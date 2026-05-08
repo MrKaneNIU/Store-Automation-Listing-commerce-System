@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { markDraftCompletion, validateDrafts } from './rules'
+import { confirmDrafts, markDraftCompletion, validateDrafts } from './rules'
 import type { ProductDraft } from './types'
 
 const completeDraft: ProductDraft = {
@@ -40,5 +40,32 @@ describe('markDraftCompletion', () => {
 
     expect(drafts[0].status).toBe('pending')
     expect(drafts[1].status).toBe('needs_completion')
+  })
+})
+
+describe('confirmDrafts', () => {
+  it('keeps deleted drafts deleted and does not require deleted draft fields', () => {
+    const result = confirmDrafts([
+      { ...completeDraft, id: 'draft-1' },
+      {
+        ...completeDraft,
+        id: 'draft-2',
+        productCode: '',
+        productName: '',
+        salePrice: 0,
+        spec: '',
+        status: 'deleted',
+      },
+    ])
+
+    expect(result.issues).toEqual([])
+    expect(result.drafts.map((draft) => draft.status)).toEqual(['confirmed', 'deleted'])
+  })
+
+  it('moves incomplete active drafts to needs_completion instead of confirming them', () => {
+    const result = confirmDrafts([{ ...completeDraft, productCode: '' }])
+
+    expect(result.issues.map((issue) => issue.field)).toEqual(['productCode'])
+    expect(result.drafts[0].status).toBe('needs_completion')
   })
 })

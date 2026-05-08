@@ -28,8 +28,8 @@
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { submitCustomerWechatOrder } from '../../../features/customer-order/customer-order'
+import { mallAccess } from '../../../features/mall-workflow/mall-access'
 import { mockWechatAuthService } from '../../../services/auth/mock-wechat-auth-service'
-import { mallRepository } from '../../../services/repositories/mall-repository'
 
 const productId = ref('')
 const selectedSkuId = ref('')
@@ -39,8 +39,8 @@ onLoad((query) => {
   productId.value = String(query?.id ?? '')
 })
 
-const product = computed(() => mallRepository.listProducts().find((item) => item.id === productId.value))
-const skus = computed(() => mallRepository.listSkus(productId.value))
+const product = computed(() => mallAccess.getProduct(productId.value))
+const skus = computed(() => mallAccess.listSkus(productId.value))
 
 const selectSku = (skuId: string, stock: number) => {
   if (stock <= 0) {

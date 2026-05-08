@@ -36,7 +36,7 @@ import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import type { ProductStatus } from '../../../domain/catalog/types'
 import { mallWorkflow } from '../../../features/mall-workflow/mall-workflow'
-import { mallRepository } from '../../../services/repositories/mall-repository'
+import { mallAccess } from '../../../features/mall-workflow/mall-access'
 
 type StatusFilter = 'all' | ProductStatus
 
@@ -63,7 +63,7 @@ onShow(() => {
 
 const products = computed(() => {
   version.value
-  return mallRepository.listProducts()
+  return mallAccess.listProducts()
 })
 
 const filteredProducts = computed(() =>
@@ -72,10 +72,10 @@ const filteredProducts = computed(() =>
 
 const readyProducts = computed(() => products.value.filter((product) => product.status === 'ready_to_publish'))
 
-const countSkus = (productId: string) => mallRepository.listSkus(productId).length
+const countSkus = (productId: string) => mallAccess.countSkus(productId)
 
 const publish = (productId: string) => {
-  const product = mallRepository.listProducts().find((item) => item.id === productId)
+  const product = mallAccess.getProduct(productId)
   if (!product) return
   const nextProduct = mallWorkflow.publishProduct(product)
   message.value = nextProduct.status === 'published' ? `${nextProduct.productCode} 已上架` : `${nextProduct.productCode} 暂不可上架`

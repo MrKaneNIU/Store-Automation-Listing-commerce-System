@@ -53,6 +53,20 @@ describe('mallWorkflow.confirmBatch', () => {
     expect(mallRepository.listProducts()).toHaveLength(2)
     expect(mallRepository.listSkus()).toHaveLength(4)
   })
+
+  it('moves a batch from recognized to confirmed after successful confirmation', async () => {
+    resetMockDb()
+    const { batch } = await mallWorkflow.createMockImportBatch([{ id: 'image-1', url: '/tmp/page-1.png', name: '商品页' }])
+    expect(mallRepository.listBatches()[0]).toMatchObject({ id: batch.id, status: 'recognized' })
+    mallRepository.replaceDrafts(
+      batch.id,
+      mallRepository.listDrafts(batch.id).map((draft) => ({ ...draft, status: 'confirmed' as const })),
+    )
+
+    mallWorkflow.confirmBatch(batch.id)
+
+    expect(mallRepository.listBatches()[0]).toMatchObject({ id: batch.id, status: 'confirmed' })
+  })
 })
 
 describe('mallWorkflow image supplement and publishing', () => {
@@ -196,6 +210,28 @@ describe('mallWorkflow orders', () => {
     )
 
     expect(() => mallWorkflow.cancelOrder(confirmedOrder.id)).toThrow('只有待商家确认订单可以取消')
+  })
+
+  it('does not allow confirming a canceled order', async () => {
+    resetMockDb()
+    const { batch } = await mallWorkflow.createMockImportBatch([{ id: 'image-1', url: '/tmp/page-1.png', name: '商品页' }])
+    mallRepository.replaceDrafts(
+      batch.id,
+      mallRepository.listDrafts(batch.id).map((draft) => ({ ...draft, status: 'confirmed' as const })),
+    )
+    const result = mallWorkflow.confirmBatch(batch.id)
+    const ready = await mallWorkflow.supplementProductImages(result.products[0])
+    const published = mallWorkflow.publishProduct(ready)
+    const sku = mallRepository.listSkus(published.id)[0]
+    const canceledOrder = mallWorkflow.cancelOrder(
+      mallWorkflow.createOrder(published, sku.id, {
+        customerName: '测试客户',
+        customerPhone: '13800000000',
+        quantity: 1,
+      }).id,
+    )
+
+    expect(() => mallWorkflow.confirmOrder(canceledOrder.id)).toThrow('只有待商家确认订单可以确认')
   })
 
   it('creates orders with authorized WeChat customer fields and reserves stock', async () => {

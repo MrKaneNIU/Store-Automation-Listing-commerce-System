@@ -1,5 +1,28 @@
 # VX Close System
 
+## Harness Engineering Baseline
+
+The current MVP is protected by the repository harness documented in:
+
+- `AGENTS.md`
+- `docs/plans/2026-05-08-harness-hardening-delivery-log.md`
+- `docs/architecture/system-overview.md`
+- `docs/architecture/module-boundaries.md`
+- `docs/testing/test-strategy.md`
+- `docs/quality/review-checklist.md`
+
+Routine verification:
+
+```powershell
+pnpm.cmd run verify
+```
+
+Full build-affecting verification:
+
+```powershell
+pnpm.cmd run verify:full
+```
+
 uni-app + Vue 3 + TypeScript 的微信小程序工程骨架，已预装 TDesign MiniProgram 和 Vant Weapp。
 
 ## 技术栈

@@ -27,7 +27,7 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { mallWorkflow } from '../../../features/mall-workflow/mall-workflow'
-import { mallRepository } from '../../../services/repositories/mall-repository'
+import { mallAccess } from '../../../features/mall-workflow/mall-access'
 
 const version = ref(0)
 const keyword = ref('')
@@ -40,12 +40,12 @@ onShow(() => {
 
 const pendingProducts = computed(() => {
   version.value
-  return mallRepository.listProducts().filter((product) => product.status === 'pending_images')
+  return mallAccess.listPendingImageProducts()
 })
 
 const batchOptions = computed(() => [
   { label: '全部批次', value: '' },
-  ...mallRepository.listBatches().map((batch) => ({ label: batch.id, value: batch.id })),
+  ...mallAccess.listBatches().map((batch) => ({ label: batch.id, value: batch.id })),
 ])
 
 const selectedBatchLabel = computed(() => batchOptions.value.find((item) => item.value === selectedBatchId.value)?.label ?? '全部批次')
@@ -64,7 +64,7 @@ const selectBatch = (event: Event) => {
 }
 
 const supplement = async (productId: string) => {
-  const product = mallRepository.listProducts().find((item) => item.id === productId)
+  const product = mallAccess.getProduct(productId)
   if (!product) return
   const nextProduct = await mallWorkflow.supplementProductImages(product)
   message.value = `${nextProduct.productCode} 已补图，状态变为可上架`

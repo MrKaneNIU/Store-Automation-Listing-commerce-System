@@ -34,6 +34,31 @@ describe('createProductsFromDrafts', () => {
     expect(result.skus).toHaveLength(1)
     expect(result.skus[0].stock).toBe(2)
   })
+
+  it('ignores drafts that are not confirmed', () => {
+    const result = createProductsFromDrafts([
+      { ...baseDraft, id: 'draft-1', productCode: 'A1023', spec: 'Black/M', stock: 1 },
+      { ...baseDraft, id: 'draft-2', productCode: 'B2088', spec: 'Blue/S', stock: 1, status: 'pending' },
+      { ...baseDraft, id: 'draft-3', productCode: 'C3001', spec: 'Red/L', stock: 1, status: 'deleted' },
+    ] as ProductDraft[])
+
+    expect(result.products.map((item) => item.productCode)).toEqual(['A1023'])
+    expect(result.skus.map((item) => item.productCode)).toEqual(['A1023'])
+  })
+
+  it('records a warning when one product code has multiple sale prices', () => {
+    const result = createProductsFromDrafts([
+      { ...baseDraft, id: 'draft-1', productCode: 'A1023', spec: 'Black/M', stock: 1, salePrice: 129 },
+      { ...baseDraft, id: 'draft-2', productCode: 'A1023', spec: 'White/L', stock: 1, salePrice: 139 },
+    ] as ProductDraft[])
+
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        type: 'price_conflict',
+        productCode: 'A1023',
+      }),
+    ])
+  })
 })
 
 describe('canPublishProduct', () => {
@@ -82,5 +107,33 @@ describe('canPublishProduct', () => {
         ],
       ),
     ).toBe(true)
+  })
+
+  it('blocks publishing when all SKUs are unpriced', () => {
+    expect(
+      canPublishProduct(
+        {
+          id: 'product-1',
+          productCode: 'A1023',
+          productName: 'Test Product',
+          mainImageUrl: '/tmp/main.png',
+          imageUrls: ['/tmp/main.png'],
+          status: 'ready_to_publish',
+          createdFromBatchId: 'batch-1',
+          createdAt: '2026-05-07T00:00:00.000Z',
+          updatedAt: '2026-05-07T00:00:00.000Z',
+        },
+        [
+          {
+            id: 'sku-1',
+            productId: 'product-1',
+            productCode: 'A1023',
+            spec: 'Black/M',
+            salePrice: 0,
+            stock: 1,
+          },
+        ],
+      ),
+    ).toBe(false)
   })
 })

@@ -16,14 +16,11 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { mallRepository } from '../../../services/repositories/mall-repository'
+import { mallAccess } from '../../../features/mall-workflow/mall-access'
 
-const products = computed(() => mallRepository.listProducts().filter((product) => product.status === 'published'))
+const products = computed(() => mallAccess.listPublishedProducts())
 
-const getMinPrice = (productId: string) => {
-  const prices = mallRepository.listSkus(productId).map((sku) => sku.salePrice)
-  return prices.length > 0 ? Math.min(...prices) : '-'
-}
+const getMinPrice = (productId: string) => mallAccess.getMinSkuPrice(productId)
 
 const openDetail = (productId: string) => {
   uni.navigateTo({ url: `/pages/customer/product-detail/index?id=${productId}` })

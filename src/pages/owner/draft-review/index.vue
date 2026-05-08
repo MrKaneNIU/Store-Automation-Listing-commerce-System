@@ -59,8 +59,8 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { mallWorkflow } from '../../../features/mall-workflow/mall-workflow'
+import { mallAccess } from '../../../features/mall-workflow/mall-access'
 import { findPriceConflictCodes, groupDraftsByProductCode } from '../../../features/draft-review/draft-review'
-import { mallRepository } from '../../../services/repositories/mall-repository'
 import type { ProductDraft } from '../../../domain/draft/types'
 
 const version = ref(0)
@@ -72,12 +72,12 @@ onShow(() => {
 
 const latestBatch = computed(() => {
   version.value
-  return mallRepository.listBatches().at(-1)
+  return mallAccess.getLatestBatch()
 })
 
 const drafts = computed(() => {
   version.value
-  return latestBatch.value ? mallRepository.listDrafts(latestBatch.value.id) : []
+  return latestBatch.value ? mallAccess.listDrafts(latestBatch.value.id) : []
 })
 
 const groups = computed(() => groupDraftsByProductCode(drafts.value))
@@ -85,7 +85,7 @@ const priceConflictCodes = computed(() => findPriceConflictCodes(drafts.value))
 
 const persistDrafts = (nextDrafts: ProductDraft[]) => {
   if (!latestBatch.value) return
-  mallRepository.replaceDrafts(latestBatch.value.id, nextDrafts)
+  mallAccess.replaceDrafts(latestBatch.value.id, nextDrafts)
   version.value += 1
 }
 

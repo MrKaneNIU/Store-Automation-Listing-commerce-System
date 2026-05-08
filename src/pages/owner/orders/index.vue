@@ -31,7 +31,7 @@ import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import type { OrderStatus } from '../../../domain/order/types'
 import { mallWorkflow } from '../../../features/mall-workflow/mall-workflow'
-import { mallRepository } from '../../../services/repositories/mall-repository'
+import { mallAccess } from '../../../features/mall-workflow/mall-access'
 
 const statusText: Record<OrderStatus, string> = {
   pending_merchant_confirm: '待商家确认',
@@ -48,7 +48,7 @@ onShow(() => {
 
 const orders = computed(() => {
   version.value
-  return mallRepository.listOrders()
+  return mallAccess.listOrders()
 })
 
 const confirm = (orderId: string) => {
