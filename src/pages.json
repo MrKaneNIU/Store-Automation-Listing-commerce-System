@@ -1,0 +1,64 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationBarTitleText": "VX Close"
+      }
+    },
+    {
+      "path": "pages/owner/dashboard/index",
+      "style": {
+        "navigationBarTitleText": "老板工作台"
+      }
+    },
+    {
+      "path": "pages/owner/import-upload/index",
+      "style": {
+        "navigationBarTitleText": "截图识别"
+      }
+    },
+    {
+      "path": "pages/owner/draft-review/index",
+      "style": {
+        "navigationBarTitleText": "草稿确认"
+      }
+    },
+    {
+      "path": "pages/owner/products/index",
+      "style": {
+        "navigationBarTitleText": "商品管理"
+      }
+    },
+    {
+      "path": "pages/owner/orders/index",
+      "style": {
+        "navigationBarTitleText": "订单确认"
+      }
+    },
+    {
+      "path": "pages/staff/image-tasks/index",
+      "style": {
+        "navigationBarTitleText": "待补图"
+      }
+    },
+    {
+      "path": "pages/customer/product-list/index",
+      "style": {
+        "navigationBarTitleText": "商品列表"
+      }
+    },
+    {
+      "path": "pages/customer/product-detail/index",
+      "style": {
+        "navigationBarTitleText": "商品详情"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "VX Close",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "backgroundColor": "#F6F7F9"
+  }
+}

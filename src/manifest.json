@@ -1,0 +1,19 @@
+{
+  "name": "VX Close System",
+  "appid": "",
+  "description": "uni-app Vue 3 TypeScript WeChat Mini Program starter.",
+  "versionName": "1.0.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "mp-weixin": {
+    "appid": "",
+    "setting": {
+      "urlCheck": false
+    },
+    "usingComponents": true
+  },
+  "uniStatistics": {
+    "enable": false
+  },
+  "vueVersion": "3"
+}
