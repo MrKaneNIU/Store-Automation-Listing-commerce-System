@@ -1,14 +1,31 @@
 # 2026-05-09 Phase 2 Real Backend and Persistence PRD
 
+## 0.0 Route Update: CloudBase Is Now The Approved Long-Term Path
+
+On 2026-05-09, the user approved changing the long-term backend and
+persistence route to WeChat official CloudBase. From this point forward, future
+Phase 2 implementation should target:
+
+- CloudBase Cloud Functions as the backend/service layer.
+- CloudBase Cloud Database as the durable persistence layer.
+- CloudBase Cloud Storage as the official storage path when Phase 3 starts.
+
+The earlier PostgreSQL-oriented work under `backend/` remains useful as an
+engineering baseline and transitional evidence, but it is no longer the default
+future implementation route unless a later PRD explicitly re-approves it.
+
+This document is kept for history and updated below so future readers do not
+follow the PostgreSQL / `DATABASE_URL` / SQL migration path by mistake.
+
 ## 0. Document Positioning
 
 This PRD breaks Phase 2 from
 `docs/prd/2026-05-08-enterprise-launch-master-prd.md` into an executable stage
 plan.
 
-Phase 2 replaces the current in-memory mock persistence with a real backend
-and durable database boundary. It must preserve the accepted MVP business loop
-and the Phase 1 page-facing ViewModel / Facade contracts.
+Phase 2 replaces the current in-memory mock persistence with CloudBase Cloud
+Functions and Cloud Database boundaries. It must preserve the accepted MVP
+business loop and the Phase 1 page-facing ViewModel / Facade contracts.
 
 This PRD is not permission to implement all backend work in one pass. Each
 module below must be implemented, verified, documented, and reviewed before the
@@ -45,10 +62,12 @@ Owner uploads cloud e-bao screenshots
 
 ## 2. Goals
 
-1. Add a backend BFF/API layer between the mini-program and durable storage.
+1. Add a CloudBase Cloud Function service layer between the mini-program and
+   durable storage.
 2. Define and enforce a stable repository port before replacing persistence.
-3. Add database schema and migration process for Phase 2 entities.
-4. Add a database-backed repository implementation that passes the same
+3. Add CloudBase collection, index, permission, and data-change process for
+   Phase 2 entities.
+4. Add a CloudBase-backed repository implementation that passes the same
    repository contract tests as the current mock repository.
 5. Add API contracts for the current MVP loop without moving real image
    storage, real WeChat auth, real OCR, payment, or UI redesign into Phase 2.
@@ -77,26 +96,28 @@ Phase 2 must not implement:
 
 Recommended Phase 2 baseline:
 
-- Add a TypeScript Node backend/BFF inside this repository.
-- Keep it separate from `src/` mini-program source.
-- Recommended directory: `backend/`.
-- Recommended runtime shape: HTTP JSON API with a health check and unified
-  response envelope.
-- Recommended durable database target: PostgreSQL-compatible SQL database.
+- Add CloudBase Cloud Functions as the official backend/service layer.
+- Keep CloudBase adapters separate from `src/pages/`; pages must still call
+  feature/service ports.
+- Recommended runtime shape: callable cloud functions with health check,
+  request validation, stable error codes, and unified response envelope.
+- Recommended durable database target: CloudBase Cloud Database.
+- Recommended future storage target: CloudBase Cloud Storage, implemented in
+  Phase 3 rather than mixed into Phase 2.
 
 Reasoning:
 
-- The repo is already TypeScript-based.
-- Current domain types can be mapped without introducing a second language
-  model.
-- PostgreSQL gives stable relational constraints for products, SKUs, orders,
-  and batch/draft relationships.
-- This keeps future Supabase, managed PostgreSQL, or self-hosted PostgreSQL
-  options open.
+- The product is a WeChat mini-program, so CloudBase is the closest official
+  ecosystem fit for cloud functions, database, storage, and future WeChat
+  identity integration.
+- The route avoids coupling the long-term product plan to Supabase free-tier
+  database limits.
+- Current domain types can be mapped into CloudBase document collections while
+  keeping the repository port stable.
 
-Implementation may choose Express, Fastify, Hono, or another small TypeScript
-HTTP framework in Module 2.1, but the choice must be documented before adding
-dependencies.
+Implementation may keep the existing `backend/` PostgreSQL baseline for local
+evidence, but new long-term Phase 2 modules should not extend that path unless
+the route is re-approved.
 
 ### 4.2 Mini-Program Boundary
 
@@ -110,6 +131,9 @@ The mini-program must not:
 
 Future frontend HTTP access must sit behind service adapters. Pages continue to
 call page-facing ViewModels / Facades.
+
+For CloudBase, the same rule applies to `wx.cloud.callFunction`: calls belong in
+service adapters, not in `.vue` pages.
 
 ### 4.3 Repository Boundary
 
@@ -131,28 +155,30 @@ the current repository surface:
 - `updateOrder`
 - `listOrders`
 
-The current mock repository and future database repository must both satisfy
+The current mock repository and future CloudBase repository must both satisfy
 the same port and contract tests.
 
-### 4.4 Migration Rules
+### 4.4 CloudBase Change Rules
 
-Every schema change must be a migration file.
+Every CloudBase collection, index, permission, or data-shape change must be a
+tracked change record or script.
 
-Migration rules:
+Change rules:
 
-- Do not edit migrations after they have run outside local development.
-- Keep schema migrations and data migrations separate.
-- Each migration must include purpose, rollback or compensation notes, and data
+- Do not silently mutate staging/production collections by hand.
+- Keep collection/index/permission changes separate from data backfill scripts.
+- Each change must include purpose, rollback or compensation notes, and data
   validation notes.
-- Add nullable columns first when changing existing tables.
+- Add optional fields first when changing existing document shapes.
 - Avoid destructive changes until application references are removed.
-- Test migrations against an empty database and an existing test database.
+- Test initialization and compatibility scripts against an empty CloudBase
+  environment and an existing test environment.
 
 ## 5. Data Model Scope
 
-Phase 2 schema must cover the current MVP entities:
+Phase 2 CloudBase collections must cover the current MVP entities:
 
-| Table | Purpose |
+| Collection | Purpose |
 | --- | --- |
 | `ocr_batches` | OCR batch metadata and status |
 | `product_drafts` | OCR draft rows and review status |
@@ -217,40 +243,40 @@ Phase 2 must define stable error codes before exposing APIs to the mini-program.
 
 ## 7. Module Plan
 
-### Module 2.1 Backend Project and Environment Baseline
+### Module 2.1 CloudBase Environment And Cloud Function Baseline
 
 Tasks:
 
-1. Choose the TypeScript backend framework.
-2. Add backend directory structure.
-3. Add health check endpoint.
-4. Add unified response envelope helpers.
-5. Add backend environment example file without secrets.
-6. Add backend verify scripts to `package.json`.
-7. Document local startup commands.
+1. Create or connect the CloudBase dev/staging/prod environments.
+2. Record environment ID, region, resource owner, and operator boundary.
+3. Add cloud function directory structure and local invocation/deploy commands.
+4. Add health check cloud function.
+5. Add unified response envelope helpers.
+6. Add CloudBase environment example file without secrets.
+7. Add verify scripts to `package.json` if needed.
+8. Document local setup, deployment, and rollback commands.
 
 Suggested files:
 
-- `backend/package.json` or root package scripts if using one workspace.
-- `backend/src/server.ts`
-- `backend/src/http/response.ts`
-- `backend/src/http/errors.ts`
-- `backend/src/config/env.ts`
-- `backend/.env.example`
-- `backend/README.md`
+- CloudBase cloud function source directory.
+- CloudBase local config template without secrets.
+- Response envelope and error helpers.
+- CloudBase setup notes in `README.md` or `docs/operations/`.
 - `docs/plans/YYYY-MM-DD-phase-2-1-backend-baseline-log.md`
 
 Acceptance:
 
-- Backend starts locally.
-- `GET /health` returns a successful JSON envelope.
-- Missing or invalid environment variables fail fast with a safe message.
+- Health cloud function can be invoked locally or in a dev CloudBase
+  environment.
+- Health function returns a successful JSON envelope.
+- Missing or invalid CloudBase environment configuration fails fast with a safe
+  message.
 - No real secret is committed.
 - Root verification commands still pass.
 
 Required tests:
 
-- Health endpoint test.
+- Health cloud function test.
 - Response envelope unit test.
 - Environment validation unit test.
 
@@ -261,40 +287,39 @@ pnpm.cmd run verify
 pnpm.cmd run verify:full
 ```
 
-### Module 2.2 Database Schema and Migration Baseline
+### Module 2.2 CloudBase Collection, Index, And Change Baseline
 
 Tasks:
 
-1. Choose migration tool.
-2. Add database configuration with `.env.example` only.
-3. Add initial schema migration for Phase 2 tables.
-4. Add migration status/apply commands.
-5. Add empty-database migration test.
-6. Add schema constraint negative tests.
+1. Define Phase 2 CloudBase collections and indexes.
+2. Add CloudBase environment configuration template without secrets.
+3. Add initialization scripts for Phase 2 collections, indexes, and permission
+   baseline.
+4. Add change-status or validation commands.
+5. Add empty-environment initialization test or documented rehearsal.
+6. Add document-shape and status negative tests at repository/service boundary.
 7. Document rollback or compensation strategy.
 
 Suggested files:
 
-- `backend/src/db/client.ts`
-- `backend/src/db/migrations/*`
-- `backend/src/db/schema.ts` or SQL schema files depending on tool choice.
-- `backend/src/db/migrate.ts`
-- `backend/src/db/migration.test.ts`
-- `docs/contracts/database-schema.md`
+- CloudBase collection/index definition files or scripts.
+- CloudBase repository tests.
+- `docs/contracts/cloudbase-data-model.md`
 - `docs/plans/YYYY-MM-DD-phase-2-2-database-migration-log.md`
 
 Acceptance:
 
-- Migration can create the full Phase 2 schema from an empty test database.
-- Migration can be run repeatedly in a test environment without schema drift.
-- Required foreign keys and status constraints exist.
+- Initialization can create the full Phase 2 collection/index baseline from an
+  empty CloudBase test environment.
+- Initialization can be run repeatedly in a test environment without drift.
+- Required indexes, permission assumptions, and status validations exist.
 - Rollback or compensation notes exist.
-- No production database is touched by tests.
+- No production CloudBase environment is touched by tests.
 
 Required tests:
 
-- Migration test.
-- Schema constraint negative test.
+- CloudBase initialization or validation test.
+- Document-shape and status negative tests.
 - Status enum or check-constraint test.
 
 Required checks:
@@ -304,15 +329,15 @@ pnpm.cmd run verify:backend
 pnpm.cmd run verify
 ```
 
-### Module 2.3 Repository Port and Database Repository
+### Module 2.3 Repository Port and CloudBase Repository
 
 Tasks:
 
 1. Extract the current repository shape into a `MallRepository` port.
 2. Adapt the current in-memory repository to that port.
 3. Add repository contract tests that run against the in-memory repository.
-4. Add database repository implementation.
-5. Run the same repository contract tests against the database repository.
+4. Add CloudBase repository implementation.
+5. Run the same repository contract tests against the CloudBase repository.
 6. Ensure workflows/features depend on the repository port, not concrete
    database code.
 7. Keep pages unchanged.
@@ -322,23 +347,23 @@ Suggested files:
 - `src/services/repositories/mall-repository-port.ts`
 - `src/services/repositories/memory-mall-repository.ts`
 - `src/services/repositories/mall-repository-contract.test.ts`
-- `backend/src/repositories/database-mall-repository.ts`
-- `backend/src/repositories/database-mall-repository.test.ts`
+- CloudBase repository implementation.
+- CloudBase repository tests.
 - `docs/plans/YYYY-MM-DD-phase-2-3-repository-port-log.md`
 
 Acceptance:
 
-- In-memory and database repositories pass the same contract tests.
+- In-memory and CloudBase repositories pass the same contract tests.
 - Current workflow integration tests still pass.
-- Main MVP loop can run using the database repository in a test environment.
+- Main MVP loop can run using the CloudBase repository in a test environment.
 - No `.vue` page changes are needed.
 
 Required tests:
 
 - Shared repository contract tests.
-- Database repository integration tests.
-- Workflow integration test using database repository.
-- Transaction rollback test for order creation or cancellation.
+- CloudBase repository integration tests.
+- Workflow integration test using CloudBase repository.
+- CloudBase transaction or compensation test for order creation or cancellation.
 
 Required checks:
 
@@ -348,39 +373,38 @@ pnpm.cmd run verify
 pnpm.cmd run verify:full
 ```
 
-### Module 2.4 API Contract and BFF Endpoints
+### Module 2.4 Cloud Function Contract And Service Endpoints
 
 Tasks:
 
-1. Define API route names and request/response schemas.
+1. Define cloud function names and request/response schemas.
 2. Add validation for every request body and route parameter.
 3. Add handlers for the MVP API groups.
 4. Map domain/workflow errors to stable API error codes.
-5. Add API contract tests.
+5. Add cloud function contract tests.
 6. Add negative tests for validation and unauthorized placeholder flows.
-7. Add API docs.
+7. Add service contract docs.
 
 Suggested files:
 
-- `backend/src/api/routes.ts`
-- `backend/src/api/schemas.ts`
-- `backend/src/api/handlers/*.ts`
-- `backend/src/api/errors.ts`
-- `backend/src/api/*.test.ts`
-- `docs/contracts/api-contract.md`
+- Cloud function route/handler source files.
+- Cloud function request/response schemas.
+- Cloud function error mapping tests.
+- `docs/contracts/api-contract.md` or `docs/contracts/cloud-function-contract.md`
 - `docs/plans/YYYY-MM-DD-phase-2-4-api-contract-log.md`
 
 Acceptance:
 
-- API uses the unified response envelope.
-- API error codes are stable and documented.
-- API does not expose internal stack traces, secrets, or database errors.
-- API fields match frontend/domain contract names.
-- API contract tests pass.
+- Cloud functions use the unified response envelope.
+- Error codes are stable and documented.
+- Cloud functions do not expose internal stack traces, secrets, or database
+  errors.
+- Cloud function fields match frontend/domain contract names.
+- Cloud function contract tests pass.
 
 Required tests:
 
-- API contract tests.
+- Cloud function contract tests.
 - Request validation tests.
 - Error mapping tests.
 - Idempotency or duplicate-confirmation tests for batch confirmation.
@@ -392,29 +416,30 @@ pnpm.cmd run verify:api
 pnpm.cmd run verify
 ```
 
-### Module 2.5 Backup, Restore, and Operational Baseline
+### Module 2.5 CloudBase Backup, Restore, And Operational Baseline
 
 Tasks:
 
-1. Define backup frequency for development/staging/production.
+1. Define CloudBase cloud database and cloud storage backup frequency for
+   development/staging/production.
 2. Define restore rehearsal process.
 3. Define pre-release backup checkpoint.
-4. Define migration failure recovery process.
+4. Define CloudBase collection/index/data-change failure recovery process.
 5. Define data validation queries.
 6. Document who can run backup/restore operations.
 
 Suggested files:
 
 - `docs/operations/backup-restore.md`
-- `docs/operations/migration-runbook.md`
+- `docs/operations/cloudbase-change-runbook.md`
 - `docs/plans/YYYY-MM-DD-phase-2-5-backup-restore-log.md`
 
 Acceptance:
 
 - Backup and restore runbook exists.
-- Migration rollback or compensation runbook exists.
-- Staging restore rehearsal is documented before production release.
-- Data validation checklist exists for core tables.
+- CloudBase change rollback or compensation runbook exists.
+- CloudBase staging restore rehearsal is documented before production release.
+- Data validation checklist exists for core collections.
 
 Required checks:
 
@@ -426,13 +451,13 @@ pnpm.cmd run verify
 
 Phase 2 is complete only when:
 
-1. Backend BFF/API can start locally.
-2. Health check and response envelope are tested.
-3. Database schema migrations create all Phase 2 tables.
-4. Migration process is documented and tested.
-5. In-memory and database repositories pass the same contract tests.
-6. Main MVP loop passes with database repository in integration tests.
-7. API contracts and error codes are documented and tested.
+1. CloudBase cloud function path can be invoked locally or in dev/staging.
+2. Health check cloud function and response envelope are tested.
+3. CloudBase collection/index initialization creates all Phase 2 collections.
+4. CloudBase change process is documented and tested.
+5. In-memory and CloudBase repositories pass the same contract tests.
+6. Main MVP loop passes with CloudBase repository in integration tests.
+7. Cloud function contracts and error codes are documented and tested.
 8. Mini-program pages remain behind feature/service boundaries.
 9. `verify`, `verify:full`, and any new backend/API verify scripts pass.
 10. WeChat DevTools manual acceptance is rerun against the Phase 2 integration
@@ -455,9 +480,9 @@ Each Phase 2 module must update:
 | Risk | Guardrail |
 | --- | --- |
 | Backend work leaks into pages | Pages continue to call feature ViewModels / Facades only |
-| Database schema drifts from domain types | Schema contract and repository contract tests must be updated together |
-| Mock path breaks while adding database path | Keep in-memory repository and run existing workflow tests |
-| Migration damages data | Test migrations on empty and existing test databases; document compensation |
+| CloudBase document shapes drift from domain types | Data-model contract and repository contract tests must be updated together |
+| Mock path breaks while adding CloudBase path | Keep in-memory repository and run existing workflow tests |
+| CloudBase change damages data | Test initialization and data-change scripts on empty and existing test environments; document compensation |
 | Real auth/storage/OCR scope creeps into Phase 2 | Keep those as Phase 3, Phase 4, and Phase 6 tasks |
 | API exposes internal errors | Enforce unified response envelope and error mapping tests |
 
@@ -467,16 +492,15 @@ Start with Module 2.1 only.
 
 Repository Impact Map for Module 2.1 should include:
 
-- `backend/`
+- CloudBase cloud function source/config directories.
 - root package scripts if needed
-- backend `.env.example`
-- backend tests
-- docs for backend startup
+- CloudBase local config template
+- cloud function tests
+- docs for CloudBase setup and deployment
 
 Module 2.1 should not include:
 
-- database schema
-- migrations
+- CloudBase collection/index initialization
 - repository replacement
 - mini-program page changes
 - real auth/storage/OCR

@@ -71,6 +71,11 @@ Existing coverage includes:
   codes, idempotent batch confirmation, product/SKU/image-task endpoints,
   unauthorized customer order rejection, merchant order transitions, and stock
   restoration.
+- Backend runtime wiring tests cover health-check-only startup without
+  `DATABASE_URL` and database-backed API startup when `DATABASE_URL` is
+  configured.
+- Phase 2.5 restore rehearsal tests cover local PostgreSQL-compatible backup
+  restore rehearsal and the core Phase 2 validation checklist.
 - Lint, module-boundary, coverage, audit, and build-artifact smoke commands.
 
 ## Current Test Gaps
@@ -185,6 +190,7 @@ pnpm.cmd run backend:test
 pnpm.cmd run backend:build
 pnpm.cmd run verify:api
 pnpm.cmd run verify:backend
+pnpm.cmd run backend:restore:rehearsal
 pnpm.cmd run build:mp-weixin
 pnpm.cmd run e2e:smoke
 pnpm.cmd run audit:prod

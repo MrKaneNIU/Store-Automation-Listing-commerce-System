@@ -173,7 +173,7 @@ domain
 ```text
 Phase 0: 基线冻结与验收矩阵
 Phase 1: UI 边界工程化收口
-Phase 2: 真实后端与持久化
+Phase 2: CloudBase 后端与持久化
 Phase 3: 真实图片对象存储
 Phase 4: 真实微信授权与角色权限
 Phase 5: 订单、库存、审计与运营能力
@@ -330,48 +330,64 @@ pnpm.cmd run verify:full
 - 后续 UI 改版可只看合约，不读完整业务实现。
 - 合约有测试保护。
 
-## 8. Phase 2：真实后端与持久化
+## 8. Phase 2：CloudBase 后端与持久化
+
+### 8.0 路线更新
+
+2026-05-09 起，Phase 2 的长期正式路线调整为微信小程序官方 CloudBase
+路线：CloudBase 云函数 + 云数据库 + 云存储。此前 PostgreSQL / SQL
+migration / `DATABASE_URL` 相关实现和文档只作为已完成的工程基线和过渡
+证据保留，不再作为后续 Phase 2 的默认实施方向，除非后续 PRD 明确重新
+批准。
+
+路线调整原因：
+
+1. 当前产品是微信小程序，CloudBase 与微信登录、云函数、云数据库、云存储
+   的生态适配更直接。
+2. 长期使用时，避免把核心路线绑定到 Supabase 免费层 500MB 数据库空间限制。
+3. 后续阶段仍必须保留 feature/service/repository 边界，避免页面直连数据库。
 
 ### 8.1 目标
 
-替换 in-memory mock persistence，让数据跨刷新、重启、设备和部署长期存在。
+替换 in-memory mock persistence，让数据通过 CloudBase 云函数和云数据库
+跨刷新、重启、设备和部署长期存在。
 
 ### 8.2 架构决策
 
 1. 小程序不得直连数据库。
-2. 新增后端 BFF/API 层。
-3. 前端继续通过 feature/service 端口调用，不把 HTTP 请求写进页面。
-4. Repository 接口先稳定，再替换真实实现。
-5. 数据库 migration 必须可追踪、可回滚。
+2. 新增 CloudBase 云函数服务层，作为小程序与云数据库之间的唯一业务入口。
+3. 前端继续通过 feature/service 端口调用，不把 `wx.cloud` 调用写进页面。
+4. Repository 接口先稳定，再替换 CloudBase 实现。
+5. 云数据库集合、索引、权限、数据变更脚本必须可追踪、可回滚或可补偿。
 
 ### 8.3 模块拆分
 
-#### 模块 2.1：后端项目与环境基线
+#### 模块 2.1：CloudBase 环境与云函数基线
 
 任务：
 
-1. 选择后端技术栈。
-2. 建立 API 项目结构。
-3. 建立 dev/staging/prod 环境配置。
-4. 建立 `.env.example`，不得提交真实 secret。
-5. 建立健康检查接口。
+1. 创建或接入 CloudBase dev/staging/prod 环境。
+2. 记录 CloudBase 环境 ID、区域、资源归属和操作账号边界。
+3. 建立云函数目录结构和本地调用/部署命令。
+4. 建立 `.env.example` 或本地配置模板，不得提交真实 secret。
+5. 建立健康检查云函数。
 6. 建立统一错误响应格式。
 
 验收：
 
-- 本地后端可启动。
-- 健康检查通过。
-- 缺少必要环境变量时启动失败并给出明确错误。
+- 本地可调用或模拟调用 CloudBase 云函数。
+- 健康检查云函数通过。
+- 缺少必要 CloudBase 环境配置时启动或调用失败并给出明确错误。
 
 测试：
 
-- 后端单元测试。
+- 云函数单元测试。
 - 配置缺失负向测试。
 - 健康检查 smoke。
 
-#### 模块 2.2：数据库 schema 和 migration
+#### 模块 2.2：CloudBase 集合、索引和数据变更基线
 
-核心表：
+核心集合：
 
 1. `ocr_batches`
 2. `product_drafts`
@@ -390,20 +406,20 @@ pnpm.cmd run verify:full
 
 约束：
 
-- 订单、库存、草稿、商品状态必须用枚举或约束保护。
+- 订单、库存、草稿、商品状态必须用领域规则、写入校验和必要索引保护。
 - 金额使用整数分或定点数，不使用浮点数。
-- 所有关键业务表必须有 `created_at`、`updated_at`。
+- 所有关键业务集合文档必须有 `created_at`、`updated_at`。
 - 操作日志不可随意删除。
 
 验收：
 
-- migration 可从空库创建完整 schema。
-- migration 可在测试库重复运行。
-- schema 有回滚策略或补偿策略。
+- 初始化脚本可从空 CloudBase 环境创建完整集合、索引和基础权限配置。
+- 初始化脚本可在测试环境重复运行且不产生结构漂移。
+- 集合、索引、权限和数据变更有回滚策略或补偿策略。
 
 测试：
 
-- migration test。
+- CloudBase 初始化/索引检查测试。
 - repository contract test。
 - 数据约束负向测试。
 
@@ -413,20 +429,20 @@ pnpm.cmd run verify:full
 
 1. 抽象 mall repository 端口。
 2. 保留 in-memory/mock 实现用于测试。
-3. 新增 database repository 实现。
+3. 新增 CloudBase repository 实现。
 4. 所有 feature 只依赖 repository 端口。
 5. 不修改页面。
 
 验收：
 
-- mock repository 和 database repository 通过同一套 contract tests。
-- 主闭环在 database repository 下可跑通。
+- mock repository 和 CloudBase repository 通过同一套 contract tests。
+- 主闭环在 CloudBase repository 下可跑通。
 
 测试：
 
 - repository contract tests。
 - workflow integration tests。
-- 事务回滚测试。
+- CloudBase 事务或补偿路径测试。
 
 #### 模块 2.4：API 合约
 
@@ -964,7 +980,7 @@ feature branch
 - OCR job 失败率。
 - 图片上传失败率。
 - 慢接口。
-- 数据库连接和容量。
+- CloudBase 云函数、云数据库和云存储容量/调用量。
 
 验收：
 
@@ -977,7 +993,7 @@ feature branch
 
 1. 前端小程序版本回滚流程。
 2. 后端服务回滚流程。
-3. 数据库 migration 回滚或补偿流程。
+3. CloudBase 集合、索引、权限和数据变更回滚或补偿流程。
 4. 对象存储误删恢复流程。
 5. 配置错误恢复流程。
 
@@ -1025,7 +1041,7 @@ Domain tests
 | --- | --- | --- |
 | Phase 0 | `verify`、`verify:full` | 是 |
 | Phase 1 | ViewModel/Facade tests、boundary、`verify:full` | 高风险页面需要 |
-| Phase 2 | repository contract、API contract、migration、integration | 是 |
+| Phase 2 | repository contract、云函数 contract、CloudBase 集合/索引初始化、integration | 是 |
 | Phase 3 | upload contract、真机上传、域名校验 | 是 |
 | Phase 4 | auth、permission matrix、隐私授权 | 是 |
 | Phase 5 | ledger、idempotency、并发下单、订单运营 | 是 |
@@ -1133,15 +1149,15 @@ pnpm.cmd run verify:e2e
 - 商品状态
 - 草稿状态
 
-### 17.2 Migration 约束
+### 17.2 CloudBase 数据变更约束
 
-每个 migration 必须说明：
+每个 CloudBase 集合、索引、权限或数据变更必须说明：
 
 1. 变更原因。
 2. 上线前置条件。
 3. 回滚方式或补偿方式。
-4. 数据校验 SQL 或脚本。
-5. 对现有 API 的影响。
+4. 数据校验脚本或检查清单。
+5. 对现有云函数/API 合约的影响。
 
 ## 18. 文档与交付要求
 
@@ -1173,7 +1189,7 @@ pnpm.cmd run verify:e2e
 2. `verify:full` 通过。
 3. 后端验证通过。
 4. API contract tests 通过。
-5. 数据库 migration 在 staging 通过。
+5. CloudBase staging 环境集合、索引、权限和数据变更验证通过。
 6. 真实图片上传下载通过。
 7. 真实微信登录通过。
 8. 真实手机号授权通过。
@@ -1184,7 +1200,7 @@ pnpm.cmd run verify:e2e
 13. 合法域名配置完成。
 14. 隐私保护指引配置完成。
 15. 生产 secret 配置完成。
-16. 数据库备份策略完成。
+16. CloudBase 云数据库和云存储备份策略完成。
 17. 回滚 SOP 完成。
 18. 发布说明完成。
 19. 提交审核资料完成。
@@ -1200,6 +1216,6 @@ pnpm.cmd run verify:e2e
 2. 建立微信开发者工具完整人工验收矩阵。
 3. 用当前 mock 闭环跑一次完整人工验收。
 4. 修复 P0/P1 缺陷。
-5. 开始 Phase 2：真实后端与持久化 PRD。
+5. 开始 Phase 2：CloudBase 后端与持久化 PRD。
 
-只有当前主链在微信开发者工具里被完整点通，并且 UI 边界工程化被验证归档后，才进入真实后端和持久化。
+只有当前主链在微信开发者工具里被完整点通，并且 UI 边界工程化被验证归档后，才进入 CloudBase 后端和持久化。

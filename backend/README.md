@@ -20,6 +20,10 @@ $env:NODE_ENV = 'development'
 pnpm.cmd run backend:start
 ```
 
+When `DATABASE_URL` is set, `backend:start` applies pending migrations and
+wires the database-backed API handler. Without `DATABASE_URL`, startup remains
+health-check-only for local baseline checks.
+
 Migration status and apply commands:
 
 ```powershell
@@ -27,6 +31,16 @@ $env:DATABASE_URL = 'postgresql://vx_close_user:replace-with-local-password@loca
 pnpm.cmd run backend:migrate:status
 pnpm.cmd run backend:migrate
 ```
+
+Local restore rehearsal:
+
+```powershell
+pnpm.cmd run backend:restore:rehearsal
+```
+
+This command runs a local PostgreSQL-compatible restore rehearsal with `pg-mem`
+and the Phase 2 validation checklist. It does not replace a real staging
+database restore rehearsal.
 
 Health check:
 
@@ -98,5 +112,33 @@ Module 2.4 adds API route handlers in `backend/src/api/`.
 
 The API contract is documented in `docs/contracts/api-contract.md`. The handler
 is injectable into the backend server and is tested against the database
-repository. Default local startup remains health-check focused until production
-database lifecycle wiring is approved.
+repository. Runtime startup mounts the database-backed API when `DATABASE_URL`
+is configured.
+
+## CloudBase Route Baseline
+
+The approved long-term route is WeChat official CloudBase. The PostgreSQL path
+above is preserved as engineering baseline and transitional evidence.
+
+Current CloudBase environment decision:
+
+- `CLOUDBASE_ENV_ID`: `shop-d0gl83cca8b2777b5`
+- `CLOUDBASE_REGION`: `ap-shanghai`
+- `CLOUDBASE_BILLING_MODE`: `free-quota`
+
+CloudBase local checks:
+
+```powershell
+pnpm.cmd run backend:test
+```
+
+This covers:
+
+- CloudBase environment parsing.
+- CloudBase health envelope contract.
+- Phase 2 collection/index definition validation.
+- CloudBase repository adapter contract tests over a local memory document
+  store.
+
+Real CloudBase deployment still requires console/operator access. Do not put
+Tencent Cloud tokens, app secrets, or private keys in this repository.

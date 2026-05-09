@@ -28,8 +28,14 @@ YYYY-MM-DD-功能名称-prd.md
 
 - `2026-05-08-enterprise-launch-master-prd.md`：企业级上线、持续迭代、真实后端、真实存储、真实微信能力、真实 OCR/AI、UI 重构、发布验收和回滚治理总纲。后续阶段任务必须以它为总路线。
 
+Phase 2 路线更新：
+
+- `2026-05-09-phase-2-real-backend-persistence-prd.md`：Phase 2 后端与持久化阶段 PRD。2026-05-09 起已更新为 CloudBase 官方路线；文档中保留 PostgreSQL 工程基线的历史说明，但后续默认不再以 `DATABASE_URL` / SQL migration 作为实施方向。
+- `../plans/2026-05-09-cloudbase-route-decision.md`：CloudBase 路线决策记录。后续 Phase 2 实施应优先读取此决策，确认 CloudBase 环境、云函数、云数据库集合和云存储边界。
+
 最新交付记录：
 
 - `../plans/2026-05-08-customer-wechat-auth-order-delivery-log.md`
 - `../plans/2026-05-08-harness-hardening-delivery-log.md`
 - `../plans/2026-05-08-ui-boundary-engineering-delivery-log.md`
+- `../plans/2026-05-09-cloudbase-route-decision.md`

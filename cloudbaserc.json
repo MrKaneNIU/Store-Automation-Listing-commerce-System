@@ -1,0 +1,16 @@
+{
+  "envId": "shop-d0gl83cca8b2777b5",
+  "functionRoot": "./cloudfunctions",
+  "functions": [
+    {
+      "name": "mallHealth",
+      "dir": "./cloudfunctions/mallHealth",
+      "runtime": "Nodejs18.15"
+    },
+    {
+      "name": "mallApi",
+      "dir": "./cloudfunctions/mallApi",
+      "runtime": "Nodejs18.15"
+    }
+  ]
+}

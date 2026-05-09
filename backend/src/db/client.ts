@@ -1,14 +1,17 @@
-import { Pool } from 'pg'
+import { Pool, type QueryResultRow } from 'pg'
 
 import { BackendConfigurationError } from '../http/errors'
 
-export type DatabaseQueryResult<T = unknown> = {
+export type DatabaseQueryResult<T extends QueryResultRow = QueryResultRow> = {
   rows: T[]
   rowCount: number | null
 }
 
 export type DatabaseExecutor = {
-  query: <T = unknown>(sql: string, params?: readonly unknown[]) => Promise<DatabaseQueryResult<T>>
+  query: <T extends QueryResultRow = QueryResultRow>(
+    sql: string,
+    params?: readonly unknown[],
+  ) => Promise<DatabaseQueryResult<T>>
 }
 
 export type TransactionalDatabaseExecutor = DatabaseExecutor & {
@@ -37,3 +40,37 @@ export const createPgPoolFromEnv = (input: NodeJS.ProcessEnv = process.env): Poo
     allowExitOnIdle: true,
   })
 }
+
+const queryPg = async <T extends QueryResultRow>(
+  executor: Pick<Pool, 'query'>,
+  sql: string,
+  params?: readonly unknown[],
+): Promise<DatabaseQueryResult<T>> => {
+  const result = await executor.query<T>(sql, params ? [...params] : undefined)
+  return {
+    rows: result.rows,
+    rowCount: result.rowCount,
+  }
+}
+
+export const createTransactionalDatabase = (pool: Pool): TransactionalDatabaseExecutor => ({
+  query: (sql, params) => queryPg(pool, sql, params),
+  transaction: async (work) => {
+    const client = await pool.connect()
+    const transactionExecutor: DatabaseExecutor = {
+      query: (sql, params) => queryPg(client, sql, params),
+    }
+
+    try {
+      await client.query('BEGIN')
+      const result = await work(transactionExecutor)
+      await client.query('COMMIT')
+      return result
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
+    }
+  },
+})
