@@ -41,6 +41,9 @@ self-review.
 - Mock implementations stay behind service interfaces where practical.
 - Future UI redesigns preserve ViewModel/Facade contracts unless a PRD
   explicitly approves a contract change.
+- Future UI redesigns check `docs/contracts/page-facing-ui-contracts.md`
+  before changing page-facing fields, command parameters, or command result
+  shapes.
 
 ## Testing Checklist
 
@@ -58,6 +61,7 @@ self-review.
 - `pnpm.cmd run type-check` passes.
 - Build-affecting changes pass `pnpm.cmd run build:mp-weixin` and
   `pnpm.cmd run e2e:smoke`.
+- Backend changes pass `pnpm.cmd run verify:backend`.
 
 ## Contract Checklist
 

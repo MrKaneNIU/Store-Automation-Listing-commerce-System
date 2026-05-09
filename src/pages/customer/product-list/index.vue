@@ -7,7 +7,7 @@
       <image v-if="product.mainImageUrl" class="image" :src="product.mainImageUrl" mode="aspectFill" />
       <text class="name">{{ product.productName }}</text>
       <text class="code">货号：{{ product.productCode }}</text>
-      <text class="price">￥{{ getMinPrice(product.id) }}</text>
+      <text class="price">￥{{ product.minPrice }}</text>
     </view>
 
     <text v-if="products.length === 0" class="empty">暂无已上架商品</text>
@@ -16,11 +16,10 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { mallAccess } from '../../../features/mall-workflow/mall-access'
+import { getCustomerProductListView } from '../../../features/customer-product-list/customer-product-list'
 
-const products = computed(() => mallAccess.listPublishedProducts())
-
-const getMinPrice = (productId: string) => mallAccess.getMinSkuPrice(productId)
+const productListView = computed(() => getCustomerProductListView())
+const products = computed(() => productListView.value.products)
 
 const openDetail = (productId: string) => {
   uni.navigateTo({ url: `/pages/customer/product-detail/index?id=${productId}` })

@@ -35,8 +35,11 @@
 import { ref } from 'vue'
 import type { UploadedImage } from '../../../domain/batch/types'
 import type { ProductDraft } from '../../../domain/draft/types'
-import { mallWorkflow } from '../../../features/mall-workflow/mall-workflow'
-import { createId } from '../../../domain/shared/ids'
+import {
+  createOwnerScreenshotDescriptors,
+  removeOwnerScreenshotDescriptor,
+  startOwnerScreenshotRecognition,
+} from '../../../features/owner-screenshot-import/owner-screenshot-import'
 
 const screenshots = ref<UploadedImage[]>([])
 const drafts = ref<ProductDraft[]>([])
@@ -48,11 +51,7 @@ const chooseScreenshots = () => {
     count: 9,
     success: (result) => {
       const tempFilePaths = Array.isArray(result.tempFilePaths) ? result.tempFilePaths : [result.tempFilePaths]
-      const selected = tempFilePaths.map((url: string, index: number) => ({
-        id: createId('image'),
-        url,
-        name: `云 e 宝截图 ${screenshots.value.length + index + 1}`,
-      }))
+      const selected = createOwnerScreenshotDescriptors(tempFilePaths, screenshots.value.length)
       screenshots.value = [...screenshots.value, ...selected]
       message.value = ''
     },
@@ -60,7 +59,7 @@ const chooseScreenshots = () => {
 }
 
 const removeScreenshot = (imageId: string) => {
-  screenshots.value = screenshots.value.filter((image) => image.id !== imageId)
+  screenshots.value = removeOwnerScreenshotDescriptor(screenshots.value, imageId)
 }
 
 const startRecognize = async () => {
@@ -71,10 +70,9 @@ const startRecognize = async () => {
 
   isRecognizing.value = true
   try {
-    const result = await mallWorkflow.createMockImportBatch(screenshots.value)
+    const result = await startOwnerScreenshotRecognition(screenshots.value)
     drafts.value = result.drafts
-    const incompleteCount = result.drafts.filter((draft) => draft.status === 'needs_completion').length
-    message.value = `已创建批次 ${result.batch.id}，生成 ${result.drafts.length} 条草稿，其中 ${incompleteCount} 条待补全`
+    message.value = result.message
   } finally {
     isRecognizing.value = false
   }

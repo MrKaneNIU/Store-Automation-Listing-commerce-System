@@ -8,6 +8,9 @@
 - Language: TypeScript
 - Build tool: Vite with `@dcloudio/vite-plugin-uni`
 - UI libraries available: TDesign MiniProgram and Vant Weapp
+- Backend baseline: TypeScript Node HTTP server, PostgreSQL-compatible
+  migration baseline, database repository baseline, and backend-only BFF/API
+  contract handlers under `backend/`
 - Test runner: Vitest
 - Type checking: `vue-tsc`
 - Package manager in current workflow: `pnpm`
@@ -24,8 +27,10 @@
 | `src/features/mall-workflow` | Main MVP orchestration for import, confirm, publish, order, cancel |
 | `src/features/mall-workflow/mall-access` | Page-safe query and repository-backed access facade |
 | `src/features/customer-order` | Customer login/phone authorization ordering flow |
+| `src/features/customer-product-list` | Customer published-product list ViewModel and minimum price display |
 | `src/features/customer-product-detail` | Customer product detail ViewModel and authorized order command |
 | `src/features/draft-review` | Draft grouping and price-conflict helper logic |
+| `src/features/owner-screenshot-import` | Owner screenshot descriptor creation and OCR import result summary |
 | `src/features/owner-draft-review` | Owner draft review ViewModel and draft edit/delete/confirm commands |
 | `src/features/owner-products` | Owner product list facade, publish button state, and publish commands |
 | `src/features/owner-orders` | Owner order list facade, action availability, and confirm/cancel commands |
@@ -33,17 +38,26 @@
 | `src/services/ocr` | OCR provider interface and mock OCR provider |
 | `src/services/storage` | Upload service interface and mock upload service |
 | `src/services/auth` | Customer session, auth service interface, mock WeChat auth |
-| `src/services/repositories` | In-memory mock database and mall repository |
+| `src/services/repositories` | Mall repository port, in-memory mock repository, and shared repository contract tests |
 | `src/pages` | Mini-program pages and user interaction |
+| `backend` | Phase 2 BFF/API baseline, health check, response envelope, environment validation, database migration baseline, database repository baseline, API contract handlers |
 
 ## Current Data Flow
 
 ```text
 pages/owner/import-upload
+-> features/owner-screenshot-import facade
 -> features/mall-workflow.createMockImportBatch
 -> services/storage mock image selection or page-selected images
 -> services/ocr mock OCR
 -> services/repositories mockDb
+```
+
+```text
+pages/customer/product-list
+-> features/customer-product-list ViewModel
+-> features/mall-workflow/mall-access lists published products and minimum SKU prices
+-> services/repositories reads products and SKUs
 ```
 
 ```text
@@ -108,17 +122,24 @@ pages/owner/orders
 - `src/features`: use-case orchestration plus page-facing ViewModels and facades.
 - `src/services`: replaceable IO adapters and repository implementations.
 - `src/pages`: page UI and mini-program interaction.
+- `backend`: server-side BFF/API code. The current Phase 2 baseline owns health
+  checks, response envelopes, environment validation, startup wiring, the
+  initial PostgreSQL-compatible schema migration runner, a database-backed
+  repository implementation, and backend-only API contract handlers. It does not
+  own mini-program HTTP adapters, real auth, real OCR, or image storage yet.
 
 ## Current Architecture Risks
 
-- `mallWorkflow` still directly imports mock OCR, mock upload, and repository
-  implementations.
+- `mallWorkflow` still directly imports mock OCR, mock upload, and the
+  synchronous in-memory repository compatibility export.
 - Status transitions are represented by TypeScript union types and domain
   helpers, but not by a centralized state-machine table.
 - `mockDb` is an in-memory singleton and is not production persistence.
-- Medium-risk pages (`customer/product-list` and `owner/import-upload`) still
-  use generic workflow/access entry points and can receive dedicated facades in a
-  future UI-hardening pass if their UI is redesigned.
+- `backend` currently has a health-check baseline, initial schema migration
+  baseline, database repository baseline, and API contract handlers. The
+  mini-program still has no HTTP adapter.
+- Low-risk static navigation pages are intentionally simple and do not need
+  dedicated business facades.
 - The current E2E smoke check validates build artifacts, not real mini-program
   click-through behavior.
 - App helper and some service adapter edge cases still have limited test depth.

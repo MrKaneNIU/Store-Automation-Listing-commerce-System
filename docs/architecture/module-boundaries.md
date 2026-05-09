@@ -9,6 +9,7 @@
 | `src/services` | External IO ports, mock adapters, auth, upload, OCR, repository storage |
 | `src/pages` | Mini-program page rendering, page-local state, `uni` UI interactions |
 | `src/app` | App-level route constants, navigation helper, role labels |
+| `backend` | Server-side BFF/API baseline; no mini-program page code or direct UI dependencies |
 | `docs` | Product, architecture, contract, testing, and quality process docs |
 
 ## Allowed Dependencies
@@ -23,6 +24,10 @@ features -> services
 
 services -> domain types
 
+backend -> backend-local modules
+backend test code -> shared repository contract tests
+backend production code -> backend-local modules
+
 app -> no business modules
 domain -> no app, feature, service, page, or uni dependency
 ```
@@ -32,11 +37,24 @@ query/use-case functions. Generic page-safe access remains in
 `src/features/mall-workflow/mall-access.ts`, while high-risk pages now use
 dedicated page-facing ViewModels and facades:
 
+- `src/features/customer-product-list`
 - `src/features/customer-product-detail`
+- `src/features/owner-screenshot-import`
 - `src/features/owner-draft-review`
 - `src/features/owner-products`
 - `src/features/owner-orders`
 - `src/features/staff-image-tasks`
+
+The frozen UI-facing field and command contract is documented in
+`docs/contracts/page-facing-ui-contracts.md`. Future UI redesign work should
+use that document as the handoff surface instead of reading lower-level
+workflow or repository implementations.
+
+`src/services/repositories/mall-repository-port.ts` is the repository contract
+surface. The current mini-program runtime uses the synchronous in-memory
+repository through the existing `mallRepository` compatibility export. The
+backend database repository is verified against the same contract in backend
+tests but is not imported by mini-program source.
 
 `scripts/check-boundaries.mjs` fails page imports of
 `services/repositories/mall-repository` or `mock-db`.
@@ -56,6 +74,9 @@ dedicated page-facing ViewModels and facades:
   batch can be confirmed or whether an order can be canceled.
 - Mock implementations must not be imported into new business code unless the
   task is explicitly about the mock adapter.
+- `backend` must not be imported by `src/pages`, `src/features`, `src/services`,
+  or `src/domain`.
+- `backend` must not import mini-program page modules or `uni` APIs.
 
 ## Logic That Must Live In Domain
 

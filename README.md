@@ -77,6 +77,28 @@ src/domain/        领域类型和核心业务规则
 src/features/      跨领域业务流程编排、页面 ViewModel / Facade
 src/services/      OCR、上传、仓储等可替换服务
 src/pages/         小程序页面，保持展示和交互为主
+backend/           Phase 2 后端 BFF/API 基线
+```
+
+## Phase 2 后端基线
+
+当前后端基线位于 `backend/`，Module 2.1 只提供 Node HTTP 健康检查、统一响应
+envelope、环境校验和启动脚本；尚未接入数据库、migration、真实微信授权、真实 OCR
+或真实图片存储。
+
+```powershell
+pnpm.cmd run backend:test
+pnpm.cmd run backend:build
+$env:BACKEND_HOST = '127.0.0.1'
+$env:BACKEND_PORT = '3001'
+$env:NODE_ENV = 'development'
+pnpm.cmd run backend:start
+```
+
+健康检查：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:3001/health
 ```
 
 当前 MVP 先使用 mock 服务跑通闭环：

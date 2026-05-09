@@ -1,0 +1,40 @@
+import type { OcrBatch } from '../../domain/batch/types'
+import type { Product, Sku } from '../../domain/catalog/types'
+import type { ProductDraft } from '../../domain/draft/types'
+import type { Order } from '../../domain/order/types'
+
+export type RepositoryResult<T> = T | Promise<T>
+
+export type MallRepositoryContract = {
+  saveBatch: (batch: OcrBatch) => RepositoryResult<OcrBatch>
+  updateBatch: (batch: OcrBatch) => RepositoryResult<OcrBatch>
+  listBatches: () => RepositoryResult<OcrBatch[]>
+  saveDrafts: (drafts: ProductDraft[]) => RepositoryResult<ProductDraft[]>
+  replaceDrafts: (batchId: string, drafts: ProductDraft[]) => RepositoryResult<ProductDraft[]>
+  listDrafts: (batchId?: string) => RepositoryResult<ProductDraft[]>
+  saveProducts: (products: Product[], skus: Sku[]) => RepositoryResult<{ products: Product[]; skus: Sku[] }>
+  updateProduct: (product: Product) => RepositoryResult<Product>
+  listProducts: () => RepositoryResult<Product[]>
+  listSkus: (productId?: string) => RepositoryResult<Sku[]>
+  updateSku: (sku: Sku) => RepositoryResult<Sku>
+  saveOrder: (order: Order) => RepositoryResult<Order>
+  updateOrder: (order: Order) => RepositoryResult<Order>
+  listOrders: () => RepositoryResult<Order[]>
+}
+
+export type MallRepository = {
+  saveBatch: (batch: OcrBatch) => OcrBatch
+  updateBatch: (batch: OcrBatch) => OcrBatch
+  listBatches: () => OcrBatch[]
+  saveDrafts: (drafts: ProductDraft[]) => ProductDraft[]
+  replaceDrafts: (batchId: string, drafts: ProductDraft[]) => ProductDraft[]
+  listDrafts: (batchId?: string) => ProductDraft[]
+  saveProducts: (products: Product[], skus: Sku[]) => { products: Product[]; skus: Sku[] }
+  updateProduct: (product: Product) => Product
+  listProducts: () => Product[]
+  listSkus: (productId?: string) => Sku[]
+  updateSku: (sku: Sku) => Sku
+  saveOrder: (order: Order) => Order
+  updateOrder: (order: Order) => Order
+  listOrders: () => Order[]
+}

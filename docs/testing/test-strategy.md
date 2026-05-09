@@ -19,6 +19,12 @@ Current tests live beside source files under `src/**/*.test.ts` and are run by:
 pnpm.cmd test
 ```
 
+Backend Phase 2 tests live under `backend/src/**/*.test.ts` and are run by:
+
+```powershell
+pnpm.cmd run backend:test
+```
+
 Existing coverage includes:
 
 - Draft validation and completion marking.
@@ -28,21 +34,43 @@ Existing coverage includes:
 - Mock WeChat auth session behavior.
 - Repository contract behavior for drafts, products, SKUs, stock, orders, and
   reset isolation.
+- Shared repository contract tests that run against the in-memory repository and
+  the backend database repository.
 - Main mall workflow including duplicate confirmation, publish, order, stock
   reservation, oversell prevention, cancellation, and authorized ordering.
 - Customer order authorization orchestration.
 - Draft review grouping, completion summary, price conflict detection, and empty
   input behavior.
 - Page-facing `mall-access` facade behavior.
+- Customer product list ViewModel behavior for published-only product listing
+  and minimum SKU price display.
 - Customer product detail ViewModel behavior for missing/unpublished products,
   out-of-stock SKUs, authorization cancellation, authorization success, and
   stock reservation.
+- Owner screenshot import facade behavior for uploaded-image descriptor
+  creation, immutable removal, OCR import summary, and needs-completion counts.
 - Owner draft review ViewModel behavior for empty batches, grouping,
   needs-completion flags, low-confidence flags, price-conflict warnings,
   deletion, confirmation, and duplicate confirmation.
 - Owner product, owner order, and staff image-task facades for status labels,
   button availability, filtering, publish commands, order commands, stock
   restoration, and image supplementation.
+- Frozen page-facing UI contracts are documented in
+  `docs/contracts/page-facing-ui-contracts.md`; every listed ViewModel or
+  facade has a focused feature test file named in that contract document.
+- Phase 2.1 backend baseline tests cover response envelopes, environment
+  validation, `GET /health`, and safe 404 responses.
+- Phase 2.2 backend migration tests cover empty-database schema creation,
+  repeated migration execution, schema migration history, status constraints,
+  required foreign keys, numeric constraints, and safe missing database
+  configuration output.
+- Phase 2.3 backend repository tests cover database repository contract
+  behavior, transaction rollback for product/SKU persistence, and the main MVP
+  loop against a migrated in-memory PostgreSQL-compatible test database.
+- Phase 2.4 API tests cover response envelopes, request validation, stable error
+  codes, idempotent batch confirmation, product/SKU/image-task endpoints,
+  unauthorized customer order rejection, merchant order transitions, and stock
+  restoration.
 - Lint, module-boundary, coverage, audit, and build-artifact smoke commands.
 
 ## Current Test Gaps
@@ -127,6 +155,18 @@ Routine task:
 pnpm.cmd run verify
 ```
 
+Backend-specific verification:
+
+```powershell
+pnpm.cmd run verify:backend
+```
+
+API-specific verification:
+
+```powershell
+pnpm.cmd run verify:api
+```
+
 Build-affecting task:
 
 ```powershell
@@ -141,6 +181,10 @@ pnpm.cmd run boundary-check
 pnpm.cmd test
 pnpm.cmd run coverage
 pnpm.cmd run type-check
+pnpm.cmd run backend:test
+pnpm.cmd run backend:build
+pnpm.cmd run verify:api
+pnpm.cmd run verify:backend
 pnpm.cmd run build:mp-weixin
 pnpm.cmd run e2e:smoke
 pnpm.cmd run audit:prod
