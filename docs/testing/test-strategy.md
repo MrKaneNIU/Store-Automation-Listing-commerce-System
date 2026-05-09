@@ -34,13 +34,21 @@ Existing coverage includes:
 - Draft review grouping, completion summary, price conflict detection, and empty
   input behavior.
 - Page-facing `mall-access` facade behavior.
+- Customer product detail ViewModel behavior for missing/unpublished products,
+  out-of-stock SKUs, authorization cancellation, authorization success, and
+  stock reservation.
+- Owner draft review ViewModel behavior for empty batches, grouping,
+  needs-completion flags, low-confidence flags, price-conflict warnings,
+  deletion, confirmation, and duplicate confirmation.
+- Owner product, owner order, and staff image-task facades for status labels,
+  button availability, filtering, publish commands, order commands, stock
+  restoration, and image supplementation.
 - Lint, module-boundary, coverage, audit, and build-artifact smoke commands.
 
 ## Current Test Gaps
 
 - No centralized state-machine implementation beyond current domain helpers and
   transition tests.
-- No page ViewModel tests.
 - No real mini-program click-through E2E test.
 - App helper, mock upload, and route helper edge cases have limited coverage.
 - No fixture approval process beyond convention.

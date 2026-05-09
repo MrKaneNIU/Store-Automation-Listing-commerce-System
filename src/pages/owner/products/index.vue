@@ -4,7 +4,7 @@
 
     <view class="tabs">
       <button
-        v-for="option in statusOptions"
+        v-for="option in viewModel.statusOptions"
         :key="option.value"
         size="mini"
         :class="{ active: selectedStatus === option.value }"
@@ -14,19 +14,17 @@
       </button>
     </view>
 
-    <button class="primary" :disabled="readyProducts.length === 0" @tap="publishReadyProducts">
-      批量上架可上架商品
-    </button>
+    <button class="primary" :disabled="!viewModel.canBatchPublish" @tap="publishReadyProducts">批量上架可上架商品</button>
 
-    <view v-for="product in filteredProducts" :key="product.id" class="card">
+    <view v-for="product in viewModel.products" :key="product.id" class="card">
       <image v-if="product.mainImageUrl" class="thumb" :src="product.mainImageUrl" mode="aspectFill" />
       <text class="name">{{ product.productCode }} {{ product.productName }}</text>
-      <text>状态：{{ statusText[product.status] }}</text>
-      <text>SKU：{{ countSkus(product.id) }} 个</text>
-      <button v-if="product.status === 'ready_to_publish'" @tap="publish(product.id)">上架</button>
+      <text>状态：{{ product.statusLabel }}</text>
+      <text>SKU：{{ product.skuCount }} 个</text>
+      <button v-if="product.canPublish" @tap="publish(product.id)">上架</button>
     </view>
 
-    <text v-if="filteredProducts.length === 0" class="empty">当前筛选下暂无商品</text>
+    <text v-if="viewModel.products.length === 0" class="empty">{{ viewModel.emptyMessage }}</text>
     <view v-if="message" class="result">{{ message }}</view>
   </view>
 </template>
@@ -34,60 +32,40 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import type { ProductStatus } from '../../../domain/catalog/types'
-import { mallWorkflow } from '../../../features/mall-workflow/mall-workflow'
-import { mallAccess } from '../../../features/mall-workflow/mall-access'
-
-type StatusFilter = 'all' | ProductStatus
-
-const statusOptions: Array<{ label: string; value: StatusFilter }> = [
-  { label: '全部', value: 'all' },
-  { label: '待补图', value: 'pending_images' },
-  { label: '可上架', value: 'ready_to_publish' },
-  { label: '已上架', value: 'published' },
-]
-
-const statusText: Record<ProductStatus, string> = {
-  pending_images: '待补图',
-  ready_to_publish: '可上架',
-  published: '已上架',
-}
+import {
+  getOwnerProductsView,
+  publishOwnerProduct,
+  publishReadyOwnerProducts,
+  type OwnerProductStatusFilter,
+} from '../../../features/owner-products/owner-products'
 
 const version = ref(0)
-const selectedStatus = ref<StatusFilter>('all')
+const selectedStatus = ref<OwnerProductStatusFilter>('all')
 const message = ref('')
 
 onShow(() => {
   version.value += 1
 })
 
-const products = computed(() => {
+const viewModel = computed(() => {
   version.value
-  return mallAccess.listProducts()
+  return getOwnerProductsView(selectedStatus.value)
 })
 
-const filteredProducts = computed(() =>
-  selectedStatus.value === 'all' ? products.value : products.value.filter((product) => product.status === selectedStatus.value),
-)
-
-const readyProducts = computed(() => products.value.filter((product) => product.status === 'ready_to_publish'))
-
-const countSkus = (productId: string) => mallAccess.countSkus(productId)
-
-const publish = (productId: string) => {
-  const product = mallAccess.getProduct(productId)
-  if (!product) return
-  const nextProduct = mallWorkflow.publishProduct(product)
-  message.value = nextProduct.status === 'published' ? `${nextProduct.productCode} 已上架` : `${nextProduct.productCode} 暂不可上架`
+const refreshView = () => {
   version.value += 1
 }
 
+const publish = (productId: string) => {
+  const result = publishOwnerProduct(productId)
+  message.value = result.message
+  refreshView()
+}
+
 const publishReadyProducts = () => {
-  readyProducts.value.forEach((product) => {
-    mallWorkflow.publishProduct(product)
-  })
-  message.value = `已上架 ${readyProducts.value.length} 个商品`
-  version.value += 1
+  const result = publishReadyOwnerProducts()
+  message.value = result.message
+  refreshView()
 }
 </script>
 

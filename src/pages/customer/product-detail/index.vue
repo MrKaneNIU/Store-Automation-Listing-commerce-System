@@ -1,35 +1,37 @@
 <template>
   <view class="page">
-    <view v-if="product && product.status === 'published'" class="card">
-      <image v-if="product.mainImageUrl" class="image" :src="product.mainImageUrl" mode="aspectFill" />
-      <text class="title">{{ product.productName }}</text>
-      <text class="code">货号：{{ product.productCode }}</text>
+    <view v-if="viewModel.product && viewModel.isPublished" class="card">
+      <image v-if="viewModel.product.mainImageUrl" class="image" :src="viewModel.product.mainImageUrl" mode="aspectFill" />
+      <text class="title">{{ viewModel.product.productName }}</text>
+      <text class="code">货号：{{ viewModel.product.productCode }}</text>
 
       <text class="section-title">选择规格</text>
       <view
-        v-for="sku in skus"
+        v-for="sku in viewModel.skus"
         :key="sku.id"
         class="sku"
-        :class="{ selected: selectedSkuId === sku.id, disabled: sku.stock <= 0 }"
-        @tap="selectSku(sku.id, sku.stock)"
+        :class="{ selected: sku.isSelected, disabled: sku.isDisabled }"
+        @tap="selectSku(sku.id)"
       >
         <text>{{ sku.spec }}</text>
-        <text>￥{{ sku.salePrice }} 库存 {{ sku.stock }}</text>
+        <text>¥{{ sku.salePrice }} 库存 {{ sku.stock }}</text>
       </view>
 
       <button class="primary" @tap="submitOrder">微信手机号下单</button>
       <text v-if="message" class="message">{{ message }}</text>
     </view>
-    <text v-else class="empty">商品不存在或未上架</text>
+    <text v-else class="empty">{{ viewModel.emptyMessage }}</text>
   </view>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { submitCustomerWechatOrder } from '../../../features/customer-order/customer-order'
-import { mallAccess } from '../../../features/mall-workflow/mall-access'
-import { mockWechatAuthService } from '../../../services/auth/mock-wechat-auth-service'
+import {
+  getCustomerProductDetailView,
+  selectCustomerProductSku,
+  submitCustomerProductDetailOrder,
+} from '../../../features/customer-product-detail/customer-product-detail'
 
 const productId = ref('')
 const selectedSkuId = ref('')
@@ -39,16 +41,12 @@ onLoad((query) => {
   productId.value = String(query?.id ?? '')
 })
 
-const product = computed(() => mallAccess.getProduct(productId.value))
-const skus = computed(() => mallAccess.listSkus(productId.value))
+const viewModel = computed(() => getCustomerProductDetailView(productId.value, selectedSkuId.value))
 
-const selectSku = (skuId: string, stock: number) => {
-  if (stock <= 0) {
-    message.value = '该规格暂无库存'
-    return
-  }
-  selectedSkuId.value = skuId
-  message.value = ''
+const selectSku = (skuId: string) => {
+  const result = selectCustomerProductSku(productId.value, skuId)
+  selectedSkuId.value = result.selectedSkuId
+  message.value = result.message
 }
 
 const confirmModal = (content: string) =>
@@ -64,28 +62,19 @@ const confirmModal = (content: string) =>
   })
 
 const submitOrder = async () => {
-  if (!product.value || !selectedSkuId.value) {
+  if (!viewModel.value.canSubmitOrder) {
     message.value = '请选择有库存的规格'
     return
   }
 
-  try {
-    const order = await submitCustomerWechatOrder({
-      product: product.value,
-      skuId: selectedSkuId.value,
-      quantity: 1,
-      authService: mockWechatAuthService,
-      confirmLogin: () => confirmModal('需要先完成微信快捷登录后才能提交订单。'),
-      confirmPhoneAuthorization: () => confirmModal('需要授权微信绑定手机号，用于商家确认订单。'),
-    })
-    if (!order) {
-      message.value = '已取消授权，未创建订单'
-      return
-    }
-    message.value = `订单已提交，等待商家确认：${order.id}`
-  } catch (error) {
-    message.value = error instanceof Error ? error.message : '订单提交失败'
-  }
+  const result = await submitCustomerProductDetailOrder({
+    productId: productId.value,
+    skuId: selectedSkuId.value,
+    quantity: 1,
+    confirmLogin: () => confirmModal('需要先完成微信快捷登录后才能提交订单。'),
+    confirmPhoneAuthorization: () => confirmModal('需要授权微信绑定手机号，用于商家确认订单。'),
+  })
+  message.value = result.message
 }
 </script>
 

@@ -5,20 +5,20 @@
 
     <view class="filters">
       <input class="input" v-model="keyword" placeholder="按商品货号搜索" />
-      <picker :range="batchOptions" range-key="label" @change="selectBatch">
-        <view class="picker">{{ selectedBatchLabel }}</view>
+      <picker :range="viewModel.batchOptions" range-key="label" @change="selectBatch">
+        <view class="picker">{{ viewModel.selectedBatchLabel }}</view>
       </picker>
     </view>
 
-    <view v-for="product in filteredProducts" :key="product.id" class="card">
+    <view v-for="product in viewModel.products" :key="product.id" class="card">
       <image v-if="product.mainImageUrl" class="thumb" :src="product.mainImageUrl" mode="aspectFill" />
       <text class="name">{{ product.productCode }} {{ product.productName }}</text>
       <text>来源批次：{{ product.createdFromBatchId }}</text>
-      <text>状态：{{ product.status }}</text>
+      <text>状态：{{ product.statusLabel }}</text>
       <button class="primary" @tap="supplement(product.id)">上传主图和详情图</button>
     </view>
 
-    <text v-if="filteredProducts.length === 0" class="empty">暂无待补图商品</text>
+    <text v-if="viewModel.products.length === 0" class="empty">{{ viewModel.emptyMessage }}</text>
     <view v-if="message" class="result">{{ message }}</view>
   </view>
 </template>
@@ -26,8 +26,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { mallWorkflow } from '../../../features/mall-workflow/mall-workflow'
-import { mallAccess } from '../../../features/mall-workflow/mall-access'
+import { getStaffImageTasksView, supplementStaffProductImages } from '../../../features/staff-image-tasks/staff-image-tasks'
 
 const version = ref(0)
 const keyword = ref('')
@@ -38,37 +37,24 @@ onShow(() => {
   version.value += 1
 })
 
-const pendingProducts = computed(() => {
+const viewModel = computed(() => {
   version.value
-  return mallAccess.listPendingImageProducts()
+  return getStaffImageTasksView({ keyword: keyword.value, selectedBatchId: selectedBatchId.value })
 })
 
-const batchOptions = computed(() => [
-  { label: '全部批次', value: '' },
-  ...mallAccess.listBatches().map((batch) => ({ label: batch.id, value: batch.id })),
-])
-
-const selectedBatchLabel = computed(() => batchOptions.value.find((item) => item.value === selectedBatchId.value)?.label ?? '全部批次')
-
-const filteredProducts = computed(() =>
-  pendingProducts.value.filter((product) => {
-    const matchesKeyword = !keyword.value.trim() || product.productCode.includes(keyword.value.trim())
-    const matchesBatch = !selectedBatchId.value || product.createdFromBatchId === selectedBatchId.value
-    return matchesKeyword && matchesBatch
-  }),
-)
+const refreshView = () => {
+  version.value += 1
+}
 
 const selectBatch = (event: Event) => {
   const detail = (event as Event & { detail?: { value?: number } }).detail
-  selectedBatchId.value = batchOptions.value[Number(detail?.value ?? 0)]?.value ?? ''
+  selectedBatchId.value = viewModel.value.batchOptions[Number(detail?.value ?? 0)]?.value ?? ''
 }
 
 const supplement = async (productId: string) => {
-  const product = mallAccess.getProduct(productId)
-  if (!product) return
-  const nextProduct = await mallWorkflow.supplementProductImages(product)
-  message.value = `${nextProduct.productCode} 已补图，状态变为可上架`
-  version.value += 1
+  const result = await supplementStaffProductImages(productId)
+  message.value = result.message
+  refreshView()
 }
 </script>
 

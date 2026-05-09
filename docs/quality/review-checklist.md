@@ -30,17 +30,23 @@ self-review.
 - Domain rules remain in `src/domain`.
 - Use-case orchestration remains in `src/features`.
 - External IO and mock adapters remain in `src/services`.
-- Pages use `src/features/mall-workflow/mall-access.ts` or feature use-cases for
-  repository-backed mall data.
+- Pages use page-facing feature ViewModels/facades or
+  `src/features/mall-workflow/mall-access.ts` for repository-backed mall data.
+- High-risk pages should not recompute status labels, button eligibility,
+  warning flags, or command result messages directly in `.vue` files.
 - Pages do not import repositories or mock DB directly.
+- Pages do not import mock service implementations directly.
 - Pages do not generate mock customer identity, OCR rows, or upload URLs.
 - Domain does not import services, features, pages, or `uni` APIs.
 - Mock implementations stay behind service interfaces where practical.
+- Future UI redesigns preserve ViewModel/Facade contracts unless a PRD
+  explicitly approves a contract change.
 
 ## Testing Checklist
 
 - New domain behavior has unit tests.
 - New workflow behavior has integration-style tests.
+- New page-facing ViewModel or Facade behavior has focused feature tests.
 - Repository behavior changes have contract tests.
 - Bugfixes include regression tests.
 - Assertions remain specific.

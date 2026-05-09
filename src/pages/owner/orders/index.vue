@@ -2,26 +2,26 @@
   <view class="page">
     <text class="title">订单确认</text>
 
-    <view v-for="order in orders" :key="order.id" class="card">
+    <view v-for="order in viewModel.orders" :key="order.id" class="card">
       <view class="header">
         <text class="name">{{ order.customerName }} {{ order.customerPhone }}</text>
-        <text class="status">{{ statusText[order.status] }}</text>
+        <text class="status">{{ order.statusLabel }}</text>
       </view>
 
       <view v-for="item in order.items" :key="item.skuId" class="item">
         <text>{{ item.productName }}</text>
         <text>{{ item.spec }} x {{ item.quantity }}</text>
-        <text>￥{{ item.salePrice }}</text>
+        <text>¥{{ item.salePrice }}</text>
       </view>
 
-      <text>合计：￥{{ order.totalAmount }}</text>
-      <view v-if="order.status === 'pending_merchant_confirm'" class="actions">
-        <button class="primary" size="mini" @tap="confirm(order.id)">确认订单</button>
-        <button size="mini" @tap="cancel(order.id)">取消订单</button>
+      <text>合计：¥{{ order.totalAmount }}</text>
+      <view v-if="order.canConfirm || order.canCancel" class="actions">
+        <button v-if="order.canConfirm" class="primary" size="mini" @tap="confirm(order.id)">确认订单</button>
+        <button v-if="order.canCancel" size="mini" @tap="cancel(order.id)">取消订单</button>
       </view>
     </view>
 
-    <text v-if="orders.length === 0" class="empty">暂无订单</text>
+    <text v-if="viewModel.orders.length === 0" class="empty">{{ viewModel.emptyMessage }}</text>
     <view v-if="message" class="result">{{ message }}</view>
   </view>
 </template>
@@ -29,15 +29,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import type { OrderStatus } from '../../../domain/order/types'
-import { mallWorkflow } from '../../../features/mall-workflow/mall-workflow'
-import { mallAccess } from '../../../features/mall-workflow/mall-access'
-
-const statusText: Record<OrderStatus, string> = {
-  pending_merchant_confirm: '待商家确认',
-  confirmed: '已确认',
-  canceled: '已取消',
-}
+import { cancelOwnerOrder, confirmOwnerOrder, getOwnerOrdersView } from '../../../features/owner-orders/owner-orders'
 
 const version = ref(0)
 const message = ref('')
@@ -46,21 +38,25 @@ onShow(() => {
   version.value += 1
 })
 
-const orders = computed(() => {
+const viewModel = computed(() => {
   version.value
-  return mallAccess.listOrders()
+  return getOwnerOrdersView()
 })
 
-const confirm = (orderId: string) => {
-  const order = mallWorkflow.confirmOrder(orderId)
-  message.value = `订单已确认：${order.id}`
+const refreshView = () => {
   version.value += 1
 }
 
+const confirm = (orderId: string) => {
+  const result = confirmOwnerOrder(orderId)
+  message.value = result.message
+  refreshView()
+}
+
 const cancel = (orderId: string) => {
-  const order = mallWorkflow.cancelOrder(orderId)
-  message.value = `订单已取消：${order.id}`
-  version.value += 1
+  const result = cancelOwnerOrder(orderId)
+  message.value = result.message
+  refreshView()
 }
 </script>
 

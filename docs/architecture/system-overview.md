@@ -24,7 +24,12 @@
 | `src/features/mall-workflow` | Main MVP orchestration for import, confirm, publish, order, cancel |
 | `src/features/mall-workflow/mall-access` | Page-safe query and repository-backed access facade |
 | `src/features/customer-order` | Customer login/phone authorization ordering flow |
+| `src/features/customer-product-detail` | Customer product detail ViewModel and authorized order command |
 | `src/features/draft-review` | Draft grouping and price-conflict helper logic |
+| `src/features/owner-draft-review` | Owner draft review ViewModel and draft edit/delete/confirm commands |
+| `src/features/owner-products` | Owner product list facade, publish button state, and publish commands |
+| `src/features/owner-orders` | Owner order list facade, action availability, and confirm/cancel commands |
+| `src/features/staff-image-tasks` | Staff image task facade, filters, and supplement-image command |
 | `src/services/ocr` | OCR provider interface and mock OCR provider |
 | `src/services/storage` | Upload service interface and mock upload service |
 | `src/services/auth` | Customer session, auth service interface, mock WeChat auth |
@@ -43,6 +48,7 @@ pages/owner/import-upload
 
 ```text
 pages/owner/draft-review
+-> features/owner-draft-review ViewModel and commands
 -> features/mall-workflow/mall-access reads and replaces drafts
 -> features/draft-review groups drafts
 -> features/mall-workflow.confirmBatch
@@ -53,6 +59,7 @@ pages/owner/draft-review
 
 ```text
 pages/staff/image-tasks
+-> features/staff-image-tasks ViewModel and command
 -> features/mall-workflow/mall-access lists pending products
 -> features/mall-workflow.supplementProductImages
 -> services/storage mock upload
@@ -61,12 +68,31 @@ pages/staff/image-tasks
 
 ```text
 pages/customer/product-detail
+-> features/customer-product-detail ViewModel and command
 -> features/mall-workflow/mall-access reads product and SKUs
 -> features/customer-order.submitCustomerWechatOrder
 -> services/auth mock WeChat auth
 -> features/mall-workflow.createAuthorizedOrder
 -> domain/order creates order
 -> services/repositories reserves stock and stores order
+```
+
+```text
+pages/owner/products
+-> features/owner-products ViewModel and publish commands
+-> features/mall-workflow/mall-access reads products/SKUs
+-> features/mall-workflow.publishProduct
+-> domain/catalog checks publish eligibility
+-> services/repositories updates product status
+```
+
+```text
+pages/owner/orders
+-> features/owner-orders ViewModel and commands
+-> features/mall-workflow/mall-access lists orders
+-> features/mall-workflow.confirmOrder/cancelOrder
+-> domain/order applies status transitions
+-> services/repositories updates orders and restores stock on cancellation
 ```
 
 ## Main Directory Responsibilities
@@ -79,7 +105,7 @@ pages/customer/product-detail
 - `docs/testing`: test strategy and fixture rules.
 - `docs/quality`: review checklists and agent failure learning logs.
 - `src/domain`: pure business language and rules.
-- `src/features`: use-case orchestration.
+- `src/features`: use-case orchestration plus page-facing ViewModels and facades.
 - `src/services`: replaceable IO adapters and repository implementations.
 - `src/pages`: page UI and mini-program interaction.
 
@@ -90,7 +116,9 @@ pages/customer/product-detail
 - Status transitions are represented by TypeScript union types and domain
   helpers, but not by a centralized state-machine table.
 - `mockDb` is an in-memory singleton and is not production persistence.
-- Page-level error handling is inconsistent.
+- Medium-risk pages (`customer/product-list` and `owner/import-upload`) still
+  use generic workflow/access entry points and can receive dedicated facades in a
+  future UI-hardening pass if their UI is redesigned.
 - The current E2E smoke check validates build artifacts, not real mini-program
   click-through behavior.
 - App helper and some service adapter edge cases still have limited test depth.

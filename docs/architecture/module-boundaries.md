@@ -5,7 +5,7 @@
 | Directory | Responsibility |
 | --- | --- |
 | `src/domain` | Entity types, pure business rules, invariants, status checks |
-| `src/features` | Application use-cases that orchestrate domain rules and services |
+| `src/features` | Application use-cases plus page-facing ViewModels and facades that orchestrate domain rules and services |
 | `src/services` | External IO ports, mock adapters, auth, upload, OCR, repository storage |
 | `src/pages` | Mini-program page rendering, page-local state, `uni` UI interactions |
 | `src/app` | App-level route constants, navigation helper, role labels |
@@ -28,9 +28,18 @@ domain -> no app, feature, service, page, or uni dependency
 ```
 
 Current pages access repository-backed mall data through feature-layer
-query/use-case functions. The page-facing facade is
-`src/features/mall-workflow/mall-access.ts`; `scripts/check-boundaries.mjs`
-fails page imports of `services/repositories/mall-repository` or `mock-db`.
+query/use-case functions. Generic page-safe access remains in
+`src/features/mall-workflow/mall-access.ts`, while high-risk pages now use
+dedicated page-facing ViewModels and facades:
+
+- `src/features/customer-product-detail`
+- `src/features/owner-draft-review`
+- `src/features/owner-products`
+- `src/features/owner-orders`
+- `src/features/staff-image-tasks`
+
+`scripts/check-boundaries.mjs` fails page imports of
+`services/repositories/mall-repository` or `mock-db`.
 
 ## Forbidden Dependencies
 
@@ -40,6 +49,7 @@ fails page imports of `services/repositories/mall-repository` or `mock-db`.
 - `src/domain` must not call `uni` APIs.
 - `src/pages` must not import `mockDb`.
 - `src/pages` must not import `mallRepository` directly.
+- `src/pages` must not import mock service implementations directly.
 - `src/pages` must not generate mock openid, customer IDs, phone numbers, OCR
   rows, or upload URLs.
 - `src/services` must not own product workflow decisions such as whether a
@@ -63,8 +73,11 @@ fails page imports of `services/repositories/mall-repository` or `mock-db`.
 
 - Product/SKU creation.
 - Draft confirmation rules.
+- Draft grouping warning rules, low-confidence flags, and needs-completion
+  display flags.
 - Stock deduction or restoration.
 - Order status transition rules.
+- Product publish eligibility and order action eligibility.
 - Mock customer identity generation.
 - Mock OCR row generation.
 - Real OCR, auth, upload, or storage IO.
@@ -87,6 +100,9 @@ fails page imports of `services/repositories/mall-repository` or `mock-db`.
 - Add or update contract tests before changing repository behavior.
 - Keep current page behavior unchanged when moving logic behind a feature
   function.
+- Future UI redesign may change layout, component structure, styles, and copy,
+  but should not change page-facing ViewModel/Facade contracts without an
+  explicit PRD.
 - Preserve existing field names unless a PRD explicitly approves a data model
   migration.
 - Preserve accepted fixtures unless the user approves new expected behavior.

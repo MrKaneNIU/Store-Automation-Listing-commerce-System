@@ -20,6 +20,9 @@ Owner uploads product screenshots
 The main orchestration entry is `src/features/mall-workflow/mall-workflow.ts`.
 Customer authorization ordering is coordinated by
 `src/features/customer-order/customer-order.ts`.
+High-risk pages call page-facing ViewModels and facades under `src/features`
+before reaching workflow/domain/services, so future UI redesigns can replace
+page structure without rewriting the accepted business chain.
 
 ## Implemented Features
 
@@ -41,6 +44,8 @@ Customer authorization ordering is coordinated by
 - Pending order cancellation restores reserved stock.
 - Unit/integration tests for domain rules, workflow, mock OCR, mock auth, and
   customer order orchestration.
+- Page-facing ViewModel and facade tests for customer product detail, owner
+  draft review, owner product management, owner orders, and staff image tasks.
 
 ## Future Features Not Yet Implemented
 
@@ -118,4 +123,3 @@ Open owner orders
 -> Review pending_merchant_confirm orders
 -> Confirm order, or cancel order and restore reserved stock
 ```
-

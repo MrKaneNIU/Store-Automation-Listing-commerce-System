@@ -8,6 +8,7 @@ The current MVP is protected by the repository harness documented in:
 - `docs/plans/2026-05-08-harness-hardening-delivery-log.md`
 - `docs/architecture/system-overview.md`
 - `docs/architecture/module-boundaries.md`
+- `docs/architecture/page-ui-boundary-inventory.md`
 - `docs/testing/test-strategy.md`
 - `docs/quality/review-checklist.md`
 
@@ -73,7 +74,7 @@ docs/prd/          每次任务前指定的 PRD 文档
 docs/plans/        已确认的开发计划
 src/app/           路由、导航、角色等应用级配置
 src/domain/        领域类型和核心业务规则
-src/features/      跨领域业务流程编排
+src/features/      跨领域业务流程编排、页面 ViewModel / Facade
 src/services/      OCR、上传、仓储等可替换服务
 src/pages/         小程序页面，保持展示和交互为主
 ```
@@ -94,6 +95,12 @@ src/pages/         小程序页面，保持展示和交互为主
 
 后续接真实微信登录/手机号授权时，优先替换 `src/services/auth`，不重写客户商品详情页主流程。
 
+2026-05-08 已完成 UI 边界工程化：高风险页面通过 page-facing
+ViewModel / Facade 调用业务能力，后续 UI 重构应优先替换页面布局、组件、
+样式和展示文案，不改变这些 feature 合约。交付记录见：
+
+- `docs/plans/2026-05-08-ui-boundary-engineering-delivery-log.md`
+
 ## 验证
 
 ```powershell
@@ -104,13 +111,16 @@ pnpm.cmd run build:mp-weixin
 
 ## 当前验收基线
 
-2026-05-08 已完成客户侧微信快捷登录与手机号授权下单闭环，并完成全量功能测试。当前基线包括：
+2026-05-08 已完成客户侧微信快捷登录与手机号授权下单闭环、harness hardening
+和 UI 边界工程化，并完成全量功能测试。当前基线包括：
 
 1. 2026-05-07 已跑通商城 MVP Mock 闭环，并完成一次人工验收。
 2. 2026-05-08 已完成 Mock 微信登录、Mock 手机号授权、授权客户下单、订单手机号兼容展示，以及取消授权不创建订单/不扣库存保护。
-3. 当前验证结果：7 个测试文件、27 条测试全部通过；类型检查通过；生产依赖和全量依赖审计无已知漏洞；`mp-weixin` 构建通过。
+3. 当前验证结果：15 个测试文件、67 条测试全部通过；lint、边界检查、覆盖率、类型检查、生产依赖和全量依赖审计均通过；`mp-weixin` 构建和 smoke 通过。
 
 交付记录见：
 
 - `docs/plans/2026-05-07-mall-mvp-delivery-log.md`
 - `docs/plans/2026-05-08-customer-wechat-auth-order-delivery-log.md`
+- `docs/plans/2026-05-08-harness-hardening-delivery-log.md`
+- `docs/plans/2026-05-08-ui-boundary-engineering-delivery-log.md`
