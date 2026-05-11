@@ -24,27 +24,38 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { getStaffImageTasksView, supplementStaffProductImages } from '../../../features/staff-image-tasks/staff-image-tasks'
+import type { StaffImageTasksViewModel } from '../../../features/staff-image-tasks/staff-image-tasks'
+import {
+  getCloudBaseStaffImageTasksView,
+  supplementCloudBaseStaffProductImages,
+} from '../../../features/cloudbase-mall/staff-image-tasks'
 
-const version = ref(0)
 const keyword = ref('')
 const selectedBatchId = ref('')
 const message = ref('')
+const viewModel = ref<StaffImageTasksViewModel>({
+  batchOptions: [],
+  selectedBatchLabel: '全部批次',
+  products: [],
+  emptyMessage: '暂无待补图商品',
+})
+
+const refreshView = async () => {
+  viewModel.value = await getCloudBaseStaffImageTasksView({
+    keyword: keyword.value,
+    selectedBatchId: selectedBatchId.value,
+  })
+}
 
 onShow(() => {
-  version.value += 1
+  void refreshView()
 })
 
-const viewModel = computed(() => {
-  version.value
-  return getStaffImageTasksView({ keyword: keyword.value, selectedBatchId: selectedBatchId.value })
+watch([keyword, selectedBatchId], () => {
+  void refreshView()
 })
-
-const refreshView = () => {
-  version.value += 1
-}
 
 const selectBatch = (event: Event) => {
   const detail = (event as Event & { detail?: { value?: number } }).detail
@@ -52,9 +63,9 @@ const selectBatch = (event: Event) => {
 }
 
 const supplement = async (productId: string) => {
-  const result = await supplementStaffProductImages(productId)
+  const result = await supplementCloudBaseStaffProductImages(productId)
   message.value = result.message
-  refreshView()
+  await refreshView()
 }
 </script>
 

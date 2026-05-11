@@ -7,11 +7,11 @@ import { createId, nowIso } from '../../domain/shared/ids'
 import type { CustomerSession } from '../../services/auth/customer-session'
 import { mockOcrProvider } from '../../services/ocr/mock-ocr-provider'
 import { mallRepository } from '../../services/repositories/mall-repository'
-import { mockUploadService } from '../../services/storage/mock-upload-service'
+import { uploadService } from '../../services/storage/runtime-upload-service'
 
 export const mallWorkflow = {
   async createMockImportBatch(images?: UploadedImage[]) {
-    const uploadedImages = images ?? (await mockUploadService.chooseImages())
+    const uploadedImages = images ?? (await uploadService.chooseImages({ businessType: 'ocr_screenshot', sourceRole: 'owner', entityType: 'ocr_batch' }))
     const timestamp = nowIso()
     const batch = mallRepository.saveBatch({
       id: createId('batch'),
@@ -47,7 +47,7 @@ export const mallWorkflow = {
     return { issues, ...result }
   },
   async supplementProductImages(product: Product) {
-    const uploaded = await mockUploadService.uploadProductImages(product.id)
+    const uploaded = await uploadService.uploadProductImages(product.id)
     const nextProduct: Product = {
       ...product,
       mainImageUrl: uploaded.mainImageUrl,

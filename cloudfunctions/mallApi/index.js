@@ -1,83 +1,151 @@
-const SUPPORTED_ACTIONS = [
-  'health',
-  'listContracts',
-  'createOcrBatch',
-  'listOcrBatches',
-  'getCurrentOcrBatch',
-  'getLatestDrafts',
-  'updateDraft',
-  'deleteDraft',
-  'confirmBatch',
-  'listProducts',
-  'listPublishedProducts',
-  'publishProduct',
-  'listSkus',
-  'listPendingImageTasks',
-  'supplementProductImages',
-  'createCustomerOrder',
-  'getCustomerOrder',
-  'listMerchantOrders',
-  'confirmMerchantOrder',
-  'cancelMerchantOrder',
-]
+const { createMallApiHandler, createMemoryDocumentStore } = require('./mall-api-core')
 
-const createSuccessEnvelope = (data, meta = {}) => ({
-  success: true,
-  data,
-  error: null,
-  meta,
-})
+let cachedStore
 
-const createErrorEnvelope = (code, message, meta = {}) => ({
-  success: false,
-  data: null,
-  error: {
-    code,
-    message,
-  },
-  meta,
-})
+const createCloudBaseDocumentStore = () => {
+  const cloudbase = require('@cloudbase/node-sdk')
+  const app = cloudbase.init({
+    env: cloudbase.SYMBOL_CURRENT_ENV,
+  })
+  const db = app.database()
 
-const isRecord = (value) => typeof value === 'object' && value !== null && !Array.isArray(value)
+  const collection = (name) => db.collection(name)
+  const resultData = (result) => result.data || []
 
-const readAction = (event) => {
-  if (!isRecord(event)) {
-    throw new Error('Request event must be a JSON object')
+  return {
+    async insert(name, document) {
+      await collection(name).add(document)
+      return document
+    },
+    async replace(name, document) {
+      const { _id, ...data } = document
+      await collection(name).doc(_id).update(data)
+      return document
+    },
+    async deleteByField(name, field, value) {
+      const existing = resultData(await collection(name).where({ [field]: value }).get())
+      for (const document of existing) {
+        await collection(name).doc(document._id).remove()
+      }
+    },
+    async list(name, query) {
+      const ref = query ? collection(name).where(query) : collection(name)
+      return resultData(await ref.get())
+    },
+    async transaction(work) {
+      return work()
+    },
   }
-  if (typeof event.action !== 'string' || event.action.trim() === '') {
-    throw new Error('action is required')
-  }
-  return event.action
 }
 
-const createHealthData = () => ({
-  service: 'mall-api',
-  envId: process.env.TCB_ENV || process.env.CLOUDBASE_ENV_ID || 'shop-d0gl83cca8b2777b5',
-  route: 'cloudbase-function',
-  supportedActions: SUPPORTED_ACTIONS.length,
+const shouldUseCloudBaseStore = () =>
+  process.env.MALL_API_LOCAL_MEMORY !== '1'
+
+const getStore = () => {
+  if (!cachedStore) {
+    cachedStore = shouldUseCloudBaseStore() ? createCloudBaseDocumentStore() : createMemoryDocumentStore()
+  }
+  return cachedStore
+}
+
+const readRuntimeIdentity = () => {
+  try {
+    const cloudbase = require('@cloudbase/node-sdk')
+    if (typeof cloudbase.getWXContext !== 'function') return null
+    const context = cloudbase.getWXContext()
+    if (!context || !context.OPENID) return null
+    return {
+      openid: context.OPENID,
+      appid: context.APPID,
+      unionid: context.UNIONID,
+      roles: ['customer'],
+    }
+  } catch (_error) {
+    return null
+  }
+}
+
+const shouldAllowTestIdentity = () =>
+  process.env.MALL_API_ALLOW_TEST_IDENTITY === '1'
+
+let cachedAccessToken = null
+
+const readWechatConfig = () => ({
+  appid: process.env.WECHAT_APPID || process.env.WX_APPID || process.env.MP_APPID || 'wxa63c53796488d4d4',
+  secret: process.env.WECHAT_APPSECRET || process.env.WX_APPSECRET || process.env.MP_APPSECRET,
 })
 
-exports.main = async (event = {}) => {
-  try {
-    const action = readAction(event)
-
-    if (action === 'health') {
-      return createSuccessEnvelope(createHealthData())
-    }
-
-    if (action === 'listContracts') {
-      return createSuccessEnvelope({ actions: SUPPORTED_ACTIONS })
-    }
-
-    if (!SUPPORTED_ACTIONS.includes(action)) {
-      return createErrorEnvelope('NOT_FOUND', `Unsupported mallApi action: ${action}`)
-    }
-
-    return createErrorEnvelope(
-      'NOT_IMPLEMENTED',
-      `mallApi action is contracted but not wired to CloudBase repository yet: ${action}`,
-    )
-  } catch (error) {
-    return createErrorEnvelope('VALIDATION_ERROR', error.message)
+const requestJson = async (url, options = {}) => {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+  })
+  const data = await response.json()
+  if (!response.ok) {
+    throw new Error(`Wechat API HTTP ${response.status}`)
   }
+  return data
+}
+
+const getWechatAccessToken = async () => {
+  const now = Date.now()
+  if (cachedAccessToken && cachedAccessToken.expiresAt > now + 60_000) {
+    return cachedAccessToken.value
+  }
+
+  const { appid, secret } = readWechatConfig()
+  if (!appid || !secret) {
+    throw new Error('WECHAT_APPID and WECHAT_APPSECRET are required for phone code exchange')
+  }
+
+  const params = new URLSearchParams({
+    grant_type: 'client_credential',
+    appid,
+    secret,
+  })
+  const data = await requestJson(`https://api.weixin.qq.com/cgi-bin/token?${params.toString()}`)
+  if (data.errcode) {
+    throw new Error(`Wechat access_token failed: ${data.errcode} ${data.errmsg || ''}`.trim())
+  }
+  if (!data.access_token) {
+    throw new Error('Wechat access_token response missing access_token')
+  }
+
+  cachedAccessToken = {
+    value: data.access_token,
+    expiresAt: now + Number(data.expires_in || 7200) * 1000,
+  }
+  return cachedAccessToken.value
+}
+
+const exchangePhoneCode = async (phoneCode) => {
+  const accessToken = await getWechatAccessToken()
+  const data = await requestJson(
+    `https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=${encodeURIComponent(accessToken)}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ code: phoneCode }),
+    },
+  )
+
+  if (data.errcode) {
+    throw new Error(`Wechat phone code exchange failed: ${data.errcode} ${data.errmsg || ''}`.trim())
+  }
+  const phoneNumber = data.phone_info?.phoneNumber
+  if (!phoneNumber) {
+    throw new Error('Wechat phone code exchange response missing phone number')
+  }
+  return phoneNumber
+}
+
+exports.main = async (event = {}) => {
+  const identity = shouldAllowTestIdentity() ? event.identity || readRuntimeIdentity() : readRuntimeIdentity()
+  return createMallApiHandler(getStore(), { exchangePhoneCode })({ ...event, ...(identity ? { identity } : {}) })
+}
+exports.__private__ = {
+  createMallApiHandler,
+  createMemoryDocumentStore,
 }

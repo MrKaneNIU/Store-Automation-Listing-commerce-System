@@ -27,36 +27,39 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { cancelOwnerOrder, confirmOwnerOrder, getOwnerOrdersView } from '../../../features/owner-orders/owner-orders'
+import type { OwnerOrdersViewModel } from '../../../features/owner-orders/owner-orders'
+import {
+  cancelCloudBaseOwnerOrder,
+  confirmCloudBaseOwnerOrder,
+  getCloudBaseOwnerOrdersView,
+} from '../../../features/cloudbase-mall/owner-orders'
 
-const version = ref(0)
 const message = ref('')
+const viewModel = ref<OwnerOrdersViewModel>({
+  orders: [],
+  emptyMessage: '暂无订单',
+})
+
+const refreshView = async () => {
+  viewModel.value = await getCloudBaseOwnerOrdersView()
+}
 
 onShow(() => {
-  version.value += 1
+  void refreshView()
 })
 
-const viewModel = computed(() => {
-  version.value
-  return getOwnerOrdersView()
-})
-
-const refreshView = () => {
-  version.value += 1
+const confirm = async (orderId: string) => {
+  const result = await confirmCloudBaseOwnerOrder(orderId)
+  message.value = result.message
+  await refreshView()
 }
 
-const confirm = (orderId: string) => {
-  const result = confirmOwnerOrder(orderId)
+const cancel = async (orderId: string) => {
+  const result = await cancelCloudBaseOwnerOrder(orderId)
   message.value = result.message
-  refreshView()
-}
-
-const cancel = (orderId: string) => {
-  const result = cancelOwnerOrder(orderId)
-  message.value = result.message
-  refreshView()
+  await refreshView()
 }
 </script>
 

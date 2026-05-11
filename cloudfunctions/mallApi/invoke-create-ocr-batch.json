@@ -1,1 +1,17 @@
-{"action":"createOcrBatch","payload":{}}
+{
+  "action": "createOcrBatch",
+  "payload": {
+    "imageUrls": ["cloud://phase-2-smoke/page-1.png"],
+    "drafts": [
+      {
+        "productCode": "PH2-SMOKE",
+        "productName": "Phase 2 Smoke Product",
+        "salePrice": 129,
+        "spec": "Black/M",
+        "stock": 2,
+        "confidence": 0.96,
+        "sourceImageUrl": "cloud://phase-2-smoke/page-1.png"
+      }
+    ]
+  }
+}

@@ -30,42 +30,50 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import {
-  getOwnerProductsView,
-  publishOwnerProduct,
-  publishReadyOwnerProducts,
   type OwnerProductStatusFilter,
+  type OwnerProductsViewModel,
 } from '../../../features/owner-products/owner-products'
+import {
+  getCloudBaseOwnerProductsView,
+  publishCloudBaseOwnerProduct,
+  publishReadyCloudBaseOwnerProducts,
+} from '../../../features/cloudbase-mall/owner-products'
 
-const version = ref(0)
 const selectedStatus = ref<OwnerProductStatusFilter>('all')
 const message = ref('')
+const viewModel = ref<OwnerProductsViewModel>({
+  statusOptions: [],
+  products: [],
+  canBatchPublish: false,
+  readyProductCount: 0,
+  emptyMessage: '当前筛选下暂无商品',
+})
+
+const refreshView = async () => {
+  viewModel.value = await getCloudBaseOwnerProductsView(selectedStatus.value)
+}
 
 onShow(() => {
-  version.value += 1
+  void refreshView()
 })
 
-const viewModel = computed(() => {
-  version.value
-  return getOwnerProductsView(selectedStatus.value)
+watch(selectedStatus, () => {
+  void refreshView()
 })
 
-const refreshView = () => {
-  version.value += 1
+const publish = async (productId: string) => {
+  const result = await publishCloudBaseOwnerProduct(productId)
+  message.value = result.message
+  await refreshView()
 }
 
-const publish = (productId: string) => {
-  const result = publishOwnerProduct(productId)
+const publishReadyProducts = async () => {
+  const result = await publishReadyCloudBaseOwnerProducts()
   message.value = result.message
-  refreshView()
-}
-
-const publishReadyProducts = () => {
-  const result = publishReadyOwnerProducts()
-  message.value = result.message
-  refreshView()
+  await refreshView()
 }
 </script>
 

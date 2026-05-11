@@ -10,8 +10,11 @@ This review strictly compares the current repository state against:
 - `docs/plans/2026-05-09-cloudbase-console-setup-log.md`
 - `docs/plans/2026-05-09-cloudbase-phase-2-execution-log.md`
 
-It is a gate review, not an implementation module. It does not change business
-code, API code, repository code, cloud functions, or mini-program UI.
+It is a gate review. Earlier entries were written before the CloudBase
+business-data wiring pass; this file now records the latest gate state after
+that pass. Mini-program visual UI remains unchanged, but page-facing runtime
+facades now call the CloudBase `mallApi` service path instead of the in-memory
+repository for the main owner/staff/customer pages.
 
 ## Route Update
 
@@ -28,11 +31,20 @@ use the CloudBase route unless a later PRD explicitly re-approves PostgreSQL.
 
 ## Strict Conclusion
 
-Phase 2 is not fully complete under the strict master PRD gate.
+Phase 2 is complete enough to enter Phase 3 planning and implementation under
+the strict master PRD gate.
 
-CloudBase Phase 2 now has environment, collection/index, and cloud function
-contract evidence. However, it does not yet satisfy the Phase 2 integration and
-manual acceptance gates required before entering Phase 3.
+CloudBase Phase 2 now has environment, collection/index, cloud function
+contract, deployed `mallApi` business-data write/read, service-adapter evidence,
+mini-program page-facing CloudBase runtime wiring, refreshed `verify` /
+`verify:full` evidence, and recorded real-AppID WeChat DevTools manual
+acceptance for the current owner screenshot import path.
+
+Important scope note: this is a Phase 2 persistence/backend gate. The current
+owner screenshot import path intentionally does not claim real OCR accuracy.
+The previous fixed mock-output problem is closed by preventing fabricated
+product fields from being written before a real OCR provider exists. Real
+OCR/AI recognition remains Phase 6.
 
 ## Completed Evidence
 
@@ -46,26 +58,43 @@ Completed from the previous engineering baseline:
 
 Completed on the approved CloudBase route:
 
-- CloudBase environment recorded: `shop-d0gl83cca8b2777b5`.
+- CloudBase environment recorded: `cloud1-d7gifjyzl7721b383`.
 - Billing posture recorded: free quota first.
 - Required Phase 2 CloudBase collections created with `ADMINONLY`
   permissions.
 - Core MVP-path indexes created or confirmed.
 - `mallHealth` deployed and invoked successfully.
-- `mallApi` deployed and invoked successfully as a contract boundary.
+- `mallApi` deployed and invoked successfully as a business-data boundary.
+- `createOcrBatch` writes CloudBase `ocr_batches` and `product_drafts`.
+- `getLatestDrafts` reads the persisted CloudBase batch/draft data back.
+- `confirmBatch` creates CloudBase product/SKU data and has a duplicate guard
+  for partially completed or repeated confirmation.
 - Local CloudBase-shaped repository contract baseline exists.
 - Local `wx.cloud.callFunction`-style client wrapper exists.
+- Local `mallApi` service adapter exists and keeps action calls behind
+  `src/services/cloudbase`.
+- Owner screenshot import, draft review, product management, order management,
+  staff image task, customer product list, and customer product detail pages now
+  call CloudBase page-facing facades under `src/features/cloudbase-mall`.
 
 ## Current CloudBase Gate Status
 
 | Gate | Status | Evidence or blocker |
 | --- | --- | --- |
-| CloudBase environment and authorization | Pass | Environment `shop-d0gl83cca8b2777b5`; console and CLI authorization succeeded during setup |
+| CloudBase environment and authorization | Pass | Environment `cloud1-d7gifjyzl7721b383`; console and CLI authorization succeeded during setup |
 | CloudBase collections and core indexes | Pass for baseline | Required collections use `ADMINONLY`; MVP-path indexes created or confirmed |
-| Cloud function contract | Pass for contract | `mallHealth` and `mallApi` deployed and smoke-tested |
-| `mallApi` business-data integration | Pending | Contracted business actions such as `createOcrBatch` still return `NOT_IMPLEMENTED` |
-| Mini-program CloudBase runtime path | Pending | Local client wrapper exists, but the active mini-program runtime is not switched through real `wx.cloud.callFunction` |
-| WeChat DevTools manual acceptance | Pending | No acceptance record exists for the CloudBase integration path |
+| Cloud function contract | Pass | `mallHealth` and `mallApi` deployed and smoke-tested |
+| `mallApi` business-data integration | Pass for OCR/draft/product baseline | Deployed `createOcrBatch`, `getLatestDrafts`, `confirmBatch`, and `listProducts` smoke probes pass against CloudBase data |
+| Mini-program CloudBase runtime path | Pass for MVP pages | Page-facing CloudBase facades are wired for owner/staff/customer MVP pages; pages still do not call `wx.cloud` directly |
+| WeChat DevTools manual acceptance | Pass for current Phase 2 owner import gate | Real-AppID build `wxa63c53796488d4d4` can call CloudBase environment `cloud1-d7gifjyzl7721b383`; owner `开始识别` path was manually accepted on 2026-05-10 |
+
+2026-05-10 update: the earlier `touristappid` artifact blocker is resolved in
+source and build output. `src/manifest.json` and generated
+`dist/build/mp-weixin/project.config.json` now use real AppID
+`wxa63c53796488d4d4`. The subsequent CloudBase environment/function/collection
+blockers were also resolved for `cloud1-d7gifjyzl7721b383`, and the user
+confirmed the current owner screenshot recognition gate passed in WeChat
+DevTools.
 
 ## Phase 1 Gate Check
 
@@ -85,44 +114,66 @@ Phase 1 can be treated as completed.
 | Repository contract | Pass for local contract baseline | Local repository contract tests cover the CloudBase-shaped adapter |
 | Cloud function contract | Pass | `mallHealth` and `mallApi` smoke probes pass |
 | CloudBase collection/index initialization | Pass for baseline | Required collections and core MVP indexes are recorded |
-| Integration | Pending | Deployed `mallApi` is not wired to CloudBase business persistence yet |
-| Manual acceptance | Pending | WeChat DevTools acceptance against CloudBase integration path has not been run |
+| Integration | Pass for Phase 2 baseline | Deployed `mallApi` writes and reads CloudBase business data; mini-program pages are wired to CloudBase facades; real AppID-gated owner import flow passed manual acceptance |
+| Manual acceptance | Pass for current Phase 2 gate | User confirmed acceptance after CloudBase env/function/collection fixes and the mock-output fix |
 
-## Required Next Work Before Declaring Phase 2 Complete
+## Phase 2 Final Closure Notes
 
-1. Wire the minimum Phase 2 `mallApi` OCR/draft actions to CloudBase
-   business-data persistence: `createOcrBatch`, `listOcrBatches`,
-   `getCurrentOcrBatch`, and `getLatestDrafts`.
-2. Smoke-test real CloudBase writes and reads through deployed `mallApi`.
-3. Wire the mini-program service adapter to the deployed cloud function path,
-   while keeping pages behind feature/service boundaries and avoiding direct
-   page-level `wx.cloud` calls.
-4. Rebuild and rerun WeChat DevTools manual acceptance against the CloudBase
-   integration path, or record any remaining blocker with a defect ID.
-5. Run:
+Resolved on 2026-05-10:
 
-   ```powershell
-   pnpm.cmd run verify
-   pnpm.cmd run verify:full
-   ```
+1. Real AppID `wxa63c53796488d4d4` is synced into `src/manifest.json`.
+2. `pnpm.cmd run build:mp-weixin` generated
+   `dist/build/mp-weixin/project.config.json` with AppID
+   `wxa63c53796488d4d4`.
+3. WeChat DevTools Stable `2.01.2510290` opened the mp-weixin artifact without
+   the earlier `touristappid` change-failure dialog during the desktop
+   observation pass.
+4. `pnpm.cmd run verify:full` passed again after the AppID sync.
+5. A manual owner screenshot recognition attempt then failed with
+   `cloud.callFunction:fail errCode: -501000` / `Environment not found` from
+   the WeChat runtime. CloudBase CLI can still invoke `mallApi` in
+   `cloud1-d7gifjyzl7721b383`, so the remaining blocker is mini-program AppID
+   access to that CloudBase environment.
+6. The account/environment mismatch was corrected to AppID
+   `wxa63c53796488d4d4` and CloudBase environment
+   `cloud1-d7gifjyzl7721b383`.
+7. `mallHealth` and `mallApi` were deployed to the correct CloudBase
+   environment and validated through CloudBase CLI.
+8. Required CloudBase collections were created/confirmed in
+   `cloud1-d7gifjyzl7721b383`; the `ocr_batches` collection-not-exist blocker
+   is resolved.
+9. The owner `开始识别` path was manually accepted by the user.
+10. The later accuracy complaint was traced to fixed mock OCR output. The
+    current Phase 2 fix prevents fabricated product name/code/price/spec fields
+    from being written before a real OCR provider exists. This preserves the
+    Phase 6 boundary for real OCR/AI.
+11. Final local verification passed:
+
+    ```powershell
+    pnpm.cmd run verify
+    pnpm.cmd run verify:full
+    ```
 
 ## Business Code Intentionally Not Changed
 
-- `src/pages/`
 - Current OCR provider behavior
 - Product and SKU domain rules
 - Customer order and merchant order domain rules
-- Existing page-facing UI contracts
+- Existing page-facing UI contracts and visual layout
+- Direct page-to-CloudBase access remains prohibited; pages only call feature
+  facades.
 
 ## Gate Decision
 
-Do not mark Phase 2 as fully complete yet.
+Phase 2 can be marked complete for the CloudBase backend/persistence gate.
 
 Allowed wording:
 
 ```text
 CloudBase Phase 2 environment, collections, core indexes, and cloud function
-contract deployment are established, but real mallApi business-data wiring,
-mini-program CloudBase service integration, and WeChat DevTools acceptance
-remain pending. Do not enter Phase 3 yet.
+contract deployment are established. Real mallApi business-data wiring and the
+service adapter are in place, MVP pages call CloudBase facades, final
+`verify`/`verify:full` pass, and the current real-AppID WeChat DevTools owner
+import gate was manually accepted. Phase 3 real image/object storage may start
+next, with real OCR/AI still reserved for Phase 6.
 ```

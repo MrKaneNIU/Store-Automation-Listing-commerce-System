@@ -4,8 +4,9 @@
 
 Phase 0 and Phase 1 have been implemented and verified in the local workspace.
 Phase 2.1 through Phase 2.4 have been implemented and verified as engineering
-baselines. Phase 2.5 has an operations SOP baseline, but the strict Phase 2
-gate is not fully complete yet.
+baselines. Phase 2.5 has an operations SOP baseline. The latest strict Phase 2
+CloudBase backend/persistence gate is complete enough to hand off to Phase 3
+real image/object storage.
 
 Route update:
 
@@ -24,17 +25,28 @@ Strict gate review:
 
 Current CloudBase progress:
 
-- CloudBase environment `shop-d0gl83cca8b2777b5` is recorded and accessible.
+- CloudBase environment `cloud1-d7gifjyzl7721b383` is recorded and accessible.
 - Free quota remains the approved billing posture.
 - Required Phase 2 collections were created with `ADMINONLY` permissions.
 - Core MVP-path indexes were created or confirmed.
 - `mallHealth` and `mallApi` were deployed and smoke-tested.
-- `mallApi` is still a contract boundary only; business actions such as
-  `createOcrBatch` still return `NOT_IMPLEMENTED`.
-- The mini-program runtime is not yet switched to the real CloudBase cloud
-  function path.
-- WeChat DevTools manual acceptance against the CloudBase integration path is
-  still pending.
+- `mallApi` now writes and reads CloudBase business data for the
+  OCR/draft/product baseline:
+  `createOcrBatch -> getLatestDrafts -> confirmBatch -> listProducts`.
+- `mallApi` no longer returns `NOT_IMPLEMENTED` for `createOcrBatch`.
+- A mini-program service adapter now maps `wx.cloud.callFunction` style calls
+  to the deployed `mallApi` action contract without page-level `wx.cloud`
+  calls.
+- The active owner/staff/customer MVP pages now call CloudBase page-facing
+  facades under `src/features/cloudbase-mall`.
+- The generated mp-weixin artifact now uses real AppID
+  `wxa63c53796488d4d4`.
+- The AppID/environment/function/collection blockers were resolved for
+  CloudBase environment `cloud1-d7gifjyzl7721b383`.
+- The user confirmed the current owner `开始识别` path passed WeChat DevTools
+  manual acceptance after the CloudBase fixes.
+- Fixed mock OCR output is no longer written as if it were recognized product
+  data; real OCR/AI remains a Phase 6 scope item.
 
 This handoff is the single entry point for the work completed today. Detailed
 module evidence remains in the per-module logs listed below.
@@ -134,16 +146,13 @@ Completed:
 - Data validation SQL checklist for Phase 2 tables.
 - Operator permission boundary for backup and restore operations.
 
-Blocked:
+Open operations gaps carried forward:
 
-- `PH2-GATE-001`: no real staging database or backup artifact exists yet, so a
-  real staging restore rehearsal has not been completed.
-- `PH2-GATE-002`: the mini-program runtime is not wired to the backend API
-  integration path yet, so WeChat DevTools acceptance cannot be rerun against
-  that path.
-- `PH2-GATE-003`: the actual mini-program runtime still uses the in-memory
-  repository path, so the master PRD's durable-persistence replacement goal is
-  not fully met.
+- `PH2-GATE-001`: CloudBase console still reports database rollback capability
+  is not enabled; production-grade restore/rollback remains a pre-production
+  operations gap.
+- Phase 2 smoke/manual data may be cleaned if a pristine dev CloudBase dataset
+  is needed for Phase 3 acceptance.
 
 Key docs:
 
@@ -156,16 +165,38 @@ Key docs:
 Latest successful checks:
 
 ```powershell
-pnpm.cmd run verify:api
+node scripts\smoke-cloudbase-api.mjs
+pnpm.cmd exec vitest run --config vitest.config.ts src/services/cloudbase/cloudbase-function-client.test.ts src/services/cloudbase/mall-api-client.test.ts
+npx.cmd -p @cloudbase/cli tcb fn deploy mallApi --envId cloud1-d7gifjyzl7721b383 --dir cloudfunctions/mallApi --force --json
+npx.cmd -p @cloudbase/cli tcb fn invoke mallApi --envId cloud1-d7gifjyzl7721b383 -d '@cloudfunctions/mallApi/invoke-create-ocr-batch.json' --json
+npx.cmd -p @cloudbase/cli tcb fn invoke mallApi --envId cloud1-d7gifjyzl7721b383 -d '@cloudfunctions/mallApi/invoke-get-latest-drafts.json' --json
+npx.cmd -p @cloudbase/cli tcb fn invoke mallApi --envId cloud1-d7gifjyzl7721b383 -d '@cloudfunctions/mallApi/invoke-list-products.json' --json
 pnpm.cmd run verify
 pnpm.cmd run verify:full
 ```
 
 Observed results:
 
-- Backend tests: 8 files, 27 tests passed.
-- App/business tests: 18 files, 76 tests passed.
-- Coverage: 92.62% statements, 83.83% branches, 95.53% functions, 92.62% lines.
+- Focused CloudBase service/facade tests include `src/features/cloudbase-mall`
+  and cover page-facing CloudBase calls for the MVP runtime path.
+- Local `mallApi` smoke passed against explicit memory mode.
+- Deployed CloudBase `mallApi` smoke passed for write/read/confirm/list
+  actions.
+- `verify` passed with 21 app/business test files, 88 tests, 12 backend test
+  files, 40 backend tests, lint, boundary-check, 88.89% line coverage,
+  type-check, backend build, and dependency audits.
+- `verify:full` passed; mini-program build completed and `smoke:mp-weixin`
+  passed.
+- 2026-05-10 AppID-sync refresh: `verify:full` passed again after
+  `src/manifest.json` was updated to `wxa63c53796488d4d4`.
+- 2026-05-10 final Phase 2 gate refresh:
+  - `pnpm.cmd run verify` passed with 22 app/business test files, 89 tests, 12
+    backend test files, 40 backend tests, lint, boundary-check, coverage,
+    type-check, backend build, and dependency audits.
+  - `pnpm.cmd run verify:full` passed; it reran `verify`, built
+    `dist/build/mp-weixin`, and `smoke:mp-weixin` passed.
+- 2026-05-10 manual acceptance: after the CloudBase AppID/environment/function/
+  collection fixes, the user confirmed the current owner `开始识别` path passed.
 - `boundary-check` passed.
 - `type-check` passed.
 - `audit:prod` and `audit:all` found no known vulnerabilities.
@@ -177,29 +208,18 @@ Observed results:
 The following behavior remains intentionally unchanged:
 
 - Existing OCR to draft to SPU/SKU to publish to order MVP loop.
-- Current mini-program runtime still uses the in-memory repository path.
-- Mini-program pages are not wired to backend HTTP APIs yet.
+- Mini-program pages are not wired directly to backend HTTP APIs or
+  `wx.cloud`.
+- Visual page layouts and page-facing UI contract shapes remain unchanged.
 - No real WeChat auth, real OCR job processing, real object storage, payment,
   production database provisioning, backup automation, or real staging restore
   rehearsal has been added.
 
 ## Next Recommended Step
 
-Phase 2.5 now defines the operational baseline for the previous PostgreSQL
-engineering path, but the approved next route is CloudBase. The first real
-acceptance blockers are now CloudBase business-data wiring, mini-program
-CloudBase service integration, and WeChat DevTools acceptance.
+Begin Phase 3 real image/object storage with a dedicated Phase 3 PRD /
+Repository Impact Map / Execution Plan before implementation.
 
-Do not mark Phase 2 fully complete until the strict gate review blockers are
-re-scoped and resolved under the CloudBase PRD route.
-
-Stop here for review before selecting the next module. Likely next paths are:
-
-- Wire the minimum `mallApi` OCR/draft actions to CloudBase persistence.
-- Smoke-test real CloudBase writes and reads through deployed `mallApi`.
-- Wire the mini-program service adapter to the deployed cloud function path
-  without page-level `wx.cloud` calls.
-- Run WeChat DevTools manual acceptance against the CloudBase integration path.
-
-Do not move to Phase 3 object storage planning until these CloudBase Phase 2
-gate items are resolved and recorded.
+Phase 3 scope must stay limited to real image upload, storage, access,
+replacement, failure handling, and CloudBase storage/domain acceptance. Do not
+pull real OCR/AI into Phase 3; that remains Phase 6.

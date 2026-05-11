@@ -24,6 +24,16 @@ these inputs:
    collections/indexes.
 4. Billing posture: `free-quota`.
 
+Production-only cloud function secrets:
+
+- `mallApi` must receive `WECHAT_APPID` and `WECHAT_APPSECRET` from the
+  CloudBase console cloud-function environment-variable configuration before
+  real WeChat phone-code exchange is accepted for launch.
+- `WECHAT_APPSECRET` must not be committed to `cloudbaserc.json`, source code,
+  test fixtures, or docs.
+- Local shell environment variables may be used only as temporary operator
+  input for tooling and are not an上线 or production configuration source.
+
 ## Collections
 
 The Phase 2 CloudBase model must include these collections:
@@ -109,6 +119,11 @@ Current real-environment status:
 - CloudBase CLI smoke for `mallApi` write/read paths passed.
 - The current real-AppID WeChat DevTools owner import gate passed manual
   acceptance.
+- On 2026-05-11, the latest Phase 4 `mallApi` code was deployed to the same
+  environment and machine smoke for `health`/`listContracts` passed. The
+  function environment variable list was still empty afterward; production
+  `WECHAT_APPID`/`WECHAT_APPSECRET` remains a CloudBase console configuration
+  task, and no Phase 4 manual WeChat DevTools acceptance was run.
 
 Phase 3 real image/object storage is now implemented on top of this boundary.
 The `uploaded_assets` collection is the storage metadata anchor for the new

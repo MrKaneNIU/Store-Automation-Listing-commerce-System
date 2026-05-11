@@ -35,11 +35,9 @@
 import { ref } from 'vue'
 import type { UploadedImage } from '../../../domain/batch/types'
 import type { ProductDraft } from '../../../domain/draft/types'
-import {
-  createOwnerScreenshotDescriptors,
-  removeOwnerScreenshotDescriptor,
-  startOwnerScreenshotRecognition,
-} from '../../../features/owner-screenshot-import/owner-screenshot-import'
+import { removeOwnerScreenshotDescriptor } from '../../../features/owner-screenshot-import/owner-screenshot-import'
+import { startCloudBaseOwnerScreenshotRecognition } from '../../../features/cloudbase-mall/owner-screenshot-import'
+import { formatUploadFailureMessage, uploadService } from '../../../services/storage/runtime-upload-service'
 
 const screenshots = ref<UploadedImage[]>([])
 const drafts = ref<ProductDraft[]>([])
@@ -47,15 +45,20 @@ const message = ref('')
 const isRecognizing = ref(false)
 
 const chooseScreenshots = () => {
-  uni.chooseImage({
-    count: 9,
-    success: (result) => {
-      const tempFilePaths = Array.isArray(result.tempFilePaths) ? result.tempFilePaths : [result.tempFilePaths]
-      const selected = createOwnerScreenshotDescriptors(tempFilePaths, screenshots.value.length)
+  void (async () => {
+    try {
+      const selected = await uploadService.chooseImages({
+        businessType: 'ocr_screenshot',
+        sourceRole: 'owner',
+        entityType: 'ocr_batch',
+        count: 9,
+      })
       screenshots.value = [...screenshots.value, ...selected]
       message.value = ''
-    },
-  })
+    } catch (error) {
+      message.value = formatUploadFailureMessage(error)
+    }
+  })()
 }
 
 const removeScreenshot = (imageId: string) => {
@@ -70,9 +73,12 @@ const startRecognize = async () => {
 
   isRecognizing.value = true
   try {
-    const result = await startOwnerScreenshotRecognition(screenshots.value)
+    const result = await startCloudBaseOwnerScreenshotRecognition(screenshots.value)
     drafts.value = result.drafts
     message.value = result.message
+  } catch (error) {
+    drafts.value = []
+    message.value = error instanceof Error ? error.message : '截图识别失败，请查看 Console 错误信息'
   } finally {
     isRecognizing.value = false
   }

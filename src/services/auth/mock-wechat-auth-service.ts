@@ -21,14 +21,14 @@ export const mockWechatAuthService: WechatAuthService = {
 
     return copySession(currentSession)
   },
-  async authorizePhoneNumber() {
+  async authorizePhoneNumber(phoneNumber?: string) {
     if (!currentSession) {
       return null
     }
 
     currentSession = {
       ...currentSession,
-      phoneNumber: '13800000000',
+      phoneNumber: phoneNumber ?? '13800000000',
       phoneAuthorizedAt: nowIso(),
     }
 

@@ -15,11 +15,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { getCustomerProductListView } from '../../../features/customer-product-list/customer-product-list'
+import { ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+import type { CustomerProductListItem } from '../../../features/customer-product-list/customer-product-list'
+import { getCloudBaseCustomerProductListView } from '../../../features/cloudbase-mall/customer-product-list'
 
-const productListView = computed(() => getCustomerProductListView())
-const products = computed(() => productListView.value.products)
+const products = ref<CustomerProductListItem[]>([])
+
+const refreshView = async () => {
+  products.value = (await getCloudBaseCustomerProductListView()).products
+}
+
+onShow(() => {
+  void refreshView()
+})
 
 const openDetail = (productId: string) => {
   uni.navigateTo({ url: `/pages/customer/product-detail/index?id=${productId}` })

@@ -56,61 +56,67 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import {
-  confirmLatestOwnerDraftReviewBatch,
-  deleteOwnerDraftReviewDraft,
-  getOwnerDraftReviewView,
-  updateOwnerDraftReviewDraft,
   type OwnerDraftReviewEditableField,
+  type OwnerDraftReviewViewModel,
 } from '../../../features/owner-draft-review/owner-draft-review'
+import {
+  confirmLatestCloudBaseOwnerDraftReviewBatch,
+  deleteCloudBaseOwnerDraftReviewDraft,
+  getCloudBaseOwnerDraftReviewView,
+  updateCloudBaseOwnerDraftReviewDraft,
+} from '../../../features/cloudbase-mall/owner-draft-review'
 
-const version = ref(0)
 const message = ref('')
+const viewModel = ref<OwnerDraftReviewViewModel>({
+  latestBatchId: null,
+  groups: [],
+  needsCompletionCount: 0,
+  lowConfidenceCount: 0,
+  priceConflictCount: 0,
+  canConfirm: false,
+  emptyMessage: '暂无草稿，请先完成截图识别',
+})
+
+const refreshView = async () => {
+  viewModel.value = await getCloudBaseOwnerDraftReviewView()
+}
 
 onShow(() => {
-  version.value += 1
+  void refreshView()
 })
-
-const viewModel = computed(() => {
-  version.value
-  return getOwnerDraftReviewView()
-})
-
-const refreshView = () => {
-  version.value += 1
-}
 
 const getInputValue = (event: Event) => {
   const detail = (event as Event & { detail?: { value?: string | number } }).detail
   return String(detail?.value ?? '')
 }
 
-const updateDraft = (draftId: string, field: OwnerDraftReviewEditableField, value: string | number) => {
-  const result = updateOwnerDraftReviewDraft(draftId, field, value)
+const updateDraft = async (draftId: string, field: OwnerDraftReviewEditableField, value: string | number) => {
+  const result = await updateCloudBaseOwnerDraftReviewDraft(draftId, field, value)
   message.value = result.message
-  refreshView()
+  await refreshView()
 }
 
 const handleTextInput = (draftId: string, field: OwnerDraftReviewEditableField, event: Event) => {
-  updateDraft(draftId, field, getInputValue(event))
+  void updateDraft(draftId, field, getInputValue(event))
 }
 
 const handleNumberInput = (draftId: string, field: OwnerDraftReviewEditableField, event: Event) => {
-  updateDraft(draftId, field, Number(getInputValue(event) || 0))
+  void updateDraft(draftId, field, Number(getInputValue(event) || 0))
 }
 
-const deleteDraft = (draftId: string) => {
-  const result = deleteOwnerDraftReviewDraft(draftId)
+const deleteDraft = async (draftId: string) => {
+  const result = await deleteCloudBaseOwnerDraftReviewDraft(draftId)
   message.value = result.message
-  refreshView()
+  await refreshView()
 }
 
-const confirmLatestBatch = () => {
-  const result = confirmLatestOwnerDraftReviewBatch()
+const confirmLatestBatch = async () => {
+  const result = await confirmLatestCloudBaseOwnerDraftReviewBatch(viewModel.value.latestBatchId)
   message.value = result.message
-  refreshView()
+  await refreshView()
 }
 </script>
 

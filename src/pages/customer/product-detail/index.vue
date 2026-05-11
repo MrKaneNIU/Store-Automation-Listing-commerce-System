@@ -25,28 +25,42 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import {
-  getCustomerProductDetailView,
-  selectCustomerProductSku,
-  submitCustomerProductDetailOrder,
+  type CustomerProductDetailViewModel,
 } from '../../../features/customer-product-detail/customer-product-detail'
+import {
+  getCloudBaseCustomerProductDetailView,
+  selectCloudBaseCustomerProductSku,
+  submitCloudBaseCustomerProductDetailOrder,
+} from '../../../features/cloudbase-mall/customer-product-detail'
 
 const productId = ref('')
 const selectedSkuId = ref('')
 const message = ref('')
+const viewModel = ref<CustomerProductDetailViewModel>({
+  product: null,
+  skus: [],
+  isPublished: false,
+  canSubmitOrder: false,
+  emptyMessage: '商品不存在或未上架',
+})
 
 onLoad((query) => {
   productId.value = String(query?.id ?? '')
+  void refreshView()
 })
 
-const viewModel = computed(() => getCustomerProductDetailView(productId.value, selectedSkuId.value))
+const refreshView = async () => {
+  viewModel.value = await getCloudBaseCustomerProductDetailView(productId.value, selectedSkuId.value)
+}
 
-const selectSku = (skuId: string) => {
-  const result = selectCustomerProductSku(productId.value, skuId)
+const selectSku = async (skuId: string) => {
+  const result = await selectCloudBaseCustomerProductSku(productId.value, skuId)
   selectedSkuId.value = result.selectedSkuId
   message.value = result.message
+  await refreshView()
 }
 
 const confirmModal = (content: string) =>
@@ -67,7 +81,7 @@ const submitOrder = async () => {
     return
   }
 
-  const result = await submitCustomerProductDetailOrder({
+  const result = await submitCloudBaseCustomerProductDetailOrder({
     productId: productId.value,
     skuId: selectedSkuId.value,
     quantity: 1,
@@ -75,6 +89,7 @@ const submitOrder = async () => {
     confirmPhoneAuthorization: () => confirmModal('需要授权微信绑定手机号，用于商家确认订单。'),
   })
   message.value = result.message
+  await refreshView()
 }
 </script>
 
