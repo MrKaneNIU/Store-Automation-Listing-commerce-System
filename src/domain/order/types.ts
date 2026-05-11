@@ -16,6 +16,7 @@ export type Order = {
   customerPhone: string
   customerId?: string
   customerAuthSource?: 'mock_wechat' | 'wechat'
+  idempotencyKey?: string
   status: OrderStatus
   items: OrderItem[]
   totalAmount: number

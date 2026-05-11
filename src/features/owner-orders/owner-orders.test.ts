@@ -65,6 +65,6 @@ describe('owner orders facade', () => {
 
     const result = cancelOwnerOrder(order.id)
 
-    expect(result.message).toContain('只有待商家确认订单可以取消')
+    expect(result.message).toContain('鍙湁寰呭晢瀹剁‘璁よ鍗曞彲浠ュ彇娑?')
   })
 })

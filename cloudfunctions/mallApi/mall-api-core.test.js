@@ -273,6 +273,60 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     })
   })
 
+  it('writes inventory ledger entries and returns the same order for repeated idempotent requests', async () => {
+    const handler = createHandler()
+    const { product, sku } = await createProductFixture(handler)
+    const first = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        idempotencyKey: 'checkout-1',
+        session: {
+          customerId: 'client-customer',
+          openid: 'client-openid',
+          phoneNumber: '13800000000',
+          authSource: 'mock_wechat',
+        },
+      },
+    })
+    const second = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        idempotencyKey: 'checkout-1',
+        session: {
+          customerId: 'client-customer',
+          openid: 'client-openid',
+          phoneNumber: '13800000000',
+          authSource: 'mock_wechat',
+        },
+      },
+    })
+
+    expect(first.success).toBe(true)
+    expect(second).toMatchObject({
+      success: true,
+      data: {
+        order: first.data.order,
+      },
+    })
+    expect(await handler({
+      action: 'listMerchantOrders',
+      identity: ownerIdentity,
+    })).toMatchObject({
+      success: true,
+      data: {
+        orders: [first.data.order],
+      },
+    })
+  })
+
   it('rejects direct client phone binding without a WeChat phone code', async () => {
     const handler = createHandler()
 
@@ -326,6 +380,62 @@ describe('mallApi Phase 4 auth and role permissions', () => {
         code: 'FORBIDDEN',
       },
     })
+  })
+
+  it('records ledger entries when merchant confirms or cancels orders', async () => {
+    const store = createStore()
+    await store.insert('role_assignments', {
+      _id: 'role-owner',
+      openid: 'owner-openid',
+      role: 'owner',
+      status: 'active',
+      created_at: '2026-05-11T00:00:00.000Z',
+      updated_at: '2026-05-11T00:00:00.000Z',
+    })
+    await store.insert('role_assignments', {
+      _id: 'role-staff',
+      openid: 'staff-openid',
+      role: 'staff',
+      status: 'active',
+      created_at: '2026-05-11T00:00:00.000Z',
+      updated_at: '2026-05-11T00:00:00.000Z',
+    })
+    const handler = createProductionRoleHandler(store)
+    const { product, sku } = await createProductFixture(handler)
+    const created = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: {
+          customerId: 'client-customer',
+          openid: 'client-openid',
+          phoneNumber: '13800000000',
+          authSource: 'mock_wechat',
+        },
+      },
+    })
+    await handler({
+      action: 'confirmMerchantOrder',
+      identity: ownerIdentity,
+      params: { orderId: created.data.order.id },
+    })
+    const canceled = await handler({
+      action: 'cancelMerchantOrder',
+      identity: ownerIdentity,
+      params: { orderId: created.data.order.id },
+    })
+    const ledger = await store.list('inventory_ledger')
+
+    expect(canceled).toMatchObject({
+      success: false,
+      error: {
+        code: 'CONFLICT',
+      },
+    })
+    expect(ledger.map((entry) => entry.action)).toEqual(['reserve', 'confirm'])
   })
 
   it('allows staff image supplementation but denies staff publishing', async () => {

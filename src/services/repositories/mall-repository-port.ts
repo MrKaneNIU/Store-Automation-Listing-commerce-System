@@ -1,6 +1,7 @@
 import type { OcrBatch } from '../../domain/batch/types'
 import type { Product, Sku } from '../../domain/catalog/types'
 import type { ProductDraft } from '../../domain/draft/types'
+import type { InventoryLedgerEntry } from '../../domain/inventory/types'
 import type { Order } from '../../domain/order/types'
 
 export type RepositoryResult<T> = T | Promise<T>
@@ -20,6 +21,8 @@ export type MallRepositoryContract = {
   saveOrder: (order: Order) => RepositoryResult<Order>
   updateOrder: (order: Order) => RepositoryResult<Order>
   listOrders: () => RepositoryResult<Order[]>
+  saveInventoryLedgerEntry: (entry: InventoryLedgerEntry) => RepositoryResult<InventoryLedgerEntry>
+  listInventoryLedgerEntries: (skuId?: string) => RepositoryResult<InventoryLedgerEntry[]>
 }
 
 export type MallRepository = {
@@ -37,4 +40,6 @@ export type MallRepository = {
   saveOrder: (order: Order) => Order
   updateOrder: (order: Order) => Order
   listOrders: () => Order[]
+  saveInventoryLedgerEntry: (entry: InventoryLedgerEntry) => InventoryLedgerEntry
+  listInventoryLedgerEntries: (skuId?: string) => InventoryLedgerEntry[]
 }

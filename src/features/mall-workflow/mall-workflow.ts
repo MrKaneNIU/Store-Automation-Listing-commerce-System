@@ -9,6 +9,22 @@ import { mockOcrProvider } from '../../services/ocr/mock-ocr-provider'
 import { mallRepository } from '../../services/repositories/mall-repository'
 import { uploadService } from '../../services/storage/runtime-upload-service'
 
+const saveInventoryLedgerEntry = (entry: {
+  skuId: string
+  orderId?: string
+  action: 'reserve' | 'release' | 'confirm' | 'adjust'
+  quantityDelta: number
+  sourceType: 'order' | 'manual'
+  sourceId: string
+  note: string
+}) => {
+  mallRepository.saveInventoryLedgerEntry({
+    id: createId('ledger'),
+    createdAt: nowIso(),
+    ...entry,
+  })
+}
+
 export const mallWorkflow = {
   async createMockImportBatch(images?: UploadedImage[]) {
     const uploadedImages = images ?? (await uploadService.chooseImages({ businessType: 'ocr_screenshot', sourceRole: 'owner', entityType: 'ocr_batch' }))
@@ -72,18 +88,37 @@ export const mallWorkflow = {
       customerPhone: string
       customerId?: string
       customerAuthSource?: 'mock_wechat' | 'wechat'
+      idempotencyKey?: string
       quantity: number
     },
   ) {
     const sku = mallRepository.listSkus(product.id).find((item) => item.id === skuId)
     if (!sku) {
-      throw new Error('SKU 不存在')
+      throw new Error('SKU 涓嶅瓨鍦?')
     }
     if (!canCreateOrder(product, sku, params.quantity)) {
-      throw new Error('商品未上架或库存不足')
+      throw new Error('鍟嗗搧鏈笂鏋舵垨搴撳瓨涓嶈冻')
     }
+
+    const normalizedKey = params.idempotencyKey?.trim()
+    if (normalizedKey) {
+      const existingOrder = mallRepository.listOrders().find((order) => order.idempotencyKey === normalizedKey)
+      if (existingOrder) {
+        return existingOrder
+      }
+    }
+
     const order = createPendingOrder({ product, sku, ...params })
     mallRepository.updateSku({ ...sku, stock: sku.stock - params.quantity })
+    saveInventoryLedgerEntry({
+      skuId: sku.id,
+      orderId: order.id,
+      action: 'reserve',
+      quantityDelta: -params.quantity,
+      sourceType: 'order',
+      sourceId: order.id,
+      note: `reserve stock for order ${order.id}`,
+    })
     return mallRepository.saveOrder(order)
   },
   createAuthorizedOrder(
@@ -91,43 +126,64 @@ export const mallWorkflow = {
     skuId: string,
     params: {
       session: CustomerSession | null
+      idempotencyKey?: string
       quantity: number
     },
   ) {
     if (!params.session?.phoneNumber) {
-      throw new Error('请先完成微信手机号授权')
+      throw new Error('璇峰厛瀹屾垚寰俊鎵嬫満鍙锋巿鏉?')
     }
 
     return mallWorkflow.createOrder(product, skuId, {
-      customerName: params.session.nickname ?? '微信用户',
+      customerName: params.session.nickname ?? '寰俊鐢ㄦ埛',
       customerPhone: params.session.phoneNumber,
       customerId: params.session.customerId,
       customerAuthSource: params.session.authSource,
+      idempotencyKey: params.idempotencyKey,
       quantity: params.quantity,
     })
   },
   confirmOrder(orderId: string) {
     const order = mallRepository.listOrders().find((item) => item.id === orderId)
     if (!order) {
-      throw new Error('订单不存在')
+      throw new Error('璁㈠崟涓嶅瓨鍦?')
     }
     if (order.status !== 'pending_merchant_confirm') {
-      throw new Error('只有待商家确认订单可以确认')
+      throw new Error('鍙湁寰呭晢瀹剁‘璁よ鍗曞彲浠ョ‘璁?')
     }
-    return mallRepository.updateOrder(confirmOrder(order))
+    const confirmed = mallRepository.updateOrder(confirmOrder(order))
+    saveInventoryLedgerEntry({
+      skuId: order.items[0].skuId,
+      orderId: order.id,
+      action: 'confirm',
+      quantityDelta: 0,
+      sourceType: 'order',
+      sourceId: order.id,
+      note: `confirm order ${order.id}`,
+    })
+    return confirmed
   },
   cancelOrder(orderId: string) {
     const order = mallRepository.listOrders().find((item) => item.id === orderId)
     if (!order) {
-      throw new Error('订单不存在')
+      throw new Error('璁㈠崟涓嶅瓨鍦?')
     }
     if (order.status !== 'pending_merchant_confirm') {
-      throw new Error('只有待商家确认订单可以取消')
+      throw new Error('鍙湁寰呭晢瀹剁‘璁よ鍗曞彲浠ュ彇娑?')
     }
     order.items.forEach((item) => {
       const sku = mallRepository.listSkus().find((currentSku) => currentSku.id === item.skuId)
       if (sku) {
         mallRepository.updateSku({ ...sku, stock: sku.stock + item.quantity })
+        saveInventoryLedgerEntry({
+          skuId: sku.id,
+          orderId: order.id,
+          action: 'release',
+          quantityDelta: item.quantity,
+          sourceType: 'order',
+          sourceId: order.id,
+          note: `release stock for order ${order.id}`,
+        })
       }
     })
     return mallRepository.updateOrder(cancelOrder(order))

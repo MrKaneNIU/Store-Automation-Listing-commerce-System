@@ -29,4 +29,24 @@ describe('CloudBase mall repository transaction boundary', () => {
     expect(await repository.listProducts()).toEqual([])
     expect(await repository.listSkus()).toEqual([])
   })
+
+  it('saves and lists inventory ledger entries by sku', async () => {
+    await store.reset()
+    const repository = createCloudBaseMallRepository(store)
+    const entry = {
+      id: 'ledger-1',
+      skuId: 'sku-1',
+      orderId: 'order-1',
+      action: 'reserve' as const,
+      quantityDelta: -1,
+      sourceType: 'order' as const,
+      sourceId: 'order-1',
+      note: 'reserve stock for order',
+      createdAt: '2026-05-11T00:00:00.000Z',
+    }
+
+    await repository.saveInventoryLedgerEntry(entry)
+
+    expect(await repository.listInventoryLedgerEntries('sku-1')).toEqual([entry])
+  })
 })

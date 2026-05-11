@@ -15,6 +15,7 @@ export const createPendingOrder = (params: {
   customerPhone: string
   customerId?: string
   customerAuthSource?: 'mock_wechat' | 'wechat'
+  idempotencyKey?: string
 }): Order => {
   const item: OrderItem = {
     skuId: params.sku.id,
@@ -33,6 +34,7 @@ export const createPendingOrder = (params: {
     customerPhone: params.customerPhone,
     customerId: params.customerId,
     customerAuthSource: params.customerAuthSource,
+    idempotencyKey: params.idempotencyKey,
     status: 'pending_merchant_confirm',
     items: [item],
     totalAmount: item.salePrice * item.quantity,

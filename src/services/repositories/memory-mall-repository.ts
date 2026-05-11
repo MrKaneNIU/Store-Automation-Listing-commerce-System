@@ -54,6 +54,13 @@ export const createMemoryMallRepository = (database: MockDb = mockDb): MallRepos
   listOrders() {
     return [...database.orders]
   },
+  saveInventoryLedgerEntry(entry) {
+    database.inventoryLedger = [...database.inventoryLedger, entry]
+    return entry
+  },
+  listInventoryLedgerEntries(skuId) {
+    return skuId ? database.inventoryLedger.filter((entry) => entry.skuId === skuId) : [...database.inventoryLedger]
+  },
 })
 
 export const memoryMallRepository = createMemoryMallRepository()

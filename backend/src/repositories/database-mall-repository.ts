@@ -58,6 +58,7 @@ type Order = {
   customerPhone: string
   customerId?: string
   customerAuthSource?: 'mock_wechat' | 'wechat'
+  idempotencyKey?: string
   status: 'pending_merchant_confirm' | 'confirmed' | 'canceled'
   items: OrderItem[]
   totalAmount: number
@@ -113,6 +114,7 @@ type OrderRow = {
   customer_phone: string
   customer_id: string | null
   customer_auth_source: Order['customerAuthSource']
+  idempotency_key: string | null
   status: Order['status']
   total_amount: string | number
   created_at: string | Date
@@ -189,11 +191,24 @@ const toOrder = (row: OrderRow, items: OrderItem[]): Order => ({
   customerPhone: row.customer_phone,
   ...(row.customer_id ? { customerId: row.customer_id } : {}),
   ...(row.customer_auth_source ? { customerAuthSource: row.customer_auth_source } : {}),
+  ...(row.idempotency_key ? { idempotencyKey: row.idempotency_key } : {}),
   status: row.status,
   items,
   totalAmount: Number(row.total_amount),
   createdAt: toIso(row.created_at),
   updatedAt: toIso(row.updated_at),
+})
+
+const toInventoryLedgerEntry = (row: InventoryLedgerRow): InventoryLedgerEntry => ({
+  id: row.id,
+  skuId: row.sku_id,
+  ...(row.order_id ? { orderId: row.order_id } : {}),
+  action: row.action,
+  quantityDelta: row.quantity_delta,
+  sourceType: row.source_type,
+  sourceId: row.source_id,
+  note: row.note,
+  createdAt: toIso(row.created_at),
 })
 
 const firstRow = <T>(rows: T[]): T => {
@@ -310,6 +325,42 @@ const ensureCustomerPlaceholder = async (database: DatabaseExecutor, order: Orde
       order.updatedAt,
     ],
   )
+}
+
+const insertInventoryLedgerEntry = async (
+  database: DatabaseExecutor,
+  entry: InventoryLedgerEntry,
+): Promise<InventoryLedgerEntry> => {
+  const { rows } = await database.query<InventoryLedgerRow>(
+    `
+      INSERT INTO inventory_ledger (
+        id,
+        sku_id,
+        order_id,
+        action,
+        quantity_delta,
+        source_type,
+        source_id,
+        note,
+        created_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *
+    `,
+    [
+      entry.id,
+      entry.skuId,
+      entry.orderId ?? null,
+      entry.action,
+      entry.quantityDelta,
+      entry.sourceType,
+      entry.sourceId,
+      entry.note,
+      entry.createdAt,
+    ],
+  )
+
+  return toInventoryLedgerEntry(firstRow(rows))
 }
 
 export const createDatabaseMallRepository = (database: TransactionalDatabaseExecutor) => ({
@@ -450,7 +501,7 @@ export const createDatabaseMallRepository = (database: TransactionalDatabaseExec
   async saveOrder(order: Order): Promise<Order> {
     return database.transaction(async (transaction) => {
       await ensureCustomerPlaceholder(transaction, order)
-      await transaction.query<OrderRow>(
+      const { rows } = await transaction.query<OrderRow>(
         `
           INSERT INTO orders (
             id,
@@ -458,12 +509,13 @@ export const createDatabaseMallRepository = (database: TransactionalDatabaseExec
             customer_phone,
             customer_id,
             customer_auth_source,
+            idempotency_key,
             status,
             total_amount,
             created_at,
             updated_at
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
           RETURNING *
         `,
         [
@@ -472,6 +524,7 @@ export const createDatabaseMallRepository = (database: TransactionalDatabaseExec
           order.customerPhone,
           order.customerId ?? null,
           order.customerAuthSource ?? 'mock_wechat',
+          order.idempotencyKey ?? null,
           order.status,
           order.totalAmount,
           order.createdAt,
@@ -509,7 +562,7 @@ export const createDatabaseMallRepository = (database: TransactionalDatabaseExec
         )
       }
 
-      return order
+      return toOrder(firstRow(rows), order.items)
     })
   },
 
@@ -521,10 +574,11 @@ export const createDatabaseMallRepository = (database: TransactionalDatabaseExec
             customer_phone = $3,
             customer_id = $4,
             customer_auth_source = $5,
-            status = $6,
-            total_amount = $7,
-            created_at = $8,
-            updated_at = $9
+            idempotency_key = $6,
+            status = $7,
+            total_amount = $8,
+            created_at = $9,
+            updated_at = $10
         WHERE id = $1
         RETURNING *
       `,
@@ -534,6 +588,7 @@ export const createDatabaseMallRepository = (database: TransactionalDatabaseExec
         order.customerPhone,
         order.customerId ?? null,
         order.customerAuthSource ?? 'mock_wechat',
+        order.idempotencyKey ?? null,
         order.status,
         order.totalAmount,
         order.createdAt,
@@ -563,4 +618,39 @@ export const createDatabaseMallRepository = (database: TransactionalDatabaseExec
 
     return result
   },
+
+  async saveInventoryLedgerEntry(entry: InventoryLedgerEntry): Promise<InventoryLedgerEntry> {
+    return insertInventoryLedgerEntry(database, entry)
+  },
+
+  async listInventoryLedgerEntries(skuId?: string): Promise<InventoryLedgerEntry[]> {
+    const { rows } = skuId
+      ? await database.query<InventoryLedgerRow>('SELECT * FROM inventory_ledger WHERE sku_id = $1 ORDER BY created_at, id', [skuId])
+      : await database.query<InventoryLedgerRow>('SELECT * FROM inventory_ledger ORDER BY created_at, id')
+
+    return rows.map(toInventoryLedgerEntry)
+  },
 })
+type InventoryLedgerEntry = {
+  id: string
+  skuId: string
+  orderId?: string
+  action: 'reserve' | 'release' | 'confirm' | 'adjust'
+  quantityDelta: number
+  sourceType: 'order' | 'manual'
+  sourceId: string
+  note: string
+  createdAt: string
+}
+
+type InventoryLedgerRow = {
+  id: string
+  sku_id: string
+  order_id: string | null
+  action: InventoryLedgerEntry['action']
+  quantity_delta: number
+  source_type: InventoryLedgerEntry['sourceType']
+  source_id: string
+  note: string
+  created_at: string | Date
+}

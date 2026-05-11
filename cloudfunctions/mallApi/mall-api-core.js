@@ -206,6 +206,7 @@ const parseCustomerOrderInput = (value) => {
     productId: readString(value, 'productId'),
     skuId: readString(value, 'skuId'),
     quantity: readPositiveInteger(value, 'quantity'),
+    idempotencyKey: readOptionalString(value, 'idempotencyKey'),
     session: {
       customerId: readOptionalString(value.session, 'customerId'),
       nickname: readOptionalString(value.session, 'nickname'),
@@ -369,6 +370,7 @@ const toOrderDocument = (order) => ({
   customer_phone: order.customerPhone,
   ...(order.customerId ? { customer_id: order.customerId } : {}),
   ...(order.customerAuthSource ? { customer_auth_source: order.customerAuthSource } : {}),
+  ...(order.idempotencyKey ? { idempotency_key: order.idempotencyKey } : {}),
   status: order.status,
   total_amount: order.totalAmount,
   created_at: order.createdAt,
@@ -403,11 +405,36 @@ const toOrder = (document, items) => ({
   customerPhone: document.customer_phone,
   ...(document.customer_id ? { customerId: document.customer_id } : {}),
   ...(document.customer_auth_source ? { customerAuthSource: document.customer_auth_source } : {}),
+  ...(document.idempotency_key ? { idempotencyKey: document.idempotency_key } : {}),
   status: document.status,
   items,
   totalAmount: document.total_amount,
   createdAt: document.created_at,
   updatedAt: document.updated_at,
+})
+
+const toInventoryLedgerDocument = (entry) => ({
+  _id: entry.id,
+  sku_id: entry.skuId,
+  ...(entry.orderId ? { order_id: entry.orderId } : {}),
+  action: entry.action,
+  quantity_delta: entry.quantityDelta,
+  source_type: entry.sourceType,
+  source_id: entry.sourceId,
+  note: entry.note,
+  created_at: entry.createdAt,
+})
+
+const toInventoryLedgerEntry = (document) => ({
+  id: document._id,
+  skuId: document.sku_id,
+  ...(document.order_id ? { orderId: document.order_id } : {}),
+  action: document.action,
+  quantityDelta: document.quantity_delta,
+  sourceType: document.source_type,
+  sourceId: document.source_id,
+  note: document.note,
+  createdAt: document.created_at,
 })
 
 const toCustomerDocument = (customer) => ({
@@ -525,6 +552,11 @@ const createRepository = (store) => ({
     return (await store.list('orders'))
       .map((order) => toOrder(order, items.filter((item) => item.orderId === order._id).map((item) => item.item)))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  },
+  saveInventoryLedgerEntry: async (entry) => toInventoryLedgerEntry(await store.insert('inventory_ledger', toInventoryLedgerDocument(entry))),
+  listInventoryLedgerEntries: async (skuId) => {
+    const documents = skuId ? await store.list('inventory_ledger', { sku_id: skuId }) : await store.list('inventory_ledger')
+    return documents.map(toInventoryLedgerEntry).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
   },
   findCustomerByOpenid: async (openid) => {
     const customer = (await store.list('customers', { openid })).at(0)
@@ -853,6 +885,12 @@ const apiHandlers = {
     if (product.status !== 'published' || sku.stock < input.quantity) {
       throw conflictError('Product is unpublished or stock is insufficient')
     }
+    if (input.idempotencyKey) {
+      const existingOrder = (await context.repository.listOrders()).find((order) => order.idempotencyKey === input.idempotencyKey)
+      if (existingOrder) {
+        return { order: existingOrder }
+      }
+    }
     const timestamp = context.now()
     const order = {
       id: context.createId('order'),
@@ -860,6 +898,7 @@ const apiHandlers = {
       customerPhone: phoneNumber,
       customerId: customer?.id || input.session.customerId,
       customerAuthSource: customer ? 'wechat' : (input.session.authSource || 'mock_wechat'),
+      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       status: 'pending_merchant_confirm',
       items: [{
         skuId: sku.id,
@@ -875,6 +914,17 @@ const apiHandlers = {
       updatedAt: timestamp,
     }
     await context.repository.updateSku({ ...sku, stock: sku.stock - input.quantity })
+    await context.repository.saveInventoryLedgerEntry({
+      id: context.createId('ledger'),
+      skuId: sku.id,
+      orderId: order.id,
+      action: 'reserve',
+      quantityDelta: -input.quantity,
+      sourceType: 'order',
+      sourceId: order.id,
+      note: `reserve stock for order ${order.id}`,
+      createdAt: timestamp,
+    })
     return { order: await context.repository.saveOrder(order) }
   },
   async getCustomerOrder(event, context) {
@@ -890,7 +940,20 @@ const apiHandlers = {
     if (order.status !== 'pending_merchant_confirm') {
       throw conflictError('Only pending merchant-confirmation orders can be confirmed')
     }
-    return { order: await context.repository.updateOrder({ ...order, status: 'confirmed', updatedAt: context.now() }) }
+    const updatedAt = context.now()
+    const confirmed = await context.repository.updateOrder({ ...order, status: 'confirmed', updatedAt })
+    await context.repository.saveInventoryLedgerEntry({
+      id: context.createId('ledger'),
+      skuId: order.items[0].skuId,
+      orderId: order.id,
+      action: 'confirm',
+      quantityDelta: 0,
+      sourceType: 'order',
+      sourceId: order.id,
+      note: `confirm order ${order.id}`,
+      createdAt: updatedAt,
+    })
+    return { order: confirmed }
   },
   async cancelMerchantOrder(event, context) {
     await requireResolvedAnyRole(event, context, ['owner'])
@@ -898,11 +961,25 @@ const apiHandlers = {
     if (order.status !== 'pending_merchant_confirm') {
       throw conflictError('Only pending merchant-confirmation orders can be canceled')
     }
+    const updatedAt = context.now()
     for (const item of order.items) {
       const sku = (await context.repository.listSkus()).find((currentSku) => currentSku.id === item.skuId)
-      if (sku) await context.repository.updateSku({ ...sku, stock: sku.stock + item.quantity })
+      if (sku) {
+        await context.repository.updateSku({ ...sku, stock: sku.stock + item.quantity })
+        await context.repository.saveInventoryLedgerEntry({
+          id: context.createId('ledger'),
+          skuId: sku.id,
+          orderId: order.id,
+          action: 'release',
+          quantityDelta: item.quantity,
+          sourceType: 'order',
+          sourceId: order.id,
+          note: `release stock for order ${order.id}`,
+          createdAt: updatedAt,
+        })
+      }
     }
-    return { order: await context.repository.updateOrder({ ...order, status: 'canceled', updatedAt: context.now() }) }
+    return { order: await context.repository.updateOrder({ ...order, status: 'canceled', updatedAt }) }
   },
 }
 

@@ -163,7 +163,7 @@ describe('mallWorkflow orders', () => {
         customerPhone: '13900000000',
         quantity: 1,
       }),
-    ).toThrow('商品未上架或库存不足')
+    ).toThrow('鍟嗗搧鏈笂鏋舵垨搴撳瓨涓嶈冻')
   })
 
   it('restores reserved SKU stock when canceling a pending order', async () => {
@@ -209,7 +209,7 @@ describe('mallWorkflow orders', () => {
       }).id,
     )
 
-    expect(() => mallWorkflow.cancelOrder(confirmedOrder.id)).toThrow('只有待商家确认订单可以取消')
+    expect(() => mallWorkflow.cancelOrder(confirmedOrder.id)).toThrow('鍙湁寰呭晢瀹剁‘璁よ鍗曞彲浠ュ彇娑?')
   })
 
   it('does not allow confirming a canceled order', async () => {
@@ -231,7 +231,7 @@ describe('mallWorkflow orders', () => {
       }).id,
     )
 
-    expect(() => mallWorkflow.confirmOrder(canceledOrder.id)).toThrow('只有待商家确认订单可以确认')
+    expect(() => mallWorkflow.confirmOrder(canceledOrder.id)).toThrow('鍙湁寰呭晢瀹剁‘璁よ鍗曞彲浠ョ‘璁?')
   })
 
   it('creates orders with authorized WeChat customer fields and reserves stock', async () => {
@@ -283,7 +283,7 @@ describe('mallWorkflow orders', () => {
         session,
         quantity: 1,
       }),
-    ).toThrow('请先完成微信手机号授权')
+    ).toThrow('璇峰厛瀹屾垚寰俊鎵嬫満鍙锋巿鏉?')
     expect(mallRepository.listOrders()).toHaveLength(0)
     expect(mallRepository.listSkus(published.id)[0].stock).toBe(sku.stock)
   })

@@ -90,6 +90,7 @@ export const initialPhase2SchemaMigration: Migration = {
       customer_phone TEXT NOT NULL,
       customer_id TEXT REFERENCES customers(id) ON DELETE SET NULL,
       customer_auth_source TEXT NOT NULL CHECK (customer_auth_source IN ('mock_wechat', 'wechat')),
+      idempotency_key TEXT,
       status TEXT NOT NULL CHECK (status IN ('pending_merchant_confirm', 'confirmed', 'canceled')),
       total_amount NUMERIC(12, 2) NOT NULL CHECK (total_amount >= 0),
       created_at TIMESTAMPTZ NOT NULL,
@@ -98,6 +99,9 @@ export const initialPhase2SchemaMigration: Migration = {
 
     CREATE INDEX IF NOT EXISTS orders_customer_id_idx ON orders(customer_id);
     CREATE INDEX IF NOT EXISTS orders_status_idx ON orders(status);
+    CREATE UNIQUE INDEX IF NOT EXISTS orders_idempotency_key_idx
+      ON orders(idempotency_key)
+      WHERE idempotency_key IS NOT NULL;
 
     CREATE TABLE IF NOT EXISTS order_items (
       id TEXT PRIMARY KEY,
@@ -113,5 +117,20 @@ export const initialPhase2SchemaMigration: Migration = {
 
     CREATE INDEX IF NOT EXISTS order_items_order_id_idx ON order_items(order_id);
     CREATE INDEX IF NOT EXISTS order_items_sku_id_idx ON order_items(sku_id);
+
+    CREATE TABLE IF NOT EXISTS inventory_ledger (
+      id TEXT PRIMARY KEY,
+      sku_id TEXT NOT NULL,
+      order_id TEXT,
+      action TEXT NOT NULL CHECK (action IN ('reserve', 'release', 'confirm', 'adjust')),
+      quantity_delta INTEGER NOT NULL,
+      source_type TEXT NOT NULL CHECK (source_type IN ('order', 'manual')),
+      source_id TEXT NOT NULL,
+      note TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS inventory_ledger_sku_id_idx ON inventory_ledger(sku_id);
+    CREATE INDEX IF NOT EXISTS inventory_ledger_order_id_idx ON inventory_ledger(order_id);
   `,
 }

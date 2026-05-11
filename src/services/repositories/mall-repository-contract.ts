@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { OcrBatch } from '../../domain/batch/types'
 import type { Product, Sku } from '../../domain/catalog/types'
 import type { ProductDraft } from '../../domain/draft/types'
+import type { InventoryLedgerEntry } from '../../domain/inventory/types'
 import type { Order } from '../../domain/order/types'
 import type { MallRepositoryContract } from './mall-repository-port'
 
@@ -74,6 +75,18 @@ const order: Order = {
   totalAmount: 129,
   createdAt: '2026-05-08T00:00:00.000Z',
   updatedAt: '2026-05-08T00:00:00.000Z',
+}
+
+const inventoryLedgerEntry: InventoryLedgerEntry = {
+  id: 'ledger-1',
+  skuId: 'sku-1',
+  orderId: 'order-1',
+  action: 'reserve',
+  quantityDelta: -1,
+  sourceType: 'order',
+  sourceId: 'order-1',
+  note: 'reserve for order',
+  createdAt: '2026-05-08T00:03:00.000Z',
 }
 
 export const runMallRepositoryContract = (
@@ -153,6 +166,42 @@ export const runMallRepositoryContract = (
 
       expect(await repository.listOrders()).toEqual([updated])
     })
+
+    it('saves and lists inventory ledger entries by sku', async () => {
+      await factory.reset?.()
+      const repository = factory.createRepository()
+
+      await repository.saveInventoryLedgerEntry(inventoryLedgerEntry)
+      await repository.saveInventoryLedgerEntry({
+        ...inventoryLedgerEntry,
+        id: 'ledger-2',
+        action: 'release',
+        quantityDelta: 1,
+        note: 'release for cancel',
+      })
+
+      expect(await repository.listInventoryLedgerEntries('sku-1')).toEqual([
+        inventoryLedgerEntry,
+        {
+          ...inventoryLedgerEntry,
+          id: 'ledger-2',
+          action: 'release',
+          quantityDelta: 1,
+          note: 'release for cancel',
+        },
+      ])
+      expect(await repository.listInventoryLedgerEntries('missing-sku')).toEqual([])
+      expect(await repository.listInventoryLedgerEntries()).toEqual([
+        inventoryLedgerEntry,
+        {
+          ...inventoryLedgerEntry,
+          id: 'ledger-2',
+          action: 'release',
+          quantityDelta: 1,
+          note: 'release for cancel',
+        },
+      ])
+    })
   })
 }
 
@@ -162,4 +211,5 @@ export const repositoryContractFixtures = {
   product,
   sku,
   order,
+  inventoryLedgerEntry,
 }

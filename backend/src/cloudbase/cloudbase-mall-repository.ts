@@ -58,11 +58,24 @@ type Order = {
   customerPhone: string
   customerId?: string
   customerAuthSource?: 'mock_wechat' | 'wechat'
+  idempotencyKey?: string
   status: 'pending_merchant_confirm' | 'confirmed' | 'canceled'
   items: OrderItem[]
   totalAmount: number
   createdAt: string
   updatedAt: string
+}
+
+type InventoryLedgerEntry = {
+  id: string
+  skuId: string
+  orderId?: string
+  action: 'reserve' | 'release' | 'confirm' | 'adjust'
+  quantityDelta: number
+  sourceType: 'order' | 'manual'
+  sourceId: string
+  note: string
+  createdAt: string
 }
 
 type BatchDocument = {
@@ -113,6 +126,7 @@ type OrderDocument = {
   customer_phone: string
   customer_id?: string
   customer_auth_source?: Order['customerAuthSource']
+  idempotency_key?: string
   status: Order['status']
   total_amount: number
   created_at: string
@@ -131,6 +145,18 @@ type OrderItemDocument = {
   quantity: number
 }
 
+type InventoryLedgerDocument = {
+  _id: string
+  sku_id: string
+  order_id: string | null
+  action: InventoryLedgerEntry['action']
+  quantity_delta: number
+  source_type: InventoryLedgerEntry['sourceType']
+  source_id: string
+  note: string
+  created_at: string
+}
+
 type CloudBaseMallRepository = {
   saveBatch: (batch: OcrBatch) => Promise<OcrBatch>
   updateBatch: (batch: OcrBatch) => Promise<OcrBatch>
@@ -146,6 +172,8 @@ type CloudBaseMallRepository = {
   saveOrder: (order: Order) => Promise<Order>
   updateOrder: (order: Order) => Promise<Order>
   listOrders: () => Promise<Order[]>
+  saveInventoryLedgerEntry: (entry: InventoryLedgerEntry) => Promise<InventoryLedgerEntry>
+  listInventoryLedgerEntries: (skuId?: string) => Promise<InventoryLedgerEntry[]>
 }
 
 const toBatchDocument = (batch: OcrBatch): BatchDocument => ({
@@ -238,6 +266,7 @@ const toOrderDocument = (order: Order): OrderDocument => ({
   customer_phone: order.customerPhone,
   ...(order.customerId ? { customer_id: order.customerId } : {}),
   ...(order.customerAuthSource ? { customer_auth_source: order.customerAuthSource } : {}),
+  ...(order.idempotencyKey ? { idempotency_key: order.idempotencyKey } : {}),
   status: order.status,
   total_amount: order.totalAmount,
   created_at: order.createdAt,
@@ -272,11 +301,36 @@ const toOrder = (document: OrderDocument, items: OrderItem[]): Order => ({
   customerPhone: document.customer_phone,
   ...(document.customer_id ? { customerId: document.customer_id } : {}),
   ...(document.customer_auth_source ? { customerAuthSource: document.customer_auth_source } : {}),
+  ...(document.idempotency_key ? { idempotencyKey: document.idempotency_key } : {}),
   status: document.status,
   items,
   totalAmount: document.total_amount,
   createdAt: document.created_at,
   updatedAt: document.updated_at,
+})
+
+const toInventoryLedgerDocument = (entry: InventoryLedgerEntry): InventoryLedgerDocument => ({
+  _id: entry.id,
+  sku_id: entry.skuId,
+  order_id: entry.orderId ?? null,
+  action: entry.action,
+  quantity_delta: entry.quantityDelta,
+  source_type: entry.sourceType,
+  source_id: entry.sourceId,
+  note: entry.note,
+  created_at: entry.createdAt,
+})
+
+const toInventoryLedgerEntry = (document: InventoryLedgerDocument): InventoryLedgerEntry => ({
+  id: document._id,
+  skuId: document.sku_id,
+  ...(document.order_id ? { orderId: document.order_id } : {}),
+  action: document.action,
+  quantityDelta: document.quantity_delta,
+  sourceType: document.source_type,
+  sourceId: document.source_id,
+  note: document.note,
+  createdAt: document.created_at,
 })
 
 const assertSkuCanPersist = (sku: Sku): void => {
@@ -371,5 +425,12 @@ export const createCloudBaseMallRepository = (
         items.filter((item) => item.orderId === order._id).map((item) => item.item),
       ),
     )
+  },
+  async saveInventoryLedgerEntry(entry: InventoryLedgerEntry) {
+    return toInventoryLedgerEntry(await store.insert('inventory_ledger', toInventoryLedgerDocument(entry)))
+  },
+  async listInventoryLedgerEntries(skuId?: string) {
+    const entries = (await store.list<InventoryLedgerDocument>('inventory_ledger')).map(toInventoryLedgerEntry)
+    return skuId ? entries.filter((entry) => entry.skuId === skuId) : entries
   },
 })

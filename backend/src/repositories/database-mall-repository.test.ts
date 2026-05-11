@@ -82,6 +82,112 @@ describe('database mall repository transactions', () => {
     expect(await repository.listProducts()).toEqual([])
     expect(await repository.listSkus()).toEqual([])
   })
+
+  it('saves and lists inventory ledger entries by sku', async () => {
+    const repository = createDatabaseMallRepository(database.executor)
+    const { batch } = repositoryContractFixtures
+
+    await repository.saveBatch(batch)
+    await repository.saveProducts(
+      [{
+        id: 'product-1',
+        productCode: 'A1023',
+        productName: 'Cotton Shirt',
+        mainImageUrl: '/tmp/main.png',
+        imageUrls: ['/tmp/main.png'],
+        status: 'published',
+        createdFromBatchId: batch.id,
+        createdAt: '2026-05-11T00:00:00.000Z',
+        updatedAt: '2026-05-11T00:00:00.000Z',
+      }],
+      [{
+        id: 'sku-1',
+        productId: 'product-1',
+        productCode: 'A1023',
+        spec: 'M',
+        salePrice: 129,
+        stock: 10,
+      }],
+    )
+    await repository.saveOrder({
+      id: 'order-1',
+      customerName: 'Wechat Customer',
+      customerPhone: '13800000000',
+      customerId: 'mock-customer-001',
+      customerAuthSource: 'mock_wechat',
+      status: 'pending_merchant_confirm',
+      items: [{
+        skuId: 'sku-1',
+        productId: 'product-1',
+        productName: 'Cotton Shirt',
+        productCode: 'A1023',
+        spec: 'M',
+        salePrice: 129,
+        quantity: 1,
+      }],
+      totalAmount: 129,
+      createdAt: '2026-05-11T00:00:00.000Z',
+      updatedAt: '2026-05-11T00:00:00.000Z',
+    })
+
+    const entry = {
+      id: 'ledger-1',
+      skuId: 'sku-1',
+      orderId: 'order-1',
+      action: 'reserve' as const,
+      quantityDelta: -1,
+      sourceType: 'order' as const,
+      sourceId: 'order-1',
+      note: 'reserve stock for order',
+      createdAt: '2026-05-11T00:00:00.000Z',
+    }
+
+    await repository.saveInventoryLedgerEntry(entry)
+
+    expect(await repository.listInventoryLedgerEntries('sku-1')).toEqual([entry])
+  })
+
+  it('persists ledger entries without depending on ledger foreign keys', async () => {
+    const repository = createDatabaseMallRepository(database.executor)
+    const { batch } = repositoryContractFixtures
+
+    await repository.saveBatch(batch)
+    await repository.saveProducts(
+      [{
+        id: 'product-1',
+        productCode: 'A1023',
+        productName: 'Cotton Shirt',
+        mainImageUrl: '/tmp/main.png',
+        imageUrls: ['/tmp/main.png'],
+        status: 'published',
+        createdFromBatchId: batch.id,
+        createdAt: '2026-05-11T00:00:00.000Z',
+        updatedAt: '2026-05-11T00:00:00.000Z',
+      }],
+      [{
+        id: 'sku-1',
+        productId: 'product-1',
+        productCode: 'A1023',
+        spec: 'M',
+        salePrice: 129,
+        stock: 10,
+      }],
+    )
+
+    const entry = {
+      id: 'ledger-1',
+      skuId: 'sku-1',
+      orderId: 'order-1',
+      action: 'reserve' as const,
+      quantityDelta: -1,
+      sourceType: 'order' as const,
+      sourceId: 'order-1',
+      note: 'reserve stock for order',
+      createdAt: '2026-05-11T00:00:00.000Z',
+    }
+
+    await expect(repository.saveInventoryLedgerEntry(entry)).resolves.toEqual(entry)
+  })
 })
 
 describe('database mall repository MVP loop', () => {
@@ -124,5 +230,62 @@ describe('database mall repository MVP loop', () => {
 
     expect((await repository.listOrders())[0]?.status).toBe('canceled')
     expect((await repository.listSkus(product.id))[0]?.stock).toBe(sku.stock)
+  })
+
+  it('persists orders with an idempotency key and returns the same record on repeat saves', async () => {
+    const repository = createDatabaseMallRepository(database.executor)
+    const { batch } = repositoryContractFixtures
+
+    await repository.saveBatch(batch)
+    await repository.saveProducts(
+      [{
+        id: 'product-1',
+        productCode: 'A1023',
+        productName: 'Cotton Shirt',
+        mainImageUrl: '/tmp/main.png',
+        imageUrls: ['/tmp/main.png'],
+        status: 'published',
+        createdFromBatchId: batch.id,
+        createdAt: '2026-05-11T00:00:00.000Z',
+        updatedAt: '2026-05-11T00:00:00.000Z',
+      }],
+      [{
+        id: 'sku-1',
+        productId: 'product-1',
+        productCode: 'A1023',
+        spec: 'M',
+        salePrice: 129,
+        stock: 10,
+      }],
+    )
+
+    const order = {
+      id: 'order-1',
+      customerName: 'Wechat Customer',
+      customerPhone: '13800000000',
+      customerId: 'mock-customer-001',
+      customerAuthSource: 'mock_wechat' as const,
+      idempotencyKey: 'checkout-1',
+      status: 'pending_merchant_confirm' as const,
+      items: [{
+        skuId: 'sku-1',
+        productId: 'product-1',
+        productName: 'Cotton Shirt',
+        productCode: 'A1023',
+        spec: 'M',
+        salePrice: 129,
+        quantity: 1,
+      }],
+      totalAmount: 129,
+      createdAt: '2026-05-11T00:00:00.000Z',
+      updatedAt: '2026-05-11T00:00:00.000Z',
+    }
+
+    const first = await repository.saveOrder(order)
+    const second = await repository.updateOrder({ ...order, updatedAt: '2026-05-11T00:01:00.000Z' })
+
+    expect(first.idempotencyKey).toBe('checkout-1')
+    expect(second.idempotencyKey).toBe('checkout-1')
+    expect(await repository.listOrders()).toHaveLength(1)
   })
 })

@@ -5,6 +5,7 @@ export type CloudBaseCollectionName =
   | 'skus'
   | 'orders'
   | 'order_items'
+  | 'inventory_ledger'
 
 export type CloudBaseDocument = Record<string, unknown> & {
   _id: string
@@ -37,6 +38,7 @@ const collectionNames: CloudBaseCollectionName[] = [
   'skus',
   'orders',
   'order_items',
+  'inventory_ledger',
 ]
 
 const createEmptyState = (): StoreState => ({
@@ -46,6 +48,7 @@ const createEmptyState = (): StoreState => ({
   skus: [],
   orders: [],
   order_items: [],
+  inventory_ledger: [],
 })
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
