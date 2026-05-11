@@ -14,11 +14,12 @@ Current status:
 
 ## Required Environment Inputs
 
-Real CloudBase deployment remains blocked until these external inputs are
-provided:
+Real CloudBase deployment for the current dev/staging path is available with
+these inputs:
 
-1. `CLOUDBASE_ENV_ID` for dev/staging: `shop-d0gl83cca8b2777b5`.
-2. Tencent Cloud or WeChat mini-program account that owns the environment.
+1. `CLOUDBASE_ENV_ID` for dev/staging: `cloud1-d7gifjyzl7721b383`.
+2. Tencent Cloud or WeChat mini-program account that owns the environment:
+   main account `100048727541`, AppID `wxa63c53796488d4d4`.
 3. Operator access for deploying cloud functions and configuring cloud database
    collections/indexes.
 4. Billing posture: `free-quota`.
@@ -99,6 +100,17 @@ This verifies:
   local memory CloudBase document store;
 - CloudBase product/SKU write path rolls back on invalid SKU stock.
 
-Real CloudBase deployment and WeChat DevTools acceptance are still blocked
-until Tencent Cloud operator access is available for deployment and collection
-configuration.
+Current real-environment status:
+
+- `mallHealth` and `mallApi` are deployed to
+  `cloud1-d7gifjyzl7721b383`.
+- Required Phase 2 collections have been created/confirmed in the same
+  environment.
+- CloudBase CLI smoke for `mallApi` write/read paths passed.
+- The current real-AppID WeChat DevTools owner import gate passed manual
+  acceptance.
+
+Phase 3 real image/object storage is now implemented on top of this boundary.
+The `uploaded_assets` collection is the storage metadata anchor for the new
+CloudBase upload flow. Real OCR/AI recognition remains Phase 6 and must not be
+treated as part of this data model closure.

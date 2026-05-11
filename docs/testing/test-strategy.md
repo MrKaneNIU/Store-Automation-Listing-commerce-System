@@ -76,6 +76,23 @@ Existing coverage includes:
   configured.
 - Phase 2.5 restore rehearsal tests cover local PostgreSQL-compatible backup
   restore rehearsal and the core Phase 2 validation checklist.
+- CloudBase service adapter tests cover safe `wx.cloud.callFunction` envelope
+  parsing and the `mallApi` action/params/payload mapping kept behind
+  `src/services/cloudbase`.
+- CloudBase page-facing facade tests cover the mini-program runtime cutover
+  boundary: owner import/review/products/orders, staff image tasks, customer
+  product list/detail, and customer order creation call `mallApi` through
+  service adapters instead of local repository writes.
+- Phase 3 storage tests cover runtime upload service selection, mock upload
+  contract behavior, CloudBase upload/delete/temp-URL mapping, asset
+  replacement, URL refresh, file-size validation, file-format validation, and
+  upload failure-code mapping.
+- `scripts/smoke-cloudbase-api.mjs` covers the local `mallApi` memory-store
+  path for health, contract listing, validation failure, OCR batch creation,
+  latest-draft readback, and batch confirmation.
+- Deployed CloudBase `mallApi` smoke is currently run through CloudBase CLI
+  for `createOcrBatch`, `getLatestDrafts`, `confirmBatch`, and `listProducts`
+  against environment `cloud1-d7gifjyzl7721b383`.
 - Lint, module-boundary, coverage, audit, and build-artifact smoke commands.
 
 ## Current Test Gaps
@@ -83,6 +100,18 @@ Existing coverage includes:
 - No centralized state-machine implementation beyond current domain helpers and
   transition tests.
 - No real mini-program click-through E2E test.
+- No automated real mini-program click-through E2E test yet for the CloudBase
+  integration path. The generated artifact uses real AppID
+  `wxa63c53796488d4d4`, and the current owner screenshot import gate passed
+  manual WeChat DevTools acceptance after the CloudBase environment/function/
+  collection fixes.
+- No automated real CloudBase image upload/download E2E test yet. Phase 3
+  automated checks cover service contracts and build artifacts. The 2026-05-11
+  WeChat Developer Tools acceptance confirmed owner screenshot upload to
+  CloudBase storage with `urlCheck: true`; staff/product image upload should be
+  re-accepted when a valid product creation path exists again.
+- No real OCR/AI recognition test yet. The current owner import path no longer
+  writes fabricated mock product fields, but real OCR remains a Phase 6 gap.
 - App helper, mock upload, and route helper edge cases have limited coverage.
 - No fixture approval process beyond convention.
 
@@ -191,6 +220,8 @@ pnpm.cmd run backend:build
 pnpm.cmd run verify:api
 pnpm.cmd run verify:backend
 pnpm.cmd run backend:restore:rehearsal
+pnpm.cmd run cloudbase:api:smoke
+pnpm.cmd run cloudbase:health:smoke
 pnpm.cmd run build:mp-weixin
 pnpm.cmd run e2e:smoke
 pnpm.cmd run audit:prod
