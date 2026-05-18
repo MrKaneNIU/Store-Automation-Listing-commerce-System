@@ -1,62 +1,121 @@
 <template>
   <view class="page">
-    <text class="title">草稿确认</text>
-    <text class="hint">按商品货号分组复核 OCR 结果。必填字段补齐后，才能确认并自动创建商品和 SKU。</text>
-
-    <view v-if="viewModel.groups.length === 0" class="empty">{{ viewModel.emptyMessage }}</view>
-
-    <view v-for="group in viewModel.groups" :key="group.productCode" class="group">
-      <view class="group-header">
-        <text class="group-title">{{ group.productCode }}</text>
-        <text v-if="group.hasPriceConflict" class="warning">价格冲突</text>
+    <view class="topbar">
+      <view class="brand">
+        <text class="kicker">DRAFT REVIEW</text>
+        <text class="title">草稿确认</text>
       </view>
+      <text class="batch">批次 {{ viewModel.latestBatchId || '待生成' }}</text>
+    </view>
 
-      <view v-for="draft in group.drafts" :key="draft.id" class="draft-card">
-        <view class="badges">
-          <text v-if="draft.isNeedsCompletion" class="badge danger">待补全</text>
-          <text v-if="draft.isLowConfidence" class="badge warn">低置信度</text>
-        </view>
-
-        <label class="field">
-          <text>商品货号</text>
-          <input :value="draft.productCode" @input="handleTextInput(draft.id, 'productCode', $event)" />
-        </label>
-        <label class="field">
-          <text>商品名称</text>
-          <input :value="draft.productName" @input="handleTextInput(draft.id, 'productName', $event)" />
-        </label>
-        <label class="field">
-          <text>销售价</text>
-          <input
-            type="digit"
-            :value="String(draft.salePrice || '')"
-            @input="handleNumberInput(draft.id, 'salePrice', $event)"
-          />
-        </label>
-        <label class="field">
-          <text>规格</text>
-          <input :value="draft.spec" @input="handleTextInput(draft.id, 'spec', $event)" />
-        </label>
-        <label class="field">
-          <text>库存</text>
-          <input
-            type="number"
-            :value="String(draft.stock || '')"
-            @input="handleNumberInput(draft.id, 'stock', $event)"
-          />
-        </label>
-
-        <button class="delete" size="mini" @tap="deleteDraft(draft.id)">删除草稿</button>
+    <view class="hero">
+      <view class="hero-copy">
+        <text class="hero-label">OCR REVIEW</text>
+        <text class="hero-title">{{ draftCount }} 条草稿</text>
+        <text class="hero-desc">按商品货号分组复核 OCR 结果。必填字段补齐后，继续通过现有规则创建商品和 SKU。</text>
+      </view>
+      <view class="hero-meter" :class="{ ready: viewModel.canConfirm }">
+        <text class="meter-number">{{ viewModel.canConfirm ? 'READY' : 'CHECK' }}</text>
+        <text class="meter-label">{{ viewModel.canConfirm ? '可确认' : '待复核' }}</text>
       </view>
     </view>
 
-    <button class="primary" :disabled="!viewModel.canConfirm" @tap="confirmLatestBatch">批量确认并创建商品 SKU</button>
+    <view class="summary-grid">
+      <view class="summary-card">
+        <text class="summary-value">{{ viewModel.groups.length }}</text>
+        <text class="summary-label">货号组</text>
+      </view>
+      <view class="summary-card">
+        <text class="summary-value">{{ viewModel.needsCompletionCount }}</text>
+        <text class="summary-label">待补全</text>
+      </view>
+      <view class="summary-card">
+        <text class="summary-value">{{ viewModel.lowConfidenceCount }}</text>
+        <text class="summary-label">低置信度</text>
+      </view>
+      <view class="summary-card">
+        <text class="summary-value">{{ viewModel.priceConflictCount }}</text>
+        <text class="summary-label">价格冲突</text>
+      </view>
+    </view>
+
+    <view v-if="viewModel.groups.length === 0" class="empty-state">
+      <text class="empty-title">暂无待确认草稿</text>
+      <text class="empty-copy">{{ viewModel.emptyMessage }}</text>
+    </view>
+
+    <view v-for="group in viewModel.groups" :key="group.productCode" class="group">
+      <view class="group-header">
+        <view class="group-copy">
+          <text class="group-kicker">PRODUCT CODE</text>
+          <text class="group-title">{{ group.productCode }}</text>
+        </view>
+        <view class="group-meta">
+          <text class="group-count">{{ group.drafts.length }} 条</text>
+          <text v-if="group.hasPriceConflict" class="warning">价格冲突</text>
+        </view>
+      </view>
+
+      <view v-for="draft in group.drafts" :key="draft.id" class="draft-card">
+        <view class="draft-top">
+          <view class="draft-heading">
+            <text class="draft-code">{{ draft.productCode || '缺少货号' }}</text>
+            <text class="draft-name">{{ draft.productName || '待填写商品名称' }}</text>
+          </view>
+          <view class="badges">
+            <text v-if="draft.isNeedsCompletion" class="badge danger">待补全</text>
+            <text v-if="draft.isLowConfidence" class="badge warn">低置信度</text>
+            <text v-if="!draft.isNeedsCompletion && !draft.isLowConfidence" class="badge clean">已就绪</text>
+          </view>
+        </view>
+
+        <view class="field-grid">
+          <label class="field">
+            <text class="field-label">商品货号</text>
+            <input :value="draft.productCode" @input="handleTextInput(draft.id, 'productCode', $event)" />
+          </label>
+          <label class="field">
+            <text class="field-label">商品名称</text>
+            <input :value="draft.productName" @input="handleTextInput(draft.id, 'productName', $event)" />
+          </label>
+          <label class="field">
+            <text class="field-label">销售价</text>
+            <input
+              type="digit"
+              :value="String(draft.salePrice || '')"
+              @input="handleNumberInput(draft.id, 'salePrice', $event)"
+            />
+          </label>
+          <label class="field">
+            <text class="field-label">规格</text>
+            <input :value="draft.spec" @input="handleTextInput(draft.id, 'spec', $event)" />
+          </label>
+          <label class="field">
+            <text class="field-label">库存</text>
+            <input
+              type="number"
+              :value="String(draft.stock || '')"
+              @input="handleNumberInput(draft.id, 'stock', $event)"
+            />
+          </label>
+        </view>
+
+        <view class="draft-actions">
+          <button class="delete" size="mini" @tap="deleteDraft(draft.id)">删除草稿</button>
+        </view>
+      </view>
+    </view>
+
     <view v-if="message" class="result">{{ message }}</view>
+
+    <view class="bottom-action">
+      <button class="primary" :disabled="!viewModel.canConfirm" @tap="confirmLatestBatch">批量确认并创建商品 SKU</button>
+    </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import {
   type OwnerDraftReviewEditableField,
@@ -79,6 +138,8 @@ const viewModel = ref<OwnerDraftReviewViewModel>({
   canConfirm: false,
   emptyMessage: '暂无草稿，请先完成截图识别',
 })
+
+const draftCount = computed(() => viewModel.value.groups.reduce((total, group) => total + group.drafts.length, 0))
 
 const refreshView = async () => {
   viewModel.value = await getCloudBaseOwnerDraftReviewView()
@@ -123,99 +184,408 @@ const confirmLatestBatch = async () => {
 <style scoped>
 .page {
   min-height: 100vh;
-  padding: 32rpx;
-  background: #f6f7f9;
+  box-sizing: border-box;
+  padding: 32rpx 32rpx calc(156rpx + env(safe-area-inset-bottom));
+  background: #f8f8f8;
+  color: #222222;
+}
+
+.topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24rpx;
+  margin-bottom: 34rpx;
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+  min-width: 0;
+}
+
+.kicker,
+.hero-label,
+.group-kicker {
+  color: #9a9a9a;
+  font-size: 22rpx;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.2;
 }
 
 .title {
   display: block;
-  margin-bottom: 16rpx;
-  font-size: 40rpx;
-  font-weight: 700;
+  color: #222222;
+  font-size: 44rpx;
+  font-weight: 600;
+  line-height: 1.15;
+  white-space: nowrap;
 }
 
-.hint,
-.empty {
+.batch {
+  flex: 0 1 auto;
+  max-width: 320rpx;
+  overflow: hidden;
+  padding: 16rpx 24rpx;
+  border: 1rpx solid #e8e8e8;
+  border-radius: 999rpx;
+  background: #ffffff;
+  color: #686868;
+  font-size: 23rpx;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hero {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 22rpx;
+  margin-bottom: 24rpx;
+  padding: 34rpx;
+  border-radius: 30rpx;
+  background: #050505;
+  box-shadow: 0 22rpx 48rpx rgba(0, 0, 0, 0.08);
+}
+
+.hero-copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 14rpx;
+  min-width: 0;
+}
+
+.hero-title {
   display: block;
-  margin-bottom: 28rpx;
-  font-size: 28rpx;
-  line-height: 1.6;
-  color: #576071;
+  color: #ffffff;
+  font-size: 46rpx;
+  font-weight: 600;
+  line-height: 1.12;
+}
+
+.hero-desc {
+  display: block;
+  max-width: 460rpx;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 25rpx;
+  line-height: 1.55;
+}
+
+.hero-meter {
+  display: flex;
+  flex: 0 0 150rpx;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10rpx;
+  min-height: 150rpx;
+  padding: 22rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.16);
+  border-radius: 26rpx;
+  background: rgba(255, 255, 255, 0.08);
+  text-align: center;
+}
+
+.hero-meter.ready {
+  background: rgba(47, 168, 92, 0.22);
+}
+
+.meter-number {
+  color: #ffffff;
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.meter-label {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 23rpx;
+  line-height: 1.2;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14rpx;
+  margin-bottom: 34rpx;
+}
+
+.summary-card {
+  min-width: 0;
+  padding: 22rpx 12rpx;
+  border: 1rpx solid #eeeeee;
+  border-radius: 24rpx;
+  background: #ffffff;
+  text-align: center;
+}
+
+.summary-value {
+  display: block;
+  color: #222222;
+  font-size: 34rpx;
+  font-weight: 650;
+  line-height: 1.1;
+}
+
+.summary-label {
+  display: block;
+  margin-top: 10rpx;
+  color: #9a9a9a;
+  font-size: 22rpx;
+  line-height: 1.2;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+  margin-bottom: 32rpx;
+  padding: 42rpx 34rpx;
+  border: 1rpx dashed #d8d8d8;
+  border-radius: 30rpx;
+  background: #ffffff;
+}
+
+.empty-title {
+  color: #222222;
+  font-size: 32rpx;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.empty-copy {
+  color: #8a8a8a;
+  font-size: 26rpx;
+  line-height: 1.5;
 }
 
 .group {
-  margin-bottom: 28rpx;
+  margin-bottom: 40rpx;
 }
 
 .group-header {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
-  margin-bottom: 12rpx;
+  gap: 22rpx;
+  margin-bottom: 18rpx;
+}
+
+.group-copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8rpx;
+  min-width: 0;
 }
 
 .group-title {
-  font-size: 32rpx;
-  font-weight: 700;
+  overflow: hidden;
+  color: #222222;
+  font-size: 34rpx;
+  font-weight: 650;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-meta {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.group-count,
+.warning {
+  padding: 8rpx 16rpx;
+  border-radius: 999rpx;
+  font-size: 22rpx;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.group-count {
+  background: #ffffff;
+  color: #8a8a8a;
 }
 
 .warning {
-  color: #c2410c;
+  background: rgba(227, 50, 42, 0.1);
+  color: #e3322a;
 }
 
 .draft-card,
 .result {
   margin-bottom: 18rpx;
-  padding: 22rpx;
+  padding: 28rpx;
+  border: 1rpx solid #eeeeee;
   background: #ffffff;
-  border-radius: 8rpx;
+  border-radius: 28rpx;
+  box-shadow: 0 18rpx 40rpx rgba(0, 0, 0, 0.04);
+}
+
+.draft-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-bottom: 24rpx;
+}
+
+.draft-heading {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8rpx;
+  min-width: 0;
+}
+
+.draft-code {
+  color: #686868;
+  font-size: 23rpx;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.draft-name {
+  display: block;
+  overflow: hidden;
+  color: #222222;
+  font-size: 31rpx;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .badges {
   display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 12rpx;
-  margin-bottom: 14rpx;
+  max-width: 240rpx;
 }
 
 .badge {
-  padding: 4rpx 12rpx;
+  padding: 8rpx 14rpx;
   font-size: 22rpx;
-  border-radius: 6rpx;
+  line-height: 1.2;
+  border-radius: 999rpx;
+  white-space: nowrap;
 }
 
 .danger {
-  color: #b42318;
-  background: #fee4e2;
+  color: #e3322a;
+  background: rgba(227, 50, 42, 0.1);
 }
 
 .warn {
-  color: #92400e;
-  background: #fef3c7;
+  color: #8b5a00;
+  background: rgba(139, 90, 0, 0.12);
+}
+
+.clean {
+  color: #2fa85c;
+  background: rgba(47, 168, 92, 0.12);
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18rpx;
 }
 
 .field {
-  display: grid;
-  grid-template-columns: 150rpx 1fr;
-  align-items: center;
-  min-height: 72rpx;
-  border-bottom: 1rpx solid #eef0f3;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10rpx;
+  padding: 20rpx 22rpx;
+  border: 1rpx solid #e8e8e8;
+  border-radius: 22rpx;
+  background: #fbfbfb;
 }
 
-.field text {
-  color: #576071;
+.field-label {
+  color: #8a8a8a;
+  font-size: 22rpx;
+  line-height: 1.2;
 }
 
 .field input {
-  min-height: 64rpx;
+  min-height: 58rpx;
+  color: #222222;
+  font-size: 28rpx;
+  line-height: 1.3;
+}
+
+.draft-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 22rpx;
 }
 
 .delete {
-  margin-top: 18rpx;
+  min-height: 64rpx;
+  margin: 0;
+  padding: 0 24rpx;
+  border-radius: 999rpx;
+  background: #f5f5f5;
+  color: #686868;
+  font-size: 23rpx;
+  line-height: 64rpx;
+}
+
+.result {
+  color: #686868;
+  font-size: 26rpx;
+  line-height: 1.5;
+}
+
+.bottom-action {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  box-sizing: border-box;
+  padding: 22rpx 32rpx calc(22rpx + env(safe-area-inset-bottom));
+  background: rgba(248, 248, 248, 0.94);
 }
 
 .primary {
-  margin-top: 12rpx;
+  min-height: 96rpx;
+  margin: 0;
+  border-radius: 999rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  line-height: 96rpx;
   color: #ffffff;
-  background: #0f62fe;
+  background: #050505;
+}
+
+.primary[disabled] {
+  background: #d8d8d8;
+  color: #ffffff;
+}
+
+@media (max-width: 390px) {
+  .hero {
+    flex-direction: column;
+  }
+
+  .hero-meter {
+    flex-basis: auto;
+    min-height: 112rpx;
+  }
+
+  .summary-grid,
+  .field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>

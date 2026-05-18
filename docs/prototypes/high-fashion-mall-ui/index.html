@@ -1,0 +1,757 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>高端女装商城原型</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="phone-shell" aria-label="高端女装商城 HTTP 原型">
+      <section class="home-screen app-view active" data-view="home">
+        <header class="hero">
+          <nav class="topbar" aria-label="首页顶部导航">
+            <button class="icon-button" type="button" aria-label="打开菜单">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 7h16M4 12h16M4 17h16" />
+              </svg>
+            </button>
+            <button class="admin-link" type="button" data-action="show-admin">管理</button>
+          </nav>
+
+          <div class="hero-image fashion-visual runway" role="img" aria-label="女装秀场长裙视觉占位"></div>
+          <div class="hero-shade" aria-hidden="true"></div>
+          <div class="hero-copy">
+            <p class="eyebrow">NEW SEASON</p>
+            <h1>柔和廓形<br />今日上新</h1>
+            <p class="hero-note">轻盈裙装、通勤套装与限定外套，按小程序 750rpx 视觉比例重构。</p>
+            <button class="primary-button" type="button" data-action="show-catalog">
+              <span>查看新品</span>
+              <span class="button-mark" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M7 17 17 7M9 7h8v8" />
+                </svg>
+              </span>
+            </button>
+          </div>
+        </header>
+
+        <section class="new-arrivals" aria-labelledby="new-title">
+          <div class="section-heading">
+            <p class="eyebrow dark">CURATED DROP</p>
+            <h2 id="new-title">新品</h2>
+            <button class="ghost-button" type="button" data-action="show-catalog">全部</button>
+          </div>
+
+          <div class="product-rail" aria-label="新品横向商品卡片">
+            <article class="product-card">
+              <div class="product-media">
+                <div class="fashion-visual coat" role="img" aria-label="高级女装外套造型"></div>
+                <button class="favorite-button" type="button" aria-label="收藏黑色廓形外套">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z" />
+                  </svg>
+                </button>
+              </div>
+              <p class="product-code">SKU AL-2407</p>
+              <h3>黑色廓形短外套</h3>
+              <p class="price">¥ 1,286</p>
+            </article>
+
+            <article class="product-card">
+              <div class="product-media tonal">
+                <span class="image-fallback">NO IMAGE</span>
+              </div>
+              <p class="product-code">SKU IV-1182</p>
+              <h3>象牙白垂坠半裙</h3>
+              <p class="price">¥ 869</p>
+            </article>
+
+            <article class="product-card">
+              <div class="product-media">
+                <div class="fashion-visual dress" role="img" aria-label="秀场连衣裙造型"></div>
+                <span class="sale-pill">-18%</span>
+              </div>
+              <p class="product-code">SKU NO-3921</p>
+              <h3>长商品名测试款法式收腰连衣裙</h3>
+              <p class="price">¥ 1,052</p>
+            </article>
+          </div>
+        </section>
+
+      </section>
+
+      <section class="catalog-screen app-view" data-view="catalog" aria-labelledby="catalog-title">
+        <header class="catalog-header">
+          <div class="catalog-nav">
+            <button class="icon-button plain" type="button" aria-label="返回首页" data-action="show-home">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M15 6 9 12l6 6" />
+              </svg>
+            </button>
+            <h1 id="catalog-title">新品目录</h1>
+            <button class="icon-button plain" type="button" aria-label="搜索商品" data-toast="搜索只在原型中展示入口">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m20 20-4.5-4.5M10.8 17a6.2 6.2 0 1 1 0-12.4 6.2 6.2 0 0 1 0 12.4Z" />
+              </svg>
+            </button>
+          </div>
+          <p class="catalog-kicker">Oh My Fish</p>
+        </header>
+
+        <nav class="category-rail" aria-label="商品分类">
+          <button class="category-pill active" type="button">全部</button>
+          <button class="category-pill" type="button">连衣裙</button>
+          <button class="category-pill" type="button">外套</button>
+          <button class="category-pill" type="button">半裙</button>
+          <button class="category-pill" type="button">通勤</button>
+        </nav>
+
+        <div class="catalog-tools" aria-label="列表工具栏">
+          <button class="tool-button" type="button" data-toast="筛选面板将在后续原型模块补齐">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 7h16M7 12h10M10 17h4" />
+            </svg>
+            <span>筛选</span>
+          </button>
+          <button class="tool-button" type="button" data-toast="排序面板将在后续原型模块补齐">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 5v14m0 0-3-3m3 3 3-3M17 19V5m0 0-3 3m3-3 3 3" />
+            </svg>
+            <span>排序</span>
+          </button>
+          <div class="view-toggle" aria-label="展示方式">
+            <button class="toggle-button active" type="button" data-layout="grid" aria-label="网格展示">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 5h6v6H5zM13 5h6v6h-6zM5 13h6v6H5zM13 13h6v6h-6z" />
+              </svg>
+            </button>
+            <button class="toggle-button" type="button" data-layout="list" aria-label="列表展示">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <section class="catalog-feedback" aria-label="列表状态样式">
+          <div class="skeleton-card" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div class="empty-card">
+            <p>暂无匹配商品</p>
+            <button type="button" data-toast="已清除原型筛选">清除筛选</button>
+          </div>
+        </section>
+
+        <section class="catalog-grid" data-catalog-layout="grid" aria-label="商品列表">
+          <article class="catalog-card" data-action="show-detail">
+            <div class="catalog-media">
+              <div class="fashion-visual coat" role="img" aria-label="黑色短外套商品图"></div>
+              <button class="favorite-button" type="button" aria-label="收藏黑色廓形短外套">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z" />
+                </svg>
+              </button>
+            </div>
+            <p class="product-code">AL-2407</p>
+            <h3>黑色廓形短外套</h3>
+            <p class="rating">4.8 <span>128 条评价</span></p>
+            <p class="price">¥ 1,286</p>
+          </article>
+
+          <article class="catalog-card" data-action="show-detail">
+            <div class="catalog-media">
+              <div class="fashion-visual dress" role="img" aria-label="法式收腰连衣裙商品图"></div>
+              <span class="sale-pill">-18%</span>
+            </div>
+            <p class="product-code">NO-3921</p>
+            <h3>长商品名测试款法式收腰连衣裙</h3>
+            <p class="rating">4.6 <span>86 条评价</span></p>
+            <p class="price">¥ 1,052</p>
+          </article>
+
+          <article class="catalog-card" data-action="show-detail">
+            <div class="catalog-media tonal">
+              <span class="image-fallback">NO IMAGE</span>
+              <button class="favorite-button" type="button" aria-label="收藏象牙白垂坠半裙">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z" />
+                </svg>
+              </button>
+            </div>
+            <p class="product-code">IV-1182</p>
+            <h3>象牙白垂坠半裙</h3>
+            <p class="rating">4.9 <span>42 条评价</span></p>
+            <p class="price">¥ 869</p>
+          </article>
+
+          <article class="catalog-card" data-action="show-detail">
+            <div class="catalog-media">
+              <div class="fashion-visual runway" role="img" aria-label="限定长裙商品图"></div>
+            </div>
+            <p class="product-code">DR-5088</p>
+            <h3>夜色缎面吊带长裙</h3>
+            <p class="rating">4.7 <span>63 条评价</span></p>
+            <p class="price">¥ 1,438</p>
+          </article>
+        </section>
+      </section>
+
+      <section class="favorites-screen app-view" data-view="favorites" aria-labelledby="favorites-title">
+        <header class="favorites-header">
+          <p class="favorites-kicker">FAVORITES</p>
+          <h1 id="favorites-title">收藏</h1>
+        </header>
+
+        <section class="favorites-grid" aria-label="静态收藏商品">
+          <article class="favorite-card" data-action="show-detail">
+            <div class="favorite-media">
+              <div class="fashion-visual coat" role="img" aria-label="黑色廓形短外套收藏图"></div>
+              <button class="favorite-button selected" type="button" aria-label="已收藏黑色廓形短外套">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z" />
+                </svg>
+              </button>
+            </div>
+            <p class="product-code">SKU AL-2407</p>
+            <h2>黑色廓形短外套</h2>
+            <span>¥ 1,286</span>
+          </article>
+
+          <article class="favorite-card" data-action="show-detail">
+            <div class="favorite-media">
+              <div class="fashion-visual dress" role="img" aria-label="法式收腰连衣裙收藏图"></div>
+              <button class="favorite-button selected" type="button" aria-label="已收藏法式收腰连衣裙">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z" />
+                </svg>
+              </button>
+            </div>
+            <p class="product-code">SKU NO-3921</p>
+            <h2>法式收腰连衣裙</h2>
+            <span>¥ 1,052</span>
+          </article>
+        </section>
+
+        <section class="favorites-empty" aria-label="收藏空状态视觉">
+          <p>空状态参考</p>
+          <span>真实收藏能力若需要新增数据结构，必须另开 PRD；当前仅保留视觉占位。</span>
+          <button class="ghost-button dark" type="button" data-action="show-catalog">浏览商品</button>
+        </section>
+      </section>
+
+      <section class="profile-screen app-view" data-view="profile" aria-labelledby="profile-title">
+        <header class="profile-hero">
+          <p class="profile-kicker">MY PROFILE</p>
+          <div class="profile-identity">
+            <div class="profile-avatar" aria-hidden="true">HF</div>
+            <div>
+              <h1 id="profile-title">我的</h1>
+              <span>静态视觉占位</span>
+            </div>
+          </div>
+          <p class="profile-note">当前页面只展示个人中心参考视觉，不读取用户资料、不新增地址、支付卡或订单数据结构。</p>
+        </header>
+
+        <section class="profile-stats" aria-label="静态个人中心摘要">
+          <article>
+            <strong>02</strong>
+            <span>收藏</span>
+          </article>
+          <article>
+            <strong>01</strong>
+            <span>待确认</span>
+          </article>
+          <article>
+            <strong>00</strong>
+            <span>优惠券</span>
+          </article>
+        </section>
+
+        <section class="profile-panel" aria-label="个人中心视觉入口">
+          <button type="button" data-toast="订单入口仅为静态视觉占位">
+            <span>我的订单</span>
+            <strong>查看静态订单卡片</strong>
+          </button>
+          <button type="button" data-toast="地址入口仅为视觉占位，不新增地址数据">
+            <span>收货地址</span>
+            <strong>未接入真实地址</strong>
+          </button>
+          <button type="button" data-toast="支付卡入口仅为视觉占位，不新增支付数据">
+            <span>支付卡</span>
+            <strong>仅展示入口</strong>
+          </button>
+          <button type="button" data-toast="设置入口仅为静态原型展示">
+            <span>设置</span>
+            <strong>原型状态</strong>
+          </button>
+        </section>
+
+      </section>
+
+      <section class="bag-screen app-view" data-view="bag" aria-labelledby="bag-title">
+        <header class="bag-header">
+          <p class="bag-kicker">MY BAG</p>
+          <h1 id="bag-title">购物袋</h1>
+        </header>
+
+        <section class="bag-list" aria-label="静态购物袋商品">
+          <article class="bag-item">
+            <div class="bag-media">
+              <div class="fashion-visual coat" role="img" aria-label="黑色廓形短外套购物袋图片"></div>
+            </div>
+            <div class="bag-info">
+              <p class="product-code">SKU AL-2407</p>
+              <h2>黑色廓形短外套</h2>
+              <span>尺码 M / 黑色</span>
+              <div class="bag-meta">
+                <p>¥ 1,286</p>
+                <div class="bag-quantity" aria-label="静态数量展示">
+                  <button type="button" data-toast="数量仅为静态原型展示">-</button>
+                  <strong>1</strong>
+                  <button type="button" data-toast="数量仅为静态原型展示">+</button>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="bag-item muted">
+            <div class="bag-media tonal">
+              <span class="image-fallback">NO IMAGE</span>
+            </div>
+            <div class="bag-info">
+              <p class="product-code">SKU IV-1182</p>
+              <h2>象牙白垂坠半裙</h2>
+              <span>尺码 S / 象牙白</span>
+              <div class="bag-meta">
+                <p>¥ 869</p>
+                <div class="bag-quantity" aria-label="静态数量展示">
+                  <button type="button" data-toast="数量仅为静态原型展示">-</button>
+                  <strong>1</strong>
+                  <button type="button" data-toast="数量仅为静态原型展示">+</button>
+                </div>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section class="bag-summary" aria-label="静态结账摘要">
+          <div>
+            <span>小计</span>
+            <strong>¥ 2,155</strong>
+          </div>
+          <div>
+            <span>优惠码</span>
+            <button type="button" data-toast="优惠码仅作为视觉占位">添加</button>
+          </div>
+          <p>配送、优惠和库存校验将在真实小程序中继续沿用现有业务边界。</p>
+        </section>
+
+        <div class="bag-checkout">
+          <button class="primary-button full" type="button" data-action="open-auth-modal">
+            <span>下单</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="detail-screen app-view" data-view="detail" aria-labelledby="detail-title">
+        <header class="detail-topbar">
+          <button class="icon-button plain" type="button" aria-label="返回商品列表" data-action="show-catalog">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M15 6 9 12l6 6" />
+            </svg>
+          </button>
+          <h1 id="detail-title">商品详情</h1>
+          <button class="icon-button plain" type="button" aria-label="更多操作" data-toast="分享与更多操作仅做原型入口">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 12h.01M12 12h.01M19 12h.01" />
+            </svg>
+          </button>
+        </header>
+
+        <section class="detail-gallery" aria-label="商品图片画廊">
+          <figure class="gallery-card">
+            <div class="fashion-visual coat" role="img" aria-label="黑色廓形短外套正面造型"></div>
+          </figure>
+          <figure class="gallery-card">
+            <div class="fashion-visual runway" role="img" aria-label="黑色廓形短外套秀场造型"></div>
+          </figure>
+        </section>
+
+        <section class="detail-body">
+          <div class="detail-meta">
+            <p class="product-code">SKU AL-2407</p>
+            <button class="favorite-button detail-favorite" type="button" aria-label="收藏当前商品">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z" />
+              </svg>
+            </button>
+          </div>
+
+          <h2>黑色廓形短外套</h2>
+          <p class="detail-price">¥ 1,286</p>
+          <p class="detail-copy">
+            利落肩线与短款比例适合通勤和晚间场景。原型仅展示视觉，不读取真实 SKU、库存或订单服务。
+          </p>
+
+          <div class="selector-row" aria-label="规格选择">
+            <label class="select-box">
+              <span>尺码</span>
+              <button type="button" data-toast="尺码选择仅为本地原型状态">M</button>
+            </label>
+            <label class="select-box">
+              <span>颜色</span>
+              <button type="button" data-toast="颜色选择仅为本地原型状态">黑色</button>
+            </label>
+          </div>
+
+          <div class="spec-pills" aria-label="可选 SKU">
+            <button class="spec-pill active" type="button" data-spec>XS</button>
+            <button class="spec-pill" type="button" data-spec>S</button>
+            <button class="spec-pill" type="button" data-spec>M</button>
+            <button class="spec-pill disabled" type="button" disabled>售罄 XL</button>
+          </div>
+
+          <section class="detail-info" aria-label="服务信息">
+            <article>
+              <p>配送说明</p>
+              <span>同城次日达，偏远地区按实际物流时效。</span>
+            </article>
+            <article>
+              <p>联系客服</p>
+              <span>尺码建议和搭配咨询将在真实小程序中沿用现有能力。</span>
+            </article>
+          </section>
+        </section>
+
+        <section class="auth-feedback" aria-live="polite" hidden>
+          <p>已取消授权</p>
+          <span>原型保持“不创建订单”规则，你可以继续浏览商品。</span>
+        </section>
+
+        <div class="detail-cta">
+          <button class="primary-button full" type="button" data-action="open-auth-modal">
+            <span>微信手机号下单</span>
+            <span class="button-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M7 17 17 7M9 7h8v8" />
+              </svg>
+            </span>
+          </button>
+        </div>
+      </section>
+
+      <section class="success-screen app-view" data-view="success" aria-labelledby="success-title">
+        <header class="success-topbar">
+          <button class="icon-button plain" type="button" aria-label="返回商品详情" data-action="show-detail">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M15 6 9 12l6 6" />
+            </svg>
+          </button>
+          <p>ORDER STATUS</p>
+        </header>
+
+        <section class="success-hero" aria-label="订单成功反馈">
+          <div class="success-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="m5 12 4.2 4.2L19 6.5" />
+            </svg>
+          </div>
+          <p class="success-kicker">STATIC PROTOTYPE</p>
+          <h1 id="success-title">订单提交成功</h1>
+          <p class="success-copy">
+            这是成功反馈的静态视觉稿。当前原型不调用微信授权、不创建真实订单、不写入购物袋或订单数据。
+          </p>
+        </section>
+
+        <section class="success-summary" aria-label="静态订单摘要">
+          <div class="summary-row">
+            <span>原型订单号</span>
+            <strong>HF-05212-STATIC</strong>
+          </div>
+          <div class="summary-row">
+            <span>商品</span>
+            <strong>黑色廓形短外套</strong>
+          </div>
+          <div class="summary-row">
+            <span>状态</span>
+            <strong>仅用于视觉验收</strong>
+          </div>
+        </section>
+
+        <div class="success-actions">
+          <button class="primary-button full" type="button" data-action="show-catalog">
+            <span>继续浏览</span>
+            <span class="button-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M7 17 17 7M9 7h8v8" />
+              </svg>
+            </span>
+          </button>
+          <button class="secondary-action full" type="button" data-action="show-detail">查看商品</button>
+        </div>
+      </section>
+
+      <section class="admin-screen app-view" data-view="admin" aria-labelledby="admin-title">
+        <header class="admin-hero">
+          <nav class="admin-topbar" aria-label="管理工作台顶部导航">
+            <div>
+              <p class="admin-kicker">Oh My Fish</p>
+              <h1 id="admin-title">管理工作台</h1>
+            </div>
+            <button class="admin-link admin-return" type="button" data-action="show-home">商城</button>
+          </nav>
+          <section class="admin-shell-card" aria-label="管理工作台原型壳">
+            <article class="admin-panel active" data-admin-panel="workbench" aria-label="工作台占位页">
+              <p>FLOW</p>
+              <h2>业务流进度</h2>
+              <div class="admin-flow-list" aria-label="业务流进度指标">
+                <div class="admin-flow-item">
+                  <span>截图识别</span>
+                  <strong data-upload-remaining>可上传 18 张</strong>
+                </div>
+                <div class="admin-flow-item">
+                  <span>草稿确认</span>
+                  <strong>待确认 6 条</strong>
+                </div>
+                <div class="admin-flow-item">
+                  <span>店员补图</span>
+                  <strong>待补图 4 件</strong>
+                </div>
+              </div>
+              <div class="admin-entry-list" aria-label="工作台功能入口">
+                <button class="admin-entry-card" type="button" data-admin-entry="截图识别">
+                  <span>01</span>
+                  <strong>截图识别</strong>
+                  <em>上传页面截图</em>
+                </button>
+                <button class="admin-entry-card" type="button" data-admin-entry="草稿确认">
+                  <span>02</span>
+                  <strong>草稿确认</strong>
+                  <em>核对识别结果</em>
+                </button>
+                <button class="admin-entry-card" type="button" data-admin-entry="店员补图">
+                  <span>03</span>
+                  <strong>店员补图</strong>
+                  <em>补齐商品图片</em>
+                </button>
+              </div>
+            </article>
+            <article class="admin-panel" data-admin-panel="products" aria-label="商品管理独占页">
+              <div class="admin-page-head">
+                <p>PRODUCTS</p>
+                <h2>商品管理</h2>
+                <span>待补图、可上架、已上架三种状态都保留在这里，点击上架只更新原型内状态。</span>
+              </div>
+
+              <section class="admin-product-summary" aria-label="商品状态摘要">
+                <div class="admin-product-stat">
+                  <span>待补图</span>
+                  <strong data-product-stat="needs-image">1</strong>
+                </div>
+                <div class="admin-product-stat">
+                  <span>可上架</span>
+                  <strong data-product-stat="ready">1</strong>
+                </div>
+                <div class="admin-product-stat">
+                  <span>已上架</span>
+                  <strong data-product-stat="published">1</strong>
+                </div>
+              </section>
+
+              <div class="admin-product-filters" aria-label="商品状态筛选">
+                <button class="product-filter active" type="button" data-product-filter="all">全部</button>
+                <button class="product-filter" type="button" data-product-filter="needs-image">待补图</button>
+                <button class="product-filter" type="button" data-product-filter="ready">可上架</button>
+                <button class="product-filter" type="button" data-product-filter="published">已上架</button>
+              </div>
+
+              <div class="admin-product-list" aria-label="商品卡片列表">
+                <article class="admin-product-card" data-product-card data-product-state="ready">
+                  <div class="admin-product-media coat" role="img" aria-label="黑色廓形短外套商品图"></div>
+                  <div class="admin-product-body">
+                    <p class="admin-product-code">AL-2407</p>
+                    <h3>黑色廓形短外套</h3>
+                    <p class="admin-product-meta">价格区间 ¥1,286 - ¥1,380</p>
+                  </div>
+                  <div class="admin-product-side">
+                    <span class="product-badge ready">可上架</span>
+                    <button class="admin-product-action" type="button" data-product-action="publish">上架</button>
+                  </div>
+                </article>
+
+                <article class="admin-product-card" data-product-card data-product-state="needs-image">
+                  <div class="admin-product-media tonal" role="img" aria-label="象牙白垂坠半裙待补图"></div>
+                  <div class="admin-product-body">
+                    <p class="admin-product-code">IV-1182</p>
+                    <h3>象牙白垂坠半裙</h3>
+                    <p class="admin-product-meta">价格区间 ¥869 - ¥918</p>
+                  </div>
+                  <div class="admin-product-side">
+                    <span class="product-badge pending">待补图</span>
+                    <button class="admin-product-action ghost" type="button" data-product-action="assist">去补图</button>
+                  </div>
+                </article>
+
+                <article class="admin-product-card" data-product-card data-product-state="published">
+                  <div class="admin-product-media dress" role="img" aria-label="法式收腰连衣裙商品图"></div>
+                  <div class="admin-product-body">
+                    <p class="admin-product-code">NO-3921</p>
+                    <h3>法式收腰连衣裙</h3>
+                    <p class="admin-product-meta">价格区间 ¥1,052 - ¥1,216</p>
+                  </div>
+                  <div class="admin-product-side">
+                    <span class="product-badge published">已上架</span>
+                    <button class="admin-product-action disabled" type="button" disabled data-product-action="published">已上架</button>
+                  </div>
+                </article>
+              </div>
+            </article>
+            <article class="admin-panel" data-admin-panel="orders" aria-label="订单确认独占页">
+              <div class="admin-page-head">
+                <p>ORDERS</p>
+                <h2>订单确认</h2>
+                <span>待确认订单集中在这里处理，确认与取消仅保留原型反馈，不新增支付、物流、退款或优惠券能力。</span>
+              </div>
+
+              <section class="admin-order-summary" aria-label="订单确认摘要">
+                <div class="admin-order-stat">
+                  <span>待确认</span>
+                  <strong>2</strong>
+                </div>
+                <div class="admin-order-stat">
+                  <span>今日金额</span>
+                  <strong>¥3,207</strong>
+                </div>
+              </section>
+
+              <div class="admin-order-list" aria-label="待确认订单卡片">
+                <article class="admin-order-card">
+                  <div class="admin-order-topline">
+                    <p>待确认</p>
+                    <span>#OMF-0521</span>
+                  </div>
+                  <div class="admin-order-body">
+                    <div class="admin-order-media coat" role="img" aria-label="黑色廓形短外套订单图"></div>
+                    <div class="admin-order-info">
+                      <h3>黑色廓形短外套</h3>
+                      <p>客户 林女士 / 尺码 M / 黑色 / x1</p>
+                      <strong>¥1,286</strong>
+                    </div>
+                  </div>
+                  <div class="admin-order-actions">
+                    <button class="admin-order-action secondary" type="button" data-order-action="cancel">取消订单</button>
+                    <button class="admin-order-action primary" type="button" data-order-action="confirm">确认订单</button>
+                  </div>
+                </article>
+
+                <article class="admin-order-card">
+                  <div class="admin-order-topline">
+                    <p>待确认</p>
+                    <span>#OMF-0522</span>
+                  </div>
+                  <div class="admin-order-body">
+                    <div class="admin-order-media dress" role="img" aria-label="法式收腰连衣裙订单图"></div>
+                    <div class="admin-order-info">
+                      <h3>法式收腰连衣裙</h3>
+                      <p>客户 周女士 / 尺码 S / 雾白 / x1</p>
+                      <strong>¥1,921</strong>
+                    </div>
+                  </div>
+                  <div class="admin-order-actions">
+                    <button class="admin-order-action secondary" type="button" data-order-action="cancel">取消订单</button>
+                    <button class="admin-order-action primary" type="button" data-order-action="confirm">确认订单</button>
+                  </div>
+                </article>
+              </div>
+            </article>
+          </section>
+        </header>
+
+        <nav class="admin-bottom-nav" aria-label="管理端底部导航">
+          <button class="admin-tab active" type="button" data-admin-tab="workbench" aria-label="工作台">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 11.5 12 6l7 5.5V20H5zM9 20v-5h6v5" />
+            </svg>
+            <span>工作台</span>
+          </button>
+          <button class="admin-tab" type="button" data-admin-tab="products" aria-label="商品管理">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 7h14M5 12h14M5 17h14" />
+            </svg>
+            <span>商品管理</span>
+          </button>
+          <button class="admin-tab" type="button" data-admin-tab="orders" aria-label="订单确认">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 4h10v16H7zM10 8h4M10 12h4M10 16h3" />
+            </svg>
+            <span>订单确认</span>
+          </button>
+        </nav>
+      </section>
+
+      <section class="modal-layer" aria-label="授权确认弹窗" aria-modal="true" role="dialog" hidden>
+        <div class="modal-sheet">
+          <button class="modal-close" type="button" aria-label="关闭授权弹窗" data-action="close-auth-modal">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18" />
+            </svg>
+          </button>
+          <p class="modal-kicker">ORDER ACCESS</p>
+          <h2>下单前需要授权</h2>
+          <p class="modal-copy">
+            浏览商品不需要登录。只有你确认下单时，真实小程序才会触发微信登录和手机号授权。
+          </p>
+          <div class="modal-actions">
+            <button class="secondary-action" type="button" data-action="cancel-auth">暂不授权</button>
+            <button class="primary-button compact" type="button" data-action="confirm-auth">
+              <span>授权</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <nav class="bottom-nav" aria-label="客户购物底部导航">
+        <button class="tab active" type="button" aria-label="首页" data-action="show-home">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 11.5 12 5l8 6.5V20H6v-6h12" />
+          </svg>
+          <span>首页</span>
+        </button>
+        <button class="tab" type="button" aria-label="商品" data-action="show-catalog">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+          <span>商品</span>
+        </button>
+        <button class="tab" type="button" aria-label="购物袋" data-action="show-bag">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6.5 8.5h11L19 20H5L6.5 8.5ZM9 8.5a3 3 0 0 1 6 0" />
+          </svg>
+          <span>购物袋</span>
+        </button>
+        <button class="tab" type="button" aria-label="收藏" data-action="show-favorites">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z" />
+          </svg>
+          <span>收藏</span>
+        </button>
+        <button class="tab" type="button" aria-label="我的" data-action="show-profile">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4.5 21a7.5 7.5 0 0 1 15 0" />
+          </svg>
+          <span>我的</span>
+        </button>
+      </nav>
+
+      <div class="toast" role="status" aria-live="polite"></div>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
+
