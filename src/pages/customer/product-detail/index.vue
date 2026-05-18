@@ -1,12 +1,45 @@
 <template>
   <view class="page">
-    <view v-if="viewModel.product && viewModel.isPublished" class="detail-screen">
+    <view v-if="isDetailLoading" class="detail-loading">
       <view class="detail-topbar">
-        <button class="icon-button plain" aria-label="返回商品列表" @tap="goBack">
+        <button
+          class="icon-button plain"
+          :class="{ busy: isBackNavigating }"
+          :disabled="isBackNavigating"
+          aria-label="返回商品列表"
+          hover-class="press-feedback"
+          @tap="goBack"
+        >
           <text class="chevron">‹</text>
         </button>
         <text class="nav-title">商品详情</text>
-        <button class="icon-button plain" aria-label="更多操作" @tap="showVisualOnlyToast('分享与更多操作仅做视觉入口')">
+        <view class="icon-button ghost" />
+      </view>
+
+      <view class="loading-gallery shimmer" />
+      <view class="loading-body">
+        <text class="loading-line short shimmer" />
+        <text class="loading-line title-line shimmer" />
+        <text class="loading-line price-line shimmer" />
+        <text class="loading-line copy-line shimmer" />
+        <text class="loading-line copy-line narrow shimmer" />
+      </view>
+    </view>
+
+    <view v-else-if="viewModel.product && viewModel.isPublished" class="detail-screen">
+      <view class="detail-topbar">
+        <button
+          class="icon-button plain"
+          :class="{ busy: isBackNavigating }"
+          :disabled="isBackNavigating"
+          aria-label="返回商品列表"
+          hover-class="press-feedback"
+          @tap="goBack"
+        >
+          <text class="chevron">‹</text>
+        </button>
+        <text class="nav-title">商品详情</text>
+        <button class="icon-button plain" aria-label="更多操作" hover-class="press-feedback" @tap="showVisualOnlyToast('分享与更多操作仅做视觉入口')">
           <text class="more-mark">•••</text>
         </button>
       </view>
@@ -107,7 +140,14 @@
     </view>
 
     <view v-else class="empty-state">
-      <button class="icon-button plain" aria-label="返回商品列表" @tap="goBack">
+      <button
+        class="icon-button plain"
+        :class="{ busy: isBackNavigating }"
+        :disabled="isBackNavigating"
+        aria-label="返回商品列表"
+        hover-class="press-feedback"
+        @tap="goBack"
+      >
         <text class="chevron">‹</text>
       </button>
       <text class="empty-title">{{ viewModel.emptyMessage }}</text>
@@ -119,6 +159,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
+import { redirectTo } from '../../../app/navigation'
+import { routes } from '../../../app/routes'
 import {
   type CustomerProductDetailViewModel,
 } from '../../../features/customer-product-detail/customer-product-detail'
@@ -137,6 +179,8 @@ const productId = ref('')
 const selectedSkuId = ref('')
 const message = ref('')
 const authPrompt = ref<AuthPrompt | null>(null)
+const isDetailLoading = ref(true)
+const isBackNavigating = ref(false)
 const viewModel = ref<CustomerProductDetailViewModel>({
   product: null,
   skus: [],
@@ -181,15 +225,29 @@ onLoad((query) => {
   void refreshView()
 })
 
-const refreshView = async () => {
-  viewModel.value = await getCloudBaseCustomerProductDetailView(productId.value, selectedSkuId.value)
+type RefreshOptions = {
+  showLoading: boolean
+}
+
+const refreshView = async (options: RefreshOptions = { showLoading: true }) => {
+  if (options.showLoading) {
+    isDetailLoading.value = true
+  }
+
+  try {
+    viewModel.value = await getCloudBaseCustomerProductDetailView(productId.value, selectedSkuId.value)
+  } finally {
+    if (options.showLoading) {
+      isDetailLoading.value = false
+    }
+  }
 }
 
 const selectSku = async (skuId: string) => {
   const result = await selectCloudBaseCustomerProductSku(productId.value, skuId)
   selectedSkuId.value = result.selectedSkuId
   message.value = result.message
-  await refreshView()
+  await refreshView({ showLoading: false })
 }
 
 const confirmModal = (content: string) =>
@@ -220,11 +278,22 @@ const submitOrder = async () => {
     confirmPhoneAuthorization: () => confirmModal('需要授权微信绑定手机号，用于商家确认订单。'),
   })
   message.value = result.message
-  await refreshView()
+  await refreshView({ showLoading: false })
 }
 
 const goBack = () => {
-  uni.navigateBack({ delta: 1 })
+  if (isBackNavigating.value) {
+    return
+  }
+
+  isBackNavigating.value = true
+  uni.navigateBack({
+    delta: 1,
+    fail: () => {
+      isBackNavigating.value = false
+      redirectTo(routes.customerProductList)
+    },
+  })
 }
 
 const showVisualOnlyToast = (title: string) => {
@@ -238,7 +307,8 @@ const showVisualOnlyToast = (title: string) => {
 
 <style scoped>
 .page,
-.detail-screen {
+.detail-screen,
+.detail-loading {
   min-height: 100vh;
   box-sizing: border-box;
   overflow-x: hidden;
@@ -248,6 +318,10 @@ const showVisualOnlyToast = (title: string) => {
 
 .detail-screen {
   padding-bottom: calc(230rpx + env(safe-area-inset-bottom));
+}
+
+.detail-loading {
+  padding-bottom: 60rpx;
 }
 
 .detail-topbar {
@@ -268,6 +342,7 @@ const showVisualOnlyToast = (title: string) => {
 .secondary-action {
   margin: 0;
   border: 0;
+  transition: opacity 160ms ease, transform 160ms ease, background-color 160ms ease;
 }
 
 .icon-button::after,
@@ -292,6 +367,20 @@ const showVisualOnlyToast = (title: string) => {
   background: #ffffff;
   color: #050505;
   box-shadow: 0 0 0 1rpx #e8e8e8 inset;
+}
+
+.icon-button.ghost {
+  pointer-events: none;
+  opacity: 0;
+}
+
+.press-feedback {
+  opacity: 0.76;
+  transform: scale(0.97);
+}
+
+.busy {
+  opacity: 0.62;
 }
 
 .chevron {
@@ -338,6 +427,72 @@ const showVisualOnlyToast = (title: string) => {
   overflow: hidden;
   border-radius: 30rpx;
   background: #f0f0f0;
+}
+
+.loading-gallery {
+  height: 940rpx;
+  margin: 24rpx 32rpx 0;
+  border-radius: 30rpx;
+  background: #f0f0f0;
+}
+
+.loading-body {
+  display: flex;
+  flex-direction: column;
+  gap: 22rpx;
+  padding: 40rpx 32rpx 0;
+}
+
+.loading-line {
+  display: block;
+  height: 28rpx;
+  border-radius: 999rpx;
+  background: #eeeeee;
+}
+
+.loading-line.short {
+  width: 34%;
+}
+
+.loading-line.title-line {
+  width: 76%;
+  height: 64rpx;
+}
+
+.loading-line.price-line {
+  width: 44%;
+  height: 58rpx;
+}
+
+.loading-line.copy-line {
+  width: 100%;
+}
+
+.loading-line.narrow {
+  width: 68%;
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -45%;
+  width: 45%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.62), transparent);
+  content: "";
+  transform: translateX(0);
+  animation: shimmer-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes shimmer-slide {
+  100% {
+    transform: translateX(320%);
+  }
 }
 
 .image,
@@ -769,7 +924,8 @@ const showVisualOnlyToast = (title: string) => {
 }
 
 @media (max-width: 390px) {
-  .gallery-card {
+  .gallery-card,
+  .loading-gallery {
     flex-basis: 620rpx;
     width: 620rpx;
     height: 900rpx;

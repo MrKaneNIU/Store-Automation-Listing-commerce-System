@@ -1,6 +1,6 @@
 <template>
   <view class="page">
-    <view class="catalog-header">
+    <view class="catalog-header" :style="{ paddingTop: headerTopPadding }">
       <view class="catalog-nav">
         <button
           class="icon-button plain"
@@ -12,10 +12,12 @@
         >
           <text class="chevron">‹</text>
         </button>
-        <text class="nav-title">新品目录</text>
-        <button class="icon-button plain" aria-label="搜索商品" hover-class="press-feedback" @tap="showVisualOnlyToast('搜索入口将在后续模块接入')">
-          <text class="search-mark" />
-        </button>
+        <view class="title-cluster">
+          <text class="nav-title">新品目录</text>
+          <button class="icon-button plain" aria-label="搜索商品" hover-class="press-feedback" @tap="showVisualOnlyToast('搜索入口将在后续模块接入')">
+            <text class="search-mark" />
+          </button>
+        </view>
       </view>
 
       <text class="catalog-kicker">Oh My Fish</text>
@@ -76,7 +78,7 @@
     </view>
 
     <view v-else-if="products.length === 0" class="empty-state">
-      <text class="empty-title">暂无匹配商品</text>
+      <text class="empty-title">{{ emptyMessage }}</text>
       <text class="empty-copy">商品上架后会自动出现在这里。</text>
       <button class="empty-action" hover-class="press-feedback" @tap="reloadView">重新加载</button>
     </view>
@@ -107,7 +109,13 @@
     </view>
 
     <view class="customer-nav">
-      <button class="tab" :class="{ busy: isHomeNavigating }" :disabled="isHomeNavigating" hover-class="tab-pressed" @tap="goHome">
+      <button
+        class="tab"
+        :class="{ busy: isHomeNavigating }"
+        :disabled="isHomeNavigating"
+        hover-class="tab-pressed"
+        @tap="goHome"
+      >
         <text class="tab-icon">⌂</text>
         <text>首页</text>
       </button>
@@ -132,7 +140,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { navigateTo, redirectTo } from '../../../app/navigation'
 import { routes } from '../../../app/routes'
@@ -140,11 +148,50 @@ import type { CustomerProductListItem } from '../../../features/customer-product
 import { getCloudBaseCustomerProductListView } from '../../../features/cloudbase-mall/customer-product-list'
 
 const products = ref<CustomerProductListItem[]>([])
+const emptyMessage = ref('暂无已上架商品')
 const isLoading = ref(false)
 const isHomeNavigating = ref(false)
 const navigatingProductId = ref('')
+const DEFAULT_HEADER_TOP_PADDING = 'calc(env(safe-area-inset-top) + 28rpx)'
+const HEADER_TOP_OFFSET_RPX = -8
+const STATUS_BAR_FALLBACK_GAP_RPX = 44
+const headerTopPadding = ref(DEFAULT_HEADER_TOP_PADDING)
 let cachedProducts: CustomerProductListItem[] | null = null
 let pendingRefresh: Promise<void> | null = null
+let homeNavigationFallbackTimer: ReturnType<typeof setTimeout> | null = null
+
+const clearHomeNavigationLock = () => {
+  isHomeNavigating.value = false
+
+  if (homeNavigationFallbackTimer) {
+    clearTimeout(homeNavigationFallbackTimer)
+    homeNavigationFallbackTimer = null
+  }
+}
+
+const syncHeaderTopPadding = () => {
+  try {
+    const menuButton = uni.getMenuButtonBoundingClientRect?.()
+    const windowInfo = uni.getWindowInfo()
+    const rpxToPx = windowInfo.windowWidth / 750
+
+    if (menuButton && Number.isFinite(menuButton.top) && menuButton.top > 0) {
+      headerTopPadding.value = `${Math.ceil(menuButton.top + HEADER_TOP_OFFSET_RPX * rpxToPx)}px`
+
+      return
+    }
+
+    const statusBarHeight = windowInfo.statusBarHeight
+
+    if (typeof statusBarHeight === 'number' && Number.isFinite(statusBarHeight) && statusBarHeight > 0) {
+      headerTopPadding.value = `${Math.ceil(statusBarHeight + STATUS_BAR_FALLBACK_GAP_RPX * rpxToPx)}px`
+    }
+  } catch {
+    headerTopPadding.value = DEFAULT_HEADER_TOP_PADDING
+  }
+}
+
+onMounted(syncHeaderTopPadding)
 
 type RefreshOptions = {
   showLoading: boolean
@@ -163,6 +210,7 @@ const refreshView = (options: RefreshOptions): Promise<void> => {
     .then((view) => {
       cachedProducts = view.products
       products.value = view.products
+      emptyMessage.value = view.emptyMessage || '暂无已上架商品'
     })
     .finally(() => {
       if (options.showLoading) {
@@ -181,7 +229,7 @@ const reloadView = () => {
 
 onShow(() => {
   navigatingProductId.value = ''
-  isHomeNavigating.value = false
+  clearHomeNavigationLock()
 
   if (cachedProducts) {
     products.value = cachedProducts
@@ -218,10 +266,17 @@ const goHome = () => {
   }
 
   isHomeNavigating.value = true
-  redirectTo(routes.customerHome)
-  setTimeout(() => {
-    isHomeNavigating.value = false
-  }, 600)
+  homeNavigationFallbackTimer = setTimeout(clearHomeNavigationLock, 900)
+  redirectTo(routes.customerHome, {
+    onFail: () => {
+      uni.showToast({
+        title: '页面切换失败，请稍后重试',
+        icon: 'none',
+        duration: 1600,
+      })
+    },
+    onComplete: clearHomeNavigationLock,
+  })
 }
 
 const showVisualOnlyToast = (title: string) => {
@@ -249,15 +304,15 @@ const getVisualClass = (productCode: string) => {
 }
 
 .catalog-header {
-  padding: 28rpx 32rpx 0;
+  padding: calc(env(safe-area-inset-top) + 28rpx) 32rpx 0;
 }
 
 .catalog-nav {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 16rpx;
-  min-height: 112rpx;
+  min-height: 92rpx;
 }
 
 .icon-button,
@@ -286,9 +341,9 @@ const getVisualClass = (productCode: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 88rpx;
-  min-width: 88rpx;
-  height: 88rpx;
+  width: 76rpx;
+  min-width: 76rpx;
+  height: 76rpx;
   padding: 0;
   border-radius: 999rpx;
   background: #ffffff;
@@ -307,25 +362,27 @@ const getVisualClass = (productCode: string) => {
 
 .chevron {
   display: block;
-  font-size: 52rpx;
+  font-size: 44rpx;
   font-weight: 300;
   line-height: 1;
+  transform: translateY(-1rpx);
 }
 
 .search-mark {
   position: relative;
   display: block;
-  width: 34rpx;
-  height: 34rpx;
+  width: 30rpx;
+  height: 30rpx;
   border: 3rpx solid #050505;
   border-radius: 999rpx;
+  transform: translate(-2rpx, -2rpx);
 }
 
 .search-mark::after {
   position: absolute;
-  right: -10rpx;
+  right: -9rpx;
   bottom: -6rpx;
-  width: 16rpx;
+  width: 15rpx;
   height: 3rpx;
   border-radius: 999rpx;
   background: #050505;
@@ -333,9 +390,18 @@ const getVisualClass = (productCode: string) => {
   transform: rotate(45deg);
 }
 
+.title-cluster {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 22rpx;
+  min-width: 0;
+  padding-right: 76rpx;
+}
+
 .nav-title {
   min-width: 0;
-  flex: 1 1 auto;
   color: #222222;
   font-size: 42rpx;
   font-weight: 500;

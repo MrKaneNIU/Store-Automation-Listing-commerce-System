@@ -5,7 +5,14 @@
         <text class="kicker">ORDER ATELIER</text>
         <text class="title">订单确认</text>
       </view>
-      <button class="shop-link" @tap="relaunchTo(routes.customerProductList)">商城</button>
+      <button
+        class="shop-link"
+        :class="{ busy: navigatingRoute === routes.customerProductList }"
+        :disabled="Boolean(navigatingRoute)"
+        @tap="goShop"
+      >
+        商城
+      </button>
     </view>
 
     <view class="hero">
@@ -50,8 +57,26 @@
             <text class="amount">¥{{ order.totalAmount }}</text>
           </view>
           <view v-if="order.canConfirm || order.canCancel" class="actions">
-            <button v-if="order.canCancel" class="secondary" @tap="cancel(order.id)">取消订单</button>
-            <button v-if="order.canConfirm" class="primary" @tap="confirm(order.id)">确认订单</button>
+            <button
+              v-if="order.canCancel"
+              class="secondary"
+              :class="{ busy: processingOrderId === order.id && processingOrderAction === 'cancel' }"
+              :disabled="Boolean(processingOrderId)"
+              hover-class="press-feedback"
+              @tap="cancel(order.id)"
+            >
+              {{ processingOrderId === order.id && processingOrderAction === 'cancel' ? '取消中...' : '取消订单' }}
+            </button>
+            <button
+              v-if="order.canConfirm"
+              class="primary"
+              :class="{ busy: processingOrderId === order.id && processingOrderAction === 'confirm' }"
+              :disabled="Boolean(processingOrderId)"
+              hover-class="press-feedback"
+              @tap="confirm(order.id)"
+            >
+              {{ processingOrderId === order.id && processingOrderAction === 'confirm' ? '确认中...' : '确认订单' }}
+            </button>
           </view>
           <text v-else class="settled-mark">已处理</text>
         </view>
@@ -66,8 +91,22 @@
     <view v-if="message" class="result">{{ message }}</view>
 
     <view class="admin-nav">
-      <button class="nav-item" @tap="redirectTo(routes.ownerDashboard)">工作台</button>
-      <button class="nav-item" @tap="redirectTo(routes.ownerProducts)">商品管理</button>
+      <button
+        class="nav-item"
+        :class="{ busy: navigatingRoute === routes.ownerDashboard }"
+        :disabled="Boolean(navigatingRoute)"
+        @tap="goAdminTab(routes.ownerDashboard)"
+      >
+        工作台
+      </button>
+      <button
+        class="nav-item"
+        :class="{ busy: navigatingRoute === routes.ownerProducts }"
+        :disabled="Boolean(navigatingRoute)"
+        @tap="goAdminTab(routes.ownerProducts)"
+      >
+        商品管理
+      </button>
       <button class="nav-item active" @tap="stayOrders">订单确认</button>
     </view>
   </view>
@@ -77,6 +116,7 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { redirectTo, relaunchTo } from '../../../app/navigation'
+import type { AppRoute } from '../../../app/routes'
 import { routes } from '../../../app/routes'
 import type { OwnerOrdersViewModel } from '../../../features/owner-orders/owner-orders'
 import {
@@ -86,6 +126,9 @@ import {
 } from '../../../features/cloudbase-mall/owner-orders'
 
 const message = ref('')
+const navigatingRoute = ref<AppRoute | ''>('')
+const processingOrderId = ref('')
+const processingOrderAction = ref<'confirm' | 'cancel' | ''>('')
 const viewModel = ref<OwnerOrdersViewModel>({
   orders: [],
   emptyMessage: '暂无订单',
@@ -97,6 +140,24 @@ const stayOrders = () => {
   uni.pageScrollTo({ scrollTop: 0, duration: 180 })
 }
 
+const goAdminTab = (route: AppRoute) => {
+  if (navigatingRoute.value) {
+    return
+  }
+
+  navigatingRoute.value = route
+  redirectTo(route)
+}
+
+const goShop = () => {
+  if (navigatingRoute.value) {
+    return
+  }
+
+  navigatingRoute.value = routes.customerProductList
+  relaunchTo(routes.customerProductList)
+}
+
 const refreshView = async () => {
   viewModel.value = await getCloudBaseOwnerOrdersView()
 }
@@ -106,15 +167,39 @@ onShow(() => {
 })
 
 const confirm = async (orderId: string) => {
-  const result = await confirmCloudBaseOwnerOrder(orderId)
-  message.value = result.message
-  await refreshView()
+  if (processingOrderId.value) {
+    return
+  }
+
+  processingOrderId.value = orderId
+  processingOrderAction.value = 'confirm'
+
+  try {
+    const result = await confirmCloudBaseOwnerOrder(orderId)
+    message.value = result.message
+    await refreshView()
+  } finally {
+    processingOrderId.value = ''
+    processingOrderAction.value = ''
+  }
 }
 
 const cancel = async (orderId: string) => {
-  const result = await cancelCloudBaseOwnerOrder(orderId)
-  message.value = result.message
-  await refreshView()
+  if (processingOrderId.value) {
+    return
+  }
+
+  processingOrderId.value = orderId
+  processingOrderAction.value = 'cancel'
+
+  try {
+    const result = await cancelCloudBaseOwnerOrder(orderId)
+    message.value = result.message
+    await refreshView()
+  } finally {
+    processingOrderId.value = ''
+    processingOrderAction.value = ''
+  }
 }
 </script>
 
@@ -170,6 +255,7 @@ const cancel = async (orderId: string) => {
   font-weight: 500;
   line-height: 60rpx;
   box-shadow: 0 12rpx 30rpx rgba(12, 12, 12, 0.06);
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
 .shop-link::after,
@@ -433,6 +519,7 @@ const cancel = async (orderId: string) => {
   font-size: 24rpx;
   font-weight: 500;
   line-height: 62rpx;
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
 .primary {
@@ -510,10 +597,21 @@ const cancel = async (orderId: string) => {
   font-weight: 500;
   line-height: 92rpx;
   text-align: center;
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
 .nav-item.active {
   background: #202020;
   color: #ffffff;
+}
+
+.busy {
+  opacity: 0.66;
+  transform: scale(0.98);
+}
+
+.press-feedback {
+  opacity: 0.72;
+  transform: scale(0.98);
 }
 </style>

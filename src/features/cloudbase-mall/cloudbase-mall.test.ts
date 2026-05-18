@@ -216,6 +216,19 @@ describe('CloudBase mall facades', () => {
     expect(listSkus).not.toHaveBeenCalled()
   })
 
+  it('keeps customer product browsing open when the published summary call fails', async () => {
+    const client = createClient({
+      listPublishedProductSummaries: vi.fn(async () => {
+        throw new Error('UNAUTHORIZED: Verified WeChat identity is required')
+      }),
+    })
+
+    await expect(getCloudBaseCustomerProductListView(client)).resolves.toEqual({
+      products: [],
+      emptyMessage: '商品加载失败，请稍后重试',
+    })
+  })
+
   it('loads and handles owner orders through mallApi', async () => {
     const client = createClient({
       listMerchantOrders: vi.fn(async () => ({ orders: [order] })),

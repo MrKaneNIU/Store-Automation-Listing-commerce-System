@@ -5,7 +5,14 @@
         <text class="kicker">MERCHANDISE ROOM</text>
         <text class="title">商品管理</text>
       </view>
-      <button class="shop-link" @tap="relaunchTo(routes.customerProductList)">商城</button>
+      <button
+        class="shop-link"
+        :class="{ busy: navigatingRoute === routes.customerProductList }"
+        :disabled="Boolean(navigatingRoute)"
+        @tap="goShop"
+      >
+        商城
+      </button>
     </view>
 
     <view class="hero">
@@ -45,10 +52,12 @@
       </view>
       <button
         class="primary"
-        :disabled="!viewModel.canBatchPublish"
+        :class="{ busy: isBatchPublishing }"
+        :disabled="!viewModel.canBatchPublish || isBatchPublishing || Boolean(publishingProductId)"
+        hover-class="press-feedback"
         @tap="publishReadyProducts"
       >
-        批量上架
+        {{ isBatchPublishing ? '上架中...' : '批量上架' }}
       </button>
     </view>
 
@@ -67,7 +76,16 @@
           <text class="name">{{ product.productName }}</text>
           <view class="product-foot">
             <text class="sku-count">SKU {{ product.skuCount }} 个</text>
-            <button v-if="product.canPublish" class="publish-button" @tap="publish(product.id)">上架</button>
+            <button
+              v-if="product.canPublish"
+              class="publish-button"
+              :class="{ busy: publishingProductId === product.id }"
+              :disabled="Boolean(publishingProductId) || isBatchPublishing"
+              hover-class="press-feedback"
+              @tap="publish(product.id)"
+            >
+              {{ publishingProductId === product.id ? '上架中...' : '上架' }}
+            </button>
             <text v-else class="published-mark">已处理</text>
           </view>
         </view>
@@ -82,9 +100,23 @@
     <view v-if="message" class="result">{{ message }}</view>
 
     <view class="admin-nav">
-      <button class="nav-item" @tap="redirectTo(routes.ownerDashboard)">工作台</button>
+      <button
+        class="nav-item"
+        :class="{ busy: navigatingRoute === routes.ownerDashboard }"
+        :disabled="Boolean(navigatingRoute)"
+        @tap="goAdminTab(routes.ownerDashboard)"
+      >
+        工作台
+      </button>
       <button class="nav-item active" @tap="stayProducts">商品管理</button>
-      <button class="nav-item" @tap="redirectTo(routes.ownerOrders)">订单确认</button>
+      <button
+        class="nav-item"
+        :class="{ busy: navigatingRoute === routes.ownerOrders }"
+        :disabled="Boolean(navigatingRoute)"
+        @tap="goAdminTab(routes.ownerOrders)"
+      >
+        订单确认
+      </button>
     </view>
   </view>
 </template>
@@ -93,6 +125,7 @@
 import { computed, ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { redirectTo, relaunchTo } from '../../../app/navigation'
+import type { AppRoute } from '../../../app/routes'
 import { routes } from '../../../app/routes'
 import {
   type OwnerProductStatusFilter,
@@ -106,6 +139,9 @@ import {
 
 const selectedStatus = ref<OwnerProductStatusFilter>('all')
 const message = ref('')
+const navigatingRoute = ref<AppRoute | ''>('')
+const publishingProductId = ref('')
+const isBatchPublishing = ref(false)
 const viewModel = ref<OwnerProductsViewModel>({
   statusOptions: [],
   products: [],
@@ -122,6 +158,24 @@ const stayProducts = () => {
   uni.pageScrollTo({ scrollTop: 0, duration: 180 })
 }
 
+const goAdminTab = (route: AppRoute) => {
+  if (navigatingRoute.value) {
+    return
+  }
+
+  navigatingRoute.value = route
+  redirectTo(route)
+}
+
+const goShop = () => {
+  if (navigatingRoute.value) {
+    return
+  }
+
+  navigatingRoute.value = routes.customerProductList
+  relaunchTo(routes.customerProductList)
+}
+
 const refreshView = async () => {
   viewModel.value = await getCloudBaseOwnerProductsView(selectedStatus.value)
 }
@@ -135,15 +189,35 @@ watch(selectedStatus, () => {
 })
 
 const publish = async (productId: string) => {
-  const result = await publishCloudBaseOwnerProduct(productId)
-  message.value = result.message
-  await refreshView()
+  if (publishingProductId.value || isBatchPublishing.value) {
+    return
+  }
+
+  publishingProductId.value = productId
+
+  try {
+    const result = await publishCloudBaseOwnerProduct(productId)
+    message.value = result.message
+    await refreshView()
+  } finally {
+    publishingProductId.value = ''
+  }
 }
 
 const publishReadyProducts = async () => {
-  const result = await publishReadyCloudBaseOwnerProducts()
-  message.value = result.message
-  await refreshView()
+  if (isBatchPublishing.value || publishingProductId.value) {
+    return
+  }
+
+  isBatchPublishing.value = true
+
+  try {
+    const result = await publishReadyCloudBaseOwnerProducts()
+    message.value = result.message
+    await refreshView()
+  } finally {
+    isBatchPublishing.value = false
+  }
 }
 </script>
 
@@ -199,6 +273,7 @@ const publishReadyProducts = async () => {
   font-weight: 500;
   line-height: 60rpx;
   box-shadow: 0 12rpx 30rpx rgba(12, 12, 12, 0.06);
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
 .shop-link::after,
@@ -378,6 +453,7 @@ const publishReadyProducts = async () => {
   font-size: 24rpx;
   font-weight: 500;
   line-height: 68rpx;
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
 .primary[disabled] {
@@ -511,6 +587,7 @@ const publishReadyProducts = async () => {
   font-size: 24rpx;
   font-weight: 500;
   line-height: 60rpx;
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
 .published-mark {
@@ -578,10 +655,21 @@ const publishReadyProducts = async () => {
   font-weight: 500;
   line-height: 92rpx;
   text-align: center;
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
 .nav-item.active {
   background: #202020;
   color: #ffffff;
+}
+
+.busy {
+  opacity: 0.66;
+  transform: scale(0.98);
+}
+
+.press-feedback {
+  opacity: 0.72;
+  transform: scale(0.98);
 }
 </style>

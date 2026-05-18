@@ -5,7 +5,14 @@
         <text class="kicker">Oh My Fish</text>
         <view class="title-row">
           <text class="title">管理工作台</text>
-          <button class="shop-link" @tap="relaunchTo(routes.customerProductList)">商城</button>
+          <button
+            class="shop-link"
+            :class="{ busy: isShopNavigating }"
+            :disabled="isShopNavigating"
+            @tap="goShop"
+          >
+            商城
+          </button>
         </view>
       </view>
     </view>
@@ -50,7 +57,12 @@
       </view>
 
       <view class="entry-list">
-        <button class="entry-card primary-card" @tap="navigateTo(routes.ownerImportUpload)">
+        <button
+          class="entry-card primary-card"
+          :class="{ busy: navigatingRoute === routes.ownerImportUpload }"
+          :disabled="Boolean(navigatingRoute)"
+          @tap="goEntry(routes.ownerImportUpload)"
+        >
           <view class="entry-copy">
             <text class="entry-label">UPLOAD</text>
             <text class="entry-title">截图识别</text>
@@ -59,7 +71,12 @@
           <text class="entry-arrow">→</text>
         </button>
 
-        <button class="entry-card" @tap="navigateTo(routes.ownerDraftReview)">
+        <button
+          class="entry-card"
+          :class="{ busy: navigatingRoute === routes.ownerDraftReview }"
+          :disabled="Boolean(navigatingRoute)"
+          @tap="goEntry(routes.ownerDraftReview)"
+        >
           <view class="entry-copy">
             <text class="entry-label">REVIEW</text>
             <text class="entry-title">草稿确认</text>
@@ -68,7 +85,12 @@
           <text class="entry-arrow">→</text>
         </button>
 
-        <button class="entry-card" @tap="navigateTo(routes.staffImageTasks)">
+        <button
+          class="entry-card"
+          :class="{ busy: navigatingRoute === routes.staffImageTasks }"
+          :disabled="Boolean(navigatingRoute)"
+          @tap="goEntry(routes.staffImageTasks)"
+        >
           <view class="entry-copy">
             <text class="entry-label">IMAGE TASKS</text>
             <text class="entry-title">店员补图</text>
@@ -81,21 +103,39 @@
 
     <view class="admin-nav">
       <button class="nav-item active" @tap="stayDashboard">工作台</button>
-      <button class="nav-item" @tap="redirectTo(routes.ownerProducts)">商品管理</button>
-      <button class="nav-item" @tap="redirectTo(routes.ownerOrders)">订单确认</button>
+      <button
+        class="nav-item"
+        :class="{ busy: navigatingRoute === routes.ownerProducts }"
+        :disabled="Boolean(navigatingRoute)"
+        @tap="goAdminTab(routes.ownerProducts)"
+      >
+        商品管理
+      </button>
+      <button
+        class="nav-item"
+        :class="{ busy: navigatingRoute === routes.ownerOrders }"
+        :disabled="Boolean(navigatingRoute)"
+        @tap="goAdminTab(routes.ownerOrders)"
+      >
+        订单确认
+      </button>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { onHide, onShow } from '@dcloudio/uni-app'
 import { navigateTo, redirectTo, relaunchTo } from '../../../app/navigation'
+import type { AppRoute } from '../../../app/routes'
 import { routes } from '../../../app/routes'
 
 const DEFAULT_PAGE_TOP_PADDING = 'calc(env(safe-area-inset-top) + 12rpx)'
 const TOP_CONTENT_GAP_RPX = 12
 
 const pageTopPadding = ref(DEFAULT_PAGE_TOP_PADDING)
+const navigatingRoute = ref<AppRoute | ''>('')
+const isShopNavigating = ref(false)
 
 const syncPageTopPadding = () => {
   try {
@@ -113,6 +153,16 @@ const syncPageTopPadding = () => {
 
 onMounted(syncPageTopPadding)
 
+onShow(() => {
+  navigatingRoute.value = ''
+  isShopNavigating.value = false
+})
+
+onHide(() => {
+  navigatingRoute.value = ''
+  isShopNavigating.value = false
+})
+
 const maxUploadCount = 18
 const selectedScreenshotCount = 5
 const remainingUploadCount = Math.max(0, maxUploadCount - selectedScreenshotCount)
@@ -121,6 +171,40 @@ const pendingImageTaskCount = 4
 
 const stayDashboard = () => {
   uni.pageScrollTo({ scrollTop: 0, duration: 180 })
+}
+
+const goEntry = (route: AppRoute) => {
+  if (navigatingRoute.value) {
+    return
+  }
+
+  navigatingRoute.value = route
+  navigateTo(route, {
+    onFail: () => {
+      navigatingRoute.value = ''
+    },
+    onComplete: () => {
+      navigatingRoute.value = ''
+    },
+  })
+}
+
+const goAdminTab = (route: AppRoute) => {
+  if (navigatingRoute.value) {
+    return
+  }
+
+  navigatingRoute.value = route
+  redirectTo(route)
+}
+
+const goShop = () => {
+  if (isShopNavigating.value) {
+    return
+  }
+
+  isShopNavigating.value = true
+  relaunchTo(routes.customerProductList)
 }
 </script>
 
@@ -181,6 +265,7 @@ const stayDashboard = () => {
   font-weight: 500;
   line-height: 56rpx;
   box-shadow: 0 12rpx 30rpx rgba(12, 12, 12, 0.06);
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
 .shop-link::after,
@@ -339,6 +424,7 @@ const stayDashboard = () => {
   color: #202020;
   text-align: left;
   box-shadow: 0 18rpx 44rpx rgba(12, 12, 12, 0.05);
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
 .primary-card {
@@ -415,10 +501,16 @@ const stayDashboard = () => {
   font-weight: 500;
   line-height: 92rpx;
   text-align: center;
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
 .nav-item.active {
   background: #202020;
   color: #ffffff;
+}
+
+.busy {
+  opacity: 0.66;
+  transform: scale(0.98);
 }
 </style>

@@ -33,7 +33,19 @@
       </view>
     </view>
 
-    <view v-if="viewModel.products.length > 0" class="task-list">
+    <view v-if="isLoading" class="task-loading">
+      <view class="loading-card shimmer">
+        <text />
+        <text />
+        <text />
+      </view>
+      <view class="loading-card shimmer compact">
+        <text />
+        <text />
+      </view>
+    </view>
+
+    <view v-else-if="viewModel.products.length > 0" class="task-list">
       <view v-for="product in viewModel.products" :key="product.id" class="task-card">
         <view class="media">
           <image v-if="product.mainImageUrl" class="thumb" :src="product.mainImageUrl" mode="aspectFill" />
@@ -56,12 +68,20 @@
             <text class="meta-item">补图范围：主图 / 详情图</text>
           </view>
 
-          <button class="primary" @tap="supplement(product.id)">上传主图和详情图</button>
+          <button
+            class="primary"
+            :class="{ busy: supplementingProductId === product.id }"
+            :disabled="Boolean(supplementingProductId)"
+            hover-class="press-feedback"
+            @tap="supplement(product.id)"
+          >
+            {{ supplementingProductId === product.id ? '上传中...' : '上传主图和详情图' }}
+          </button>
         </view>
       </view>
     </view>
 
-    <view v-if="viewModel.products.length === 0" class="empty-state">
+    <view v-else class="empty-state">
       <text class="empty-title">暂无补图任务</text>
       <text class="empty-copy">{{ viewModel.emptyMessage }}</text>
     </view>
@@ -82,6 +102,9 @@ import {
 const keyword = ref('')
 const selectedBatchId = ref('')
 const message = ref('')
+const isLoading = ref(false)
+const supplementingProductId = ref('')
+let pendingRefresh: Promise<void> | null = null
 const viewModel = ref<StaffImageTasksViewModel>({
   batchOptions: [],
   selectedBatchLabel: '全部批次',
@@ -89,11 +112,35 @@ const viewModel = ref<StaffImageTasksViewModel>({
   emptyMessage: '暂无待补图商品',
 })
 
-const refreshView = async () => {
-  viewModel.value = await getCloudBaseStaffImageTasksView({
+type RefreshOptions = {
+  showLoading: boolean
+}
+
+const refreshView = (options: RefreshOptions = { showLoading: true }) => {
+  if (pendingRefresh) {
+    return pendingRefresh
+  }
+
+  if (options.showLoading) {
+    isLoading.value = true
+  }
+
+  pendingRefresh = getCloudBaseStaffImageTasksView({
     keyword: keyword.value,
     selectedBatchId: selectedBatchId.value,
   })
+    .then((view) => {
+      viewModel.value = view
+    })
+    .finally(() => {
+      if (options.showLoading) {
+        isLoading.value = false
+      }
+
+      pendingRefresh = null
+    })
+
+  return pendingRefresh
 }
 
 onShow(() => {
@@ -101,7 +148,7 @@ onShow(() => {
 })
 
 watch([keyword, selectedBatchId], () => {
-  void refreshView()
+  void refreshView({ showLoading: false })
 })
 
 const selectBatch = (event: Event) => {
@@ -110,9 +157,19 @@ const selectBatch = (event: Event) => {
 }
 
 const supplement = async (productId: string) => {
-  const result = await supplementCloudBaseStaffProductImages(productId)
-  message.value = result.message
-  await refreshView()
+  if (supplementingProductId.value) {
+    return
+  }
+
+  supplementingProductId.value = productId
+
+  try {
+    const result = await supplementCloudBaseStaffProductImages(productId)
+    message.value = result.message
+    await refreshView({ showLoading: false })
+  } finally {
+    supplementingProductId.value = ''
+  }
 }
 </script>
 
@@ -276,6 +333,70 @@ const supplement = async (productId: string) => {
   gap: 22rpx;
 }
 
+.task-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.loading-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  box-sizing: border-box;
+  min-height: 190rpx;
+  padding: 30rpx;
+  border-radius: 28rpx;
+  background: #ffffff;
+  box-shadow: 0 18rpx 40rpx rgba(0, 0, 0, 0.04);
+}
+
+.loading-card.compact {
+  min-height: 122rpx;
+}
+
+.loading-card text {
+  display: block;
+  height: 22rpx;
+  border-radius: 999rpx;
+  background: #eeeeee;
+}
+
+.loading-card text:first-child {
+  width: 44%;
+}
+
+.loading-card text:nth-child(2) {
+  width: 82%;
+}
+
+.loading-card text:nth-child(3) {
+  width: 58%;
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -45%;
+  width: 45%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.62), transparent);
+  content: "";
+  transform: translateX(0);
+  animation: shimmer-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes shimmer-slide {
+  100% {
+    transform: translateX(320%);
+  }
+}
+
 .task-card,
 .result {
   display: flex;
@@ -384,6 +505,22 @@ const supplement = async (productId: string) => {
   line-height: 76rpx;
   color: #ffffff;
   background: #050505;
+  transition: opacity 120ms ease, transform 120ms ease, background-color 120ms ease;
+}
+
+.primary[disabled] {
+  background: #d8d8d8;
+  color: #ffffff;
+}
+
+.busy {
+  opacity: 0.66;
+  transform: scale(0.98);
+}
+
+.press-feedback {
+  opacity: 0.76;
+  transform: scale(0.97);
 }
 
 .empty-state {

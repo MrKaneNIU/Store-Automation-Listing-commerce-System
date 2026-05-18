@@ -2,7 +2,14 @@
   <view class="page">
     <view class="hero">
       <view class="topbar" :style="{ top: topbarTop }">
-        <button class="manage-link" @tap="navigateTo(routes.ownerDashboard)">管理</button>
+        <button
+          class="manage-link"
+          :class="{ busy: navigatingRoute === routes.ownerDashboard }"
+          :disabled="Boolean(navigatingRoute)"
+          @tap="goOwnerDashboard"
+        >
+          管理
+        </button>
       </view>
 
       <view class="hero-visual">
@@ -18,7 +25,12 @@
         <text class="hero-title">柔和廓形</text>
         <text class="hero-title">今日上新</text>
         <text class="hero-note">轻盈裙装、通勤套装与限定外套，按小程序 750rpx 视觉比例重构。</text>
-        <button class="primary-button" @tap="goProductList">
+        <button
+          class="primary-button"
+          :class="{ busy: navigatingRoute === routes.customerProductList }"
+          :disabled="Boolean(navigatingRoute)"
+          @tap="goProductList"
+        >
           <text>查看新品</text>
           <text class="button-mark">↗</text>
         </button>
@@ -31,12 +43,19 @@
           <text class="eyebrow dark">CURATED DROP</text>
           <text class="section-title">新品</text>
         </view>
-        <button class="ghost-button" @tap="goProductList">全部</button>
+        <button
+          class="ghost-button"
+          :class="{ busy: navigatingRoute === routes.customerProductList }"
+          :disabled="Boolean(navigatingRoute)"
+          @tap="goProductList"
+        >
+          全部
+        </button>
       </view>
 
       <scroll-view class="product-rail" scroll-x enable-flex>
         <view class="rail-inner">
-          <view class="product-card" @tap="goProductList">
+          <view class="product-card" :class="{ busy: navigatingRoute === routes.customerProductList }" @tap="goProductList">
             <view class="product-media coat">
               <view class="mini-head" />
               <view class="mini-body" />
@@ -47,7 +66,7 @@
             <text class="price">进入商品列表查看</text>
           </view>
 
-          <view class="product-card tonal" @tap="goProductList">
+          <view class="product-card tonal" :class="{ busy: navigatingRoute === routes.customerProductList }" @tap="goProductList">
             <view class="product-media empty-media">
               <text class="image-fallback">NO IMAGE</text>
             </view>
@@ -56,7 +75,7 @@
             <text class="price">真实价格来自商品页</text>
           </view>
 
-          <view class="product-card" @tap="goProductList">
+          <view class="product-card" :class="{ busy: navigatingRoute === routes.customerProductList }" @tap="goProductList">
             <view class="product-media dress">
               <view class="mini-head" />
               <view class="mini-body long" />
@@ -75,7 +94,12 @@
         <text class="tab-icon">⌂</text>
         <text>首页</text>
       </button>
-      <button class="tab" @tap="goProductList">
+      <button
+        class="tab"
+        :class="{ busy: navigatingRoute === routes.customerProductList }"
+        :disabled="Boolean(navigatingRoute)"
+        @tap="goProductList"
+      >
         <text class="tab-icon">◇</text>
         <text>商品</text>
       </button>
@@ -98,11 +122,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { navigateTo, redirectTo } from '../../app/navigation'
+import type { AppRoute } from '../../app/routes'
 import { routes } from '../../app/routes'
 
 const DEFAULT_TOPBAR_TOP = 'calc(env(safe-area-inset-top) + 40rpx)'
 
 const topbarTop = ref(DEFAULT_TOPBAR_TOP)
+const navigatingRoute = ref<AppRoute | ''>('')
 
 const syncTopbarPosition = () => {
   try {
@@ -132,7 +158,30 @@ const stayHome = () => {
 }
 
 const goProductList = () => {
+  if (navigatingRoute.value) {
+    return
+  }
+
+  navigatingRoute.value = routes.customerProductList
   redirectTo(routes.customerProductList)
+}
+
+const goOwnerDashboard = () => {
+  if (navigatingRoute.value) {
+    return
+  }
+
+  navigatingRoute.value = routes.ownerDashboard
+  navigateTo(routes.ownerDashboard, {
+    onFail: () => {
+      navigatingRoute.value = ''
+      uni.showToast({
+        title: '页面打开失败，请稍后重试',
+        icon: 'none',
+        duration: 1600,
+      })
+    },
+  })
 }
 
 const showVisualOnlyToast = (title: string) => {
@@ -178,6 +227,7 @@ const showVisualOnlyToast = (title: string) => {
 .tab {
   margin: 0;
   border: 0;
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
 .manage-link::after,
@@ -395,6 +445,7 @@ const showVisualOnlyToast = (title: string) => {
 .product-card {
   flex: 0 0 312rpx;
   width: 312rpx;
+  transition: opacity 120ms ease, transform 120ms ease;
   white-space: normal;
 }
 
@@ -564,6 +615,11 @@ const showVisualOnlyToast = (title: string) => {
 
 .tab.active {
   color: #050505;
+}
+
+.busy {
+  opacity: 0.66;
+  transform: scale(0.98);
 }
 
 @media (max-width: 390px) {

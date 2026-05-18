@@ -5,7 +5,14 @@
         <text class="kicker">IMAGE INTAKE</text>
         <text class="title">截图识别</text>
       </view>
-      <button class="shop-link" @tap="relaunchTo(routes.customerProductList)">商城</button>
+      <button
+        class="shop-link"
+        :class="{ busy: isShopNavigating }"
+        :disabled="isShopNavigating"
+        @tap="goShop"
+      >
+        商城
+      </button>
     </view>
 
     <view class="hero">
@@ -26,8 +33,22 @@
         <text class="panel-desc">当前仍使用现有上传服务与 CloudBase OCR 批次入口。</text>
       </view>
       <view class="actions">
-        <button class="secondary" @tap="chooseScreenshots">选择截图</button>
-        <button class="primary" :disabled="screenshots.length === 0 || isRecognizing" @tap="startRecognize">
+        <button
+          class="secondary"
+          :class="{ busy: isChoosingScreenshots }"
+          :disabled="isChoosingScreenshots"
+          hover-class="press-feedback"
+          @tap="chooseScreenshots"
+        >
+          {{ isChoosingScreenshots ? '选择中...' : '选择截图' }}
+        </button>
+        <button
+          class="primary"
+          :class="{ busy: isRecognizing }"
+          :disabled="screenshots.length === 0 || isRecognizing"
+          hover-class="press-feedback"
+          @tap="startRecognize"
+        >
           {{ isRecognizing ? '识别中...' : '开始识别' }}
         </button>
       </view>
@@ -41,7 +62,7 @@
         </view>
         <view class="image-foot">
           <text class="image-name">{{ image.name }}</text>
-          <button class="remove-button" @tap="removeScreenshot(image.id)">删除</button>
+          <button class="remove-button" hover-class="press-feedback" @tap="removeScreenshot(image.id)">删除</button>
         </view>
       </view>
     </view>
@@ -86,9 +107,17 @@ const screenshots = ref<UploadedImage[]>([])
 const drafts = ref<ProductDraft[]>([])
 const message = ref('')
 const isRecognizing = ref(false)
+const isShopNavigating = ref(false)
+const isChoosingScreenshots = ref(false)
 
 const chooseScreenshots = () => {
+  if (isChoosingScreenshots.value) {
+    return
+  }
+
   void (async () => {
+    isChoosingScreenshots.value = true
+
     try {
       const selected = await uploadService.chooseImages({
         businessType: 'ocr_screenshot',
@@ -100,6 +129,8 @@ const chooseScreenshots = () => {
       message.value = ''
     } catch (error) {
       message.value = formatUploadFailureMessage(error)
+    } finally {
+      isChoosingScreenshots.value = false
     }
   })()
 }
@@ -108,7 +139,20 @@ const removeScreenshot = (imageId: string) => {
   screenshots.value = removeOwnerScreenshotDescriptor(screenshots.value, imageId)
 }
 
+const goShop = () => {
+  if (isShopNavigating.value) {
+    return
+  }
+
+  isShopNavigating.value = true
+  relaunchTo(routes.customerProductList)
+}
+
 const startRecognize = async () => {
+  if (isRecognizing.value) {
+    return
+  }
+
   if (screenshots.value.length === 0) {
     message.value = '请先选择至少一张截图'
     return
@@ -180,6 +224,7 @@ const startRecognize = async () => {
   font-weight: 500;
   line-height: 60rpx;
   box-shadow: 0 12rpx 30rpx rgba(12, 12, 12, 0.06);
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
 .shop-link::after,
@@ -303,6 +348,7 @@ const startRecognize = async () => {
   font-size: 24rpx;
   font-weight: 500;
   line-height: 68rpx;
+  transition: opacity 120ms ease, transform 120ms ease, background-color 120ms ease;
 }
 
 .primary {
@@ -515,5 +561,15 @@ const startRecognize = async () => {
   font-size: 24rpx;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.busy {
+  opacity: 0.66;
+  transform: scale(0.98);
+}
+
+.press-feedback {
+  opacity: 0.76;
+  transform: scale(0.97);
 }
 </style>
