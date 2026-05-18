@@ -53,5 +53,12 @@ Each failure should produce at least one durable improvement:
 
 ## Current Entries
 
-No recorded agent failures yet.
+## 2026-05-18 - Navigation stack overflow after partial fixes
 
+- Task: Optimize post-freeze mini-program UI/navigation performance and page switching.
+- What went wrong: Initial fixes only changed several visible navigation buttons. Repeated manual switching still triggered `navigateTo:fail webview count limit exceed`.
+- Root cause: The project-level `navigateTo` wrapper still delegated directly to `uni.navigateTo`, so any missed entry could continue growing the mini-program webview stack. Some same-level management tabs and customer page transitions were also using push navigation where replacement navigation was required.
+- Impact: Manual acceptance in WeChat DevTools could freeze or emit repeated red console errors after enough page switches.
+- Detection: User reproduced the issue by repeatedly switching pages in the customer and management areas and provided WeChat DevTools console screenshots.
+- Correction: Same-level tabs were changed to `redirectTo`, management-to-customer transitions were normalized to `reLaunch`, and `src/app/navigation.ts` now guards `navigateTo` globally by replacing current page when the target is current or the page stack is near the mini-program limit. The remaining direct product-detail navigation was routed through this wrapper.
+- Prevent next time by: Treat WeChat page-stack behavior as a global routing contract. Before claiming navigation fixes, search for all `uni.navigateTo`/`navigateTo` usages, ensure only the project wrapper calls `uni.navigateTo`, and verify repeated manual switching after recompiling the mini-program.

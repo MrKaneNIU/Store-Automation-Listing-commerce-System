@@ -81,4 +81,24 @@ describe('CloudBase mall API client', () => {
       },
     ])
   })
+
+  it('maps published product summaries to a single mallApi action', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        return { products: [] } as never
+      },
+    })
+
+    await client.listPublishedProductSummaries()
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'listPublishedProductSummaries',
+        },
+      },
+    ])
+  })
 })

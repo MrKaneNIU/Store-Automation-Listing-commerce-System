@@ -38,6 +38,7 @@ const createClient = (overrides: Partial<CloudBaseMallApiClient>): CloudBaseMall
     confirmBatch: missing,
     listProducts: missing,
     listPublishedProducts: missing,
+    listPublishedProductSummaries: missing,
     publishProduct: missing,
     listSkus: missing,
     listPendingImageTasks: missing,
@@ -184,16 +185,35 @@ describe('CloudBase mall facades', () => {
     })
   })
 
-  it('loads customer product list from published mallApi products', async () => {
+  it('loads customer product list from published mallApi summaries', async () => {
     const client = createClient({
-      listPublishedProducts: vi.fn(async () => ({ products: [product] })),
-      listSkus: vi.fn(async () => ({ skus: [sku] })),
+      listPublishedProductSummaries: vi.fn(async () => ({
+        products: [{ ...product, minPrice: 129 }],
+      })),
     })
 
     await expect(getCloudBaseCustomerProductListView(client)).resolves.toMatchObject({
       products: [{ id: 'product-1', minPrice: 129 }],
       emptyMessage: '',
     })
+  })
+
+  it('loads customer product list from a single published summary mallApi call', async () => {
+    const listPublishedProductSummaries = vi.fn(async () => ({
+      products: [{ ...product, minPrice: 129 }],
+    }))
+    const listSkus = vi.fn(async () => ({ skus: [sku] }))
+    const client = createClient({
+      listPublishedProductSummaries,
+      listSkus,
+    })
+
+    await expect(getCloudBaseCustomerProductListView(client)).resolves.toMatchObject({
+      products: [{ id: 'product-1', minPrice: 129 }],
+      emptyMessage: '',
+    })
+    expect(listPublishedProductSummaries).toHaveBeenCalledTimes(1)
+    expect(listSkus).not.toHaveBeenCalled()
   })
 
   it('loads and handles owner orders through mallApi', async () => {

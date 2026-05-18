@@ -68,6 +68,10 @@ type RoleAssignment = {
   updatedAt: string
 }
 
+export type PublishedProductSummary = Product & {
+  minPrice: number | '-'
+}
+
 type CreateCustomerOrderInput = {
   productId: string
   skuId: string
@@ -88,6 +92,7 @@ export type CloudBaseMallApiClient = {
   confirmBatch: (batchId: string) => Promise<{ issues: Array<{ draftId: string; message: string }>; products: Product[]; skus: Sku[] }>
   listProducts: () => Promise<{ products: Product[] }>
   listPublishedProducts: () => Promise<{ products: Product[] }>
+  listPublishedProductSummaries: () => Promise<{ products: PublishedProductSummary[] }>
   publishProduct: (productId: string) => Promise<{ product: Product }>
   listSkus: (productId: string) => Promise<{ skus: Sku[] }>
   listPendingImageTasks: () => Promise<{ products: Product[] }>
@@ -142,6 +147,9 @@ export const createCloudBaseMallApiClient = (
   },
   listPublishedProducts() {
     return callMallApi(functionClient, { action: 'listPublishedProducts' })
+  },
+  listPublishedProductSummaries() {
+    return callMallApi(functionClient, { action: 'listPublishedProductSummaries' })
   },
   publishProduct(productId) {
     return callMallApi(functionClient, { action: 'publishProduct', params: { productId } })

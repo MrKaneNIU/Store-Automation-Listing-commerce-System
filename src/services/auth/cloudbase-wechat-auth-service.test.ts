@@ -21,6 +21,7 @@ const createClient = (overrides: Partial<CloudBaseMallApiClient>): CloudBaseMall
     confirmBatch: missing,
     listProducts: missing,
     listPublishedProducts: missing,
+    listPublishedProductSummaries: missing,
     publishProduct: missing,
     listSkus: missing,
     listPendingImageTasks: missing,

@@ -113,6 +113,12 @@ empty `products` and `skus` arrays and does not create duplicates.
 | `POST` | `/api/products/:productId/publish` | Publish a product that has a main image and SKU |
 | `GET` | `/api/products/:productId/skus` | List product SKUs |
 
+Mini-program CloudBase `mallApi` also exposes `listPublishedProductSummaries`
+for the customer product list. It returns published product fields plus
+`minPrice` in one call so the customer list page does not issue one SKU request
+per product. Deploy `cloudfunctions/mallApi` with this action before relying on
+the optimized list path in a real WeChat DevTools run.
+
 ### Image Tasks
 
 | Method | Path | Purpose |

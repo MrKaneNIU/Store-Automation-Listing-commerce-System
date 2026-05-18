@@ -5,7 +5,7 @@
         <text class="kicker">MERCHANDISE ROOM</text>
         <text class="title">商品管理</text>
       </view>
-      <button class="shop-link" @tap="navigateTo(routes.customerProductList)">商城</button>
+      <button class="shop-link" @tap="relaunchTo(routes.customerProductList)">商城</button>
     </view>
 
     <view class="hero">
@@ -82,9 +82,9 @@
     <view v-if="message" class="result">{{ message }}</view>
 
     <view class="admin-nav">
-      <button class="nav-item" @tap="navigateTo(routes.ownerDashboard)">工作台</button>
-      <button class="nav-item active" @tap="navigateTo(routes.ownerProducts)">商品管理</button>
-      <button class="nav-item" @tap="navigateTo(routes.ownerOrders)">订单确认</button>
+      <button class="nav-item" @tap="redirectTo(routes.ownerDashboard)">工作台</button>
+      <button class="nav-item active" @tap="stayProducts">商品管理</button>
+      <button class="nav-item" @tap="redirectTo(routes.ownerOrders)">订单确认</button>
     </view>
   </view>
 </template>
@@ -92,7 +92,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { navigateTo } from '../../../app/navigation'
+import { redirectTo, relaunchTo } from '../../../app/navigation'
 import { routes } from '../../../app/routes'
 import {
   type OwnerProductStatusFilter,
@@ -117,6 +117,10 @@ const viewModel = ref<OwnerProductsViewModel>({
 const selectedStatusLabel = computed(() => {
   return viewModel.value.statusOptions.find((option) => option.value === selectedStatus.value)?.label ?? '全部'
 })
+
+const stayProducts = () => {
+  uni.pageScrollTo({ scrollTop: 0, duration: 180 })
+}
 
 const refreshView = async () => {
   viewModel.value = await getCloudBaseOwnerProductsView(selectedStatus.value)

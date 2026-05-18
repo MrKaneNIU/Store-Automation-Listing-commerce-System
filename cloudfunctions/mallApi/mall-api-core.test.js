@@ -382,6 +382,30 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     })
   })
 
+  it('returns published product summaries with min prices in one customer list call', async () => {
+    const handler = createHandler()
+    const { product } = await createProductFixture(handler)
+
+    const result = await handler({
+      action: 'listPublishedProductSummaries',
+      identity: customerIdentity,
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        products: [
+          {
+            id: product.id,
+            productCode: product.productCode,
+            minPrice: 129,
+            status: 'published',
+          },
+        ],
+      },
+    })
+  })
+
   it('records ledger entries when merchant confirms or cancels orders', async () => {
     const store = createStore()
     await store.insert('role_assignments', {

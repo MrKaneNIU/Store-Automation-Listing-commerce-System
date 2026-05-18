@@ -1,12 +1,7 @@
 <template>
   <view class="page">
     <view class="hero">
-      <view class="topbar">
-        <button class="icon-button" aria-label="打开菜单">
-          <text class="menu-line" />
-          <text class="menu-line" />
-          <text class="menu-line" />
-        </button>
+      <view class="topbar" :style="{ top: topbarTop }">
         <button class="manage-link" @tap="navigateTo(routes.ownerDashboard)">管理</button>
       </view>
 
@@ -23,7 +18,7 @@
         <text class="hero-title">柔和廓形</text>
         <text class="hero-title">今日上新</text>
         <text class="hero-note">轻盈裙装、通勤套装与限定外套，按小程序 750rpx 视觉比例重构。</text>
-        <button class="primary-button" @tap="navigateTo(routes.customerProductList)">
+        <button class="primary-button" @tap="goProductList">
           <text>查看新品</text>
           <text class="button-mark">↗</text>
         </button>
@@ -36,12 +31,12 @@
           <text class="eyebrow dark">CURATED DROP</text>
           <text class="section-title">新品</text>
         </view>
-        <button class="ghost-button" @tap="navigateTo(routes.customerProductList)">全部</button>
+        <button class="ghost-button" @tap="goProductList">全部</button>
       </view>
 
       <scroll-view class="product-rail" scroll-x enable-flex>
         <view class="rail-inner">
-          <view class="product-card" @tap="navigateTo(routes.customerProductList)">
+          <view class="product-card" @tap="goProductList">
             <view class="product-media coat">
               <view class="mini-head" />
               <view class="mini-body" />
@@ -52,7 +47,7 @@
             <text class="price">进入商品列表查看</text>
           </view>
 
-          <view class="product-card tonal" @tap="navigateTo(routes.customerProductList)">
+          <view class="product-card tonal" @tap="goProductList">
             <view class="product-media empty-media">
               <text class="image-fallback">NO IMAGE</text>
             </view>
@@ -61,7 +56,7 @@
             <text class="price">真实价格来自商品页</text>
           </view>
 
-          <view class="product-card" @tap="navigateTo(routes.customerProductList)">
+          <view class="product-card" @tap="goProductList">
             <view class="product-media dress">
               <view class="mini-head" />
               <view class="mini-body long" />
@@ -80,7 +75,7 @@
         <text class="tab-icon">⌂</text>
         <text>首页</text>
       </button>
-      <button class="tab" @tap="navigateTo(routes.customerProductList)">
+      <button class="tab" @tap="goProductList">
         <text class="tab-icon">◇</text>
         <text>商品</text>
       </button>
@@ -101,11 +96,43 @@
 </template>
 
 <script setup lang="ts">
-import { navigateTo } from '../../app/navigation'
+import { onMounted, ref } from 'vue'
+import { navigateTo, redirectTo } from '../../app/navigation'
 import { routes } from '../../app/routes'
+
+const DEFAULT_TOPBAR_TOP = 'calc(env(safe-area-inset-top) + 40rpx)'
+
+const topbarTop = ref(DEFAULT_TOPBAR_TOP)
+
+const syncTopbarPosition = () => {
+  try {
+    const menuButton = uni.getMenuButtonBoundingClientRect?.()
+    const systemInfo = uni.getSystemInfoSync()
+
+    if (menuButton && Number.isFinite(menuButton.top) && menuButton.top > 0) {
+      topbarTop.value = `${Math.ceil(menuButton.top)}px`
+
+      return
+    }
+
+    const statusBarHeight = systemInfo.statusBarHeight
+
+    if (typeof statusBarHeight === 'number' && Number.isFinite(statusBarHeight) && statusBarHeight > 0) {
+      topbarTop.value = `${Math.ceil(statusBarHeight + 8)}px`
+    }
+  } catch {
+    topbarTop.value = DEFAULT_TOPBAR_TOP
+  }
+}
+
+onMounted(syncTopbarPosition)
 
 const stayHome = () => {
   uni.pageScrollTo({ scrollTop: 0, duration: 180 })
+}
+
+const goProductList = () => {
+  redirectTo(routes.customerProductList)
 }
 
 const showVisualOnlyToast = (title: string) => {
@@ -138,16 +165,13 @@ const showVisualOnlyToast = (title: string) => {
 
 .topbar {
   position: absolute;
-  top: 34rpx;
-  right: 32rpx;
+  top: calc(env(safe-area-inset-top) + 40rpx);
   left: 32rpx;
   z-index: 4;
   display: flex;
   align-items: center;
-  justify-content: space-between;
 }
 
-.icon-button,
 .manage-link,
 .primary-button,
 .ghost-button,
@@ -156,7 +180,6 @@ const showVisualOnlyToast = (title: string) => {
   border: 0;
 }
 
-.icon-button::after,
 .manage-link::after,
 .primary-button::after,
 .ghost-button::after,
@@ -164,7 +187,6 @@ const showVisualOnlyToast = (title: string) => {
   border: 0;
 }
 
-.icon-button,
 .manage-link {
   display: flex;
   align-items: center;
@@ -175,20 +197,6 @@ const showVisualOnlyToast = (title: string) => {
   background: rgba(255, 255, 255, 0.9);
   color: #050505;
   box-shadow: 0 18rpx 44rpx rgba(0, 0, 0, 0.1);
-}
-
-.icon-button {
-  flex-direction: column;
-  gap: 8rpx;
-  width: 88rpx;
-  padding: 0;
-}
-
-.menu-line {
-  width: 38rpx;
-  height: 3rpx;
-  border-radius: 999rpx;
-  background: #050505;
 }
 
 .manage-link {

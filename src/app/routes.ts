@@ -1,4 +1,5 @@
 export const routes = {
+  customerHome: '/pages/index/index',
   ownerDashboard: '/pages/owner/dashboard/index',
   ownerImportUpload: '/pages/owner/import-upload/index',
   ownerDraftReview: '/pages/owner/draft-review/index',

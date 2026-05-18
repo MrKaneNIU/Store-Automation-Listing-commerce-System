@@ -2,11 +2,18 @@
   <view class="page">
     <view class="catalog-header">
       <view class="catalog-nav">
-        <button class="icon-button plain" aria-label="返回首页" @tap="goHome">
+        <button
+          class="icon-button plain"
+          :class="{ busy: isHomeNavigating }"
+          :disabled="isHomeNavigating"
+          aria-label="返回首页"
+          hover-class="press-feedback"
+          @tap="goHome"
+        >
           <text class="chevron">‹</text>
         </button>
         <text class="nav-title">新品目录</text>
-        <button class="icon-button plain" aria-label="搜索商品" @tap="showVisualOnlyToast('搜索入口将在后续模块接入')">
+        <button class="icon-button plain" aria-label="搜索商品" hover-class="press-feedback" @tap="showVisualOnlyToast('搜索入口将在后续模块接入')">
           <text class="search-mark" />
         </button>
       </view>
@@ -16,16 +23,16 @@
 
     <scroll-view class="category-rail" scroll-x enable-flex>
       <view class="category-inner">
-        <button class="category-pill active" @tap="showVisualOnlyToast('当前展示全部已上架商品')">全部</button>
-        <button class="category-pill" @tap="showVisualOnlyToast('分类筛选将在后续模块接入')">连衣裙</button>
-        <button class="category-pill" @tap="showVisualOnlyToast('分类筛选将在后续模块接入')">外套</button>
-        <button class="category-pill" @tap="showVisualOnlyToast('分类筛选将在后续模块接入')">半裙</button>
-        <button class="category-pill" @tap="showVisualOnlyToast('分类筛选将在后续模块接入')">通勤</button>
+        <button class="category-pill active" hover-class="press-feedback" @tap="showVisualOnlyToast('当前展示全部已上架商品')">全部</button>
+        <button class="category-pill" hover-class="press-feedback" @tap="showVisualOnlyToast('分类筛选将在后续模块接入')">连衣裙</button>
+        <button class="category-pill" hover-class="press-feedback" @tap="showVisualOnlyToast('分类筛选将在后续模块接入')">外套</button>
+        <button class="category-pill" hover-class="press-feedback" @tap="showVisualOnlyToast('分类筛选将在后续模块接入')">半裙</button>
+        <button class="category-pill" hover-class="press-feedback" @tap="showVisualOnlyToast('分类筛选将在后续模块接入')">通勤</button>
       </view>
     </scroll-view>
 
     <view class="catalog-tools">
-      <button class="tool-button" @tap="showVisualOnlyToast('筛选面板将在后续模块接入')">
+      <button class="tool-button" hover-class="press-feedback" @tap="showVisualOnlyToast('筛选面板将在后续模块接入')">
         <text class="filter-icon">
           <text />
           <text />
@@ -33,12 +40,12 @@
         </text>
         <text>筛选</text>
       </button>
-      <button class="tool-button" @tap="showVisualOnlyToast('排序面板将在后续模块接入')">
+      <button class="tool-button" hover-class="press-feedback" @tap="showVisualOnlyToast('排序面板将在后续模块接入')">
         <text class="sort-icon">↕</text>
         <text>排序</text>
       </button>
       <view class="view-toggle" aria-label="展示方式">
-        <button class="toggle-button active" aria-label="网格展示">
+        <button class="toggle-button active" aria-label="网格展示" hover-class="press-feedback">
           <text class="grid-icon">
             <text />
             <text />
@@ -46,7 +53,7 @@
             <text />
           </text>
         </button>
-        <button class="toggle-button" aria-label="列表展示" @tap="showVisualOnlyToast('列表展示将在后续模块接入')">
+        <button class="toggle-button" aria-label="列表展示" hover-class="press-feedback" @tap="showVisualOnlyToast('列表展示将在后续模块接入')">
           <text class="list-icon">
             <text />
             <text />
@@ -71,15 +78,23 @@
     <view v-else-if="products.length === 0" class="empty-state">
       <text class="empty-title">暂无匹配商品</text>
       <text class="empty-copy">商品上架后会自动出现在这里。</text>
-      <button class="empty-action" @tap="refreshView">重新加载</button>
+      <button class="empty-action" hover-class="press-feedback" @tap="reloadView">重新加载</button>
     </view>
 
     <view v-else class="catalog-grid">
-      <view v-for="product in products" :key="product.id" class="catalog-card" @tap="openDetail(product.id)">
+      <view
+        v-for="product in products"
+        :key="product.id"
+        class="catalog-card"
+        :class="{ opening: navigatingProductId === product.id }"
+        hover-class="catalog-card-pressed"
+        hover-stay-time="90"
+        @tap="openDetail(product.id)"
+      >
         <view class="catalog-media">
           <image v-if="product.mainImageUrl" class="image" :src="product.mainImageUrl" mode="aspectFill" />
           <view v-else class="fashion-visual" :class="getVisualClass(product.productCode)" />
-          <button class="favorite-button" @tap.stop="showVisualOnlyToast('收藏为视觉入口，真实收藏能力需单独 PRD')">
+          <button class="favorite-button" hover-class="press-feedback" @tap.stop="showVisualOnlyToast('收藏为视觉入口，真实收藏能力需单独 PRD')">
             <text>♡</text>
           </button>
         </view>
@@ -92,7 +107,7 @@
     </view>
 
     <view class="customer-nav">
-      <button class="tab" @tap="goHome">
+      <button class="tab" :class="{ busy: isHomeNavigating }" :disabled="isHomeNavigating" hover-class="tab-pressed" @tap="goHome">
         <text class="tab-icon">⌂</text>
         <text>首页</text>
       </button>
@@ -100,15 +115,15 @@
         <text class="tab-icon">◇</text>
         <text>商品</text>
       </button>
-      <button class="tab" @tap="showVisualOnlyToast('购物袋为视觉入口，真实购物袋能力需单独 PRD')">
+      <button class="tab" hover-class="tab-pressed" @tap="showVisualOnlyToast('购物袋为视觉入口，真实购物袋能力需单独 PRD')">
         <text class="tab-icon">▢</text>
         <text>购物袋</text>
       </button>
-      <button class="tab" @tap="showVisualOnlyToast('收藏为视觉入口，真实收藏能力需单独 PRD')">
+      <button class="tab" hover-class="tab-pressed" @tap="showVisualOnlyToast('收藏为视觉入口，真实收藏能力需单独 PRD')">
         <text class="tab-icon">♡</text>
         <text>收藏</text>
       </button>
-      <button class="tab" @tap="showVisualOnlyToast('我的为视觉入口，不新增个人中心数据模型')">
+      <button class="tab" hover-class="tab-pressed" @tap="showVisualOnlyToast('我的为视觉入口，不新增个人中心数据模型')">
         <text class="tab-icon">○</text>
         <text>我的</text>
       </button>
@@ -119,31 +134,94 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import { navigateTo, redirectTo } from '../../../app/navigation'
+import { routes } from '../../../app/routes'
 import type { CustomerProductListItem } from '../../../features/customer-product-list/customer-product-list'
 import { getCloudBaseCustomerProductListView } from '../../../features/cloudbase-mall/customer-product-list'
 
 const products = ref<CustomerProductListItem[]>([])
 const isLoading = ref(false)
+const isHomeNavigating = ref(false)
+const navigatingProductId = ref('')
+let cachedProducts: CustomerProductListItem[] | null = null
+let pendingRefresh: Promise<void> | null = null
 
-const refreshView = async () => {
-  isLoading.value = true
-  try {
-    products.value = (await getCloudBaseCustomerProductListView()).products
-  } finally {
-    isLoading.value = false
+type RefreshOptions = {
+  showLoading: boolean
+}
+
+const refreshView = (options: RefreshOptions): Promise<void> => {
+  if (pendingRefresh) {
+    return pendingRefresh
   }
+
+  if (options.showLoading) {
+    isLoading.value = true
+  }
+
+  pendingRefresh = getCloudBaseCustomerProductListView()
+    .then((view) => {
+      cachedProducts = view.products
+      products.value = view.products
+    })
+    .finally(() => {
+      if (options.showLoading) {
+        isLoading.value = false
+      }
+
+      pendingRefresh = null
+    })
+
+  return pendingRefresh
+}
+
+const reloadView = () => {
+  void refreshView({ showLoading: true })
 }
 
 onShow(() => {
-  void refreshView()
+  navigatingProductId.value = ''
+  isHomeNavigating.value = false
+
+  if (cachedProducts) {
+    products.value = cachedProducts
+    isLoading.value = false
+    void refreshView({ showLoading: false })
+
+    return
+  }
+
+  void refreshView({ showLoading: true })
 })
 
 const openDetail = (productId: string) => {
-  uni.navigateTo({ url: `/pages/customer/product-detail/index?id=${productId}` })
+  if (navigatingProductId.value) {
+    return
+  }
+
+  navigatingProductId.value = productId
+  navigateTo(`/pages/customer/product-detail/index?id=${productId}`, {
+    onFail: () => {
+      navigatingProductId.value = ''
+      uni.showToast({
+        title: '页面打开失败，请稍后重试',
+        icon: 'none',
+        duration: 1600,
+      })
+    },
+  })
 }
 
 const goHome = () => {
-  uni.navigateBack({ delta: 1 })
+  if (isHomeNavigating.value) {
+    return
+  }
+
+  isHomeNavigating.value = true
+  redirectTo(routes.customerHome)
+  setTimeout(() => {
+    isHomeNavigating.value = false
+  }, 600)
 }
 
 const showVisualOnlyToast = (title: string) => {
@@ -191,6 +269,7 @@ const getVisualClass = (productCode: string) => {
 .tab {
   margin: 0;
   border: 0;
+  transition: opacity 160ms ease, transform 160ms ease, background-color 160ms ease;
 }
 
 .icon-button::after,
@@ -215,6 +294,15 @@ const getVisualClass = (productCode: string) => {
   background: #ffffff;
   color: #050505;
   box-shadow: 0 0 0 1rpx #e8e8e8 inset;
+}
+
+.press-feedback {
+  opacity: 0.76;
+  transform: scale(0.97);
+}
+
+.busy {
+  opacity: 0.62;
 }
 
 .chevron {
@@ -535,6 +623,14 @@ const getVisualClass = (productCode: string) => {
 .catalog-card {
   width: calc((100% - 36rpx) / 2);
   min-width: 0;
+  transition: opacity 160ms ease, transform 160ms ease;
+  will-change: transform;
+}
+
+.catalog-card-pressed,
+.catalog-card.opening {
+  opacity: 0.84;
+  transform: scale(0.985);
 }
 
 .catalog-media {
@@ -714,6 +810,11 @@ const getVisualClass = (productCode: string) => {
   color: #9a9a9a;
   font-size: 22rpx;
   line-height: 1.2;
+}
+
+.tab-pressed {
+  opacity: 0.7;
+  transform: scale(0.96);
 }
 
 .tab-icon {

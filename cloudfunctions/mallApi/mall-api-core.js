@@ -10,6 +10,7 @@ const SUPPORTED_ACTIONS = [
   'confirmBatch',
   'listProducts',
   'listPublishedProducts',
+  'listPublishedProductSummaries',
   'publishProduct',
   'listSkus',
   'listPendingImageTasks',
@@ -493,6 +494,15 @@ const toAuditLogDocument = (auditLog) => ({
   created_at: auditLog.createdAt,
 })
 
+const toPublishedProductSummary = (product, skus) => {
+  const prices = skus.filter((sku) => sku.productId === product.id).map((sku) => sku.salePrice)
+
+  return {
+    ...product,
+    minPrice: prices.length > 0 ? Math.min(...prices) : '-',
+  }
+}
+
 const createRepository = (store) => ({
   saveBatch: async (batch) => toBatch(await store.insert('ocr_batches', toBatchDocument(batch))),
   updateBatch: async (batch) => toBatch(await store.replace('ocr_batches', toBatchDocument(batch))),
@@ -839,6 +849,12 @@ const apiHandlers = {
   },
   async listPublishedProducts(_event, context) {
     return { products: (await context.repository.listProducts()).filter((product) => product.status === 'published') }
+  },
+  async listPublishedProductSummaries(_event, context) {
+    const products = (await context.repository.listProducts()).filter((product) => product.status === 'published')
+    const skus = await context.repository.listSkus()
+
+    return { products: products.map((product) => toPublishedProductSummary(product, skus)) }
   },
   async publishProduct(event, context) {
     await requireResolvedAnyRole(event, context, ['owner'])

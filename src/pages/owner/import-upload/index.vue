@@ -5,7 +5,7 @@
         <text class="kicker">IMAGE INTAKE</text>
         <text class="title">截图识别</text>
       </view>
-      <button class="shop-link" @tap="navigateTo(routes.customerProductList)">商城</button>
+      <button class="shop-link" @tap="relaunchTo(routes.customerProductList)">商城</button>
     </view>
 
     <view class="hero">
@@ -76,7 +76,7 @@
 import { ref } from 'vue'
 import type { UploadedImage } from '../../../domain/batch/types'
 import type { ProductDraft } from '../../../domain/draft/types'
-import { navigateTo } from '../../../app/navigation'
+import { relaunchTo } from '../../../app/navigation'
 import { routes } from '../../../app/routes'
 import { removeOwnerScreenshotDescriptor } from '../../../features/owner-screenshot-import/owner-screenshot-import'
 import { startCloudBaseOwnerScreenshotRecognition } from '../../../features/cloudbase-mall/owner-screenshot-import'

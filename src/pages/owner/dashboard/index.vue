@@ -1,11 +1,13 @@
 <template>
-  <view class="page">
+  <view class="page" :style="{ paddingTop: pageTopPadding }">
     <view class="topbar">
       <view class="brand">
         <text class="kicker">Oh My Fish</text>
-        <text class="title">管理工作台</text>
+        <view class="title-row">
+          <text class="title">管理工作台</text>
+          <button class="shop-link" @tap="relaunchTo(routes.customerProductList)">商城</button>
+        </view>
       </view>
-      <button class="shop-link" @tap="navigateTo(routes.customerProductList)">商城</button>
     </view>
 
     <view class="flow-section">
@@ -78,29 +80,55 @@
     </view>
 
     <view class="admin-nav">
-      <button class="nav-item active" @tap="navigateTo(routes.ownerDashboard)">工作台</button>
-      <button class="nav-item" @tap="navigateTo(routes.ownerProducts)">商品管理</button>
-      <button class="nav-item" @tap="navigateTo(routes.ownerOrders)">订单确认</button>
+      <button class="nav-item active" @tap="stayDashboard">工作台</button>
+      <button class="nav-item" @tap="redirectTo(routes.ownerProducts)">商品管理</button>
+      <button class="nav-item" @tap="redirectTo(routes.ownerOrders)">订单确认</button>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { navigateTo } from '../../../app/navigation'
+import { onMounted, ref } from 'vue'
+import { navigateTo, redirectTo, relaunchTo } from '../../../app/navigation'
 import { routes } from '../../../app/routes'
+
+const DEFAULT_PAGE_TOP_PADDING = 'calc(env(safe-area-inset-top) + 12rpx)'
+const TOP_CONTENT_GAP_RPX = 12
+
+const pageTopPadding = ref(DEFAULT_PAGE_TOP_PADDING)
+
+const syncPageTopPadding = () => {
+  try {
+    const systemInfo = uni.getSystemInfoSync()
+    const rpxToPx = systemInfo.windowWidth / 750
+    const statusBarHeight = systemInfo.statusBarHeight
+
+    if (typeof statusBarHeight === 'number' && Number.isFinite(statusBarHeight) && statusBarHeight > 0) {
+      pageTopPadding.value = `${Math.ceil(statusBarHeight + TOP_CONTENT_GAP_RPX * rpxToPx)}px`
+    }
+  } catch {
+    pageTopPadding.value = DEFAULT_PAGE_TOP_PADDING
+  }
+}
+
+onMounted(syncPageTopPadding)
 
 const maxUploadCount = 18
 const selectedScreenshotCount = 5
 const remainingUploadCount = Math.max(0, maxUploadCount - selectedScreenshotCount)
 const pendingDraftCount = 6
 const pendingImageTaskCount = 4
+
+const stayDashboard = () => {
+  uni.pageScrollTo({ scrollTop: 0, duration: 180 })
+}
 </script>
 
 <style scoped>
 .page {
   min-height: 100vh;
   box-sizing: border-box;
-  padding: 32rpx 32rpx calc(188rpx + env(safe-area-inset-bottom));
+  padding: calc(env(safe-area-inset-top) + 12rpx) 32rpx calc(188rpx + env(safe-area-inset-bottom));
   background: #f8f8f8;
   color: #202020;
 }
@@ -108,8 +136,6 @@ const pendingImageTaskCount = 4
 .topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 24rpx;
   margin-bottom: 34rpx;
 }
 
@@ -117,6 +143,13 @@ const pendingImageTaskCount = 4
   display: flex;
   flex-direction: column;
   gap: 10rpx;
+  min-width: 0;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
   min-width: 0;
 }
 
@@ -137,16 +170,16 @@ const pendingImageTaskCount = 4
 
 .shop-link {
   flex: 0 0 auto;
-  min-width: 112rpx;
-  min-height: 60rpx;
+  min-width: 100rpx;
+  min-height: 56rpx;
   margin: 0;
-  padding: 0 28rpx;
+  padding: 0 24rpx;
   border-radius: 999rpx;
   background: #ffffff;
   color: #202020;
   font-size: 24rpx;
   font-weight: 500;
-  line-height: 60rpx;
+  line-height: 56rpx;
   box-shadow: 0 12rpx 30rpx rgba(12, 12, 12, 0.06);
 }
 

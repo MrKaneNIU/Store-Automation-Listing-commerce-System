@@ -5,7 +5,7 @@
         <text class="kicker">ORDER ATELIER</text>
         <text class="title">订单确认</text>
       </view>
-      <button class="shop-link" @tap="navigateTo(routes.customerProductList)">商城</button>
+      <button class="shop-link" @tap="relaunchTo(routes.customerProductList)">商城</button>
     </view>
 
     <view class="hero">
@@ -66,9 +66,9 @@
     <view v-if="message" class="result">{{ message }}</view>
 
     <view class="admin-nav">
-      <button class="nav-item" @tap="navigateTo(routes.ownerDashboard)">工作台</button>
-      <button class="nav-item" @tap="navigateTo(routes.ownerProducts)">商品管理</button>
-      <button class="nav-item active" @tap="navigateTo(routes.ownerOrders)">订单确认</button>
+      <button class="nav-item" @tap="redirectTo(routes.ownerDashboard)">工作台</button>
+      <button class="nav-item" @tap="redirectTo(routes.ownerProducts)">商品管理</button>
+      <button class="nav-item active" @tap="stayOrders">订单确认</button>
     </view>
   </view>
 </template>
@@ -76,7 +76,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { navigateTo } from '../../../app/navigation'
+import { redirectTo, relaunchTo } from '../../../app/navigation'
 import { routes } from '../../../app/routes'
 import type { OwnerOrdersViewModel } from '../../../features/owner-orders/owner-orders'
 import {
@@ -92,6 +92,10 @@ const viewModel = ref<OwnerOrdersViewModel>({
 })
 
 const pendingOrderCount = computed(() => viewModel.value.orders.filter((order) => order.canConfirm).length)
+
+const stayOrders = () => {
+  uni.pageScrollTo({ scrollTop: 0, duration: 180 })
+}
 
 const refreshView = async () => {
   viewModel.value = await getCloudBaseOwnerOrdersView()
