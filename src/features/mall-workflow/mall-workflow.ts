@@ -36,7 +36,18 @@ export const mallWorkflow = {
       createdAt: timestamp,
       updatedAt: timestamp,
     })
-    const drafts = await mockOcrProvider.recognizeBatch(batch.id, uploadedImages)
+    const recognized = await mockOcrProvider.recognizeBatch({
+      batchId: batch.id,
+      images: uploadedImages,
+      context: {
+        jobId: `job-${batch.id}`,
+        requestedAt: timestamp,
+      },
+    })
+    if (!recognized.ok) {
+      return { batch, drafts: [] }
+    }
+    const { drafts } = recognized
     mallRepository.saveDrafts(drafts)
     const recognizedBatch = mallRepository.updateBatch({ ...batch, status: 'recognized', updatedAt: nowIso() })
 

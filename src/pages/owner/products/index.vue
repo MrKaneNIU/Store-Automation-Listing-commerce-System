@@ -21,10 +21,6 @@
         <text class="hero-title">{{ viewModel.readyProductCount }} 件待上架</text>
         <text class="hero-desc">状态筛选、单品上架和批量上架均沿用现有商品发布链路。</text>
       </view>
-      <view class="hero-meter">
-        <text class="meter-number">{{ viewModel.products.length }}</text>
-        <text class="meter-label">{{ selectedStatusLabel }}</text>
-      </view>
     </view>
 
     <view class="filter-panel">
@@ -122,7 +118,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { redirectTo, relaunchTo } from '../../../app/navigation'
 import type { AppRoute } from '../../../app/routes'
@@ -148,10 +144,6 @@ const viewModel = ref<OwnerProductsViewModel>({
   canBatchPublish: false,
   readyProductCount: 0,
   emptyMessage: '当前筛选下暂无商品',
-})
-
-const selectedStatusLabel = computed(() => {
-  return viewModel.value.statusOptions.find((option) => option.value === selectedStatus.value)?.label ?? '全部'
 })
 
 const stayProducts = () => {
@@ -285,9 +277,6 @@ const publishReadyProducts = async () => {
 }
 
 .hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 168rpx;
-  gap: 24rpx;
   box-sizing: border-box;
   margin-bottom: 24rpx;
   padding: 34rpx;
@@ -323,27 +312,6 @@ const publishReadyProducts = async () => {
   color: #d7d7d7;
   font-size: 24rpx;
   line-height: 1.55;
-}
-
-.hero-meter {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: space-between;
-  min-width: 0;
-}
-
-.meter-number {
-  font-size: 60rpx;
-  font-weight: 600;
-  line-height: 1;
-}
-
-.meter-label {
-  color: #b8b8b8;
-  font-size: 20rpx;
-  line-height: 1.2;
-  text-align: right;
 }
 
 .filter-panel,

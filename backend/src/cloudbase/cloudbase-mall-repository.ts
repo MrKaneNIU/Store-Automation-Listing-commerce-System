@@ -8,6 +8,16 @@ type OcrBatch = {
   updatedAt: string
 }
 
+type OcrJob = {
+  id: string
+  batchId: string
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'retrying'
+  failureReason?: string
+  retryCount: number
+  createdAt: string
+  updatedAt: string
+}
+
 type ProductDraft = {
   id: string
   batchId: string
@@ -18,6 +28,9 @@ type ProductDraft = {
   stock: number
   confidence: number
   sourceImageUrl: string
+  fieldConfidence?: Partial<Record<'productCode' | 'productName' | 'salePrice' | 'spec', number>>
+  fieldSources?: Partial<Record<'productCode' | 'productName' | 'salePrice' | 'spec', string>>
+  correctionState?: 'ocr_raw' | 'manual_corrected'
   status: 'pending' | 'confirmed' | 'deleted' | 'needs_completion'
 }
 
@@ -86,6 +99,16 @@ type BatchDocument = {
   updated_at: string
 }
 
+type OcrJobDocument = {
+  _id: string
+  batch_id: string
+  status: OcrJob['status']
+  failure_reason?: string
+  retry_count: number
+  created_at: string
+  updated_at: string
+}
+
 type DraftDocument = {
   _id: string
   batch_id: string
@@ -96,6 +119,9 @@ type DraftDocument = {
   stock: number
   confidence: number
   source_image_url: string
+  field_confidence?: Partial<Record<'productCode' | 'productName' | 'salePrice' | 'spec', number>>
+  field_sources?: Partial<Record<'productCode' | 'productName' | 'salePrice' | 'spec', string>>
+  correction_state?: ProductDraft['correctionState']
   status: ProductDraft['status']
 }
 
@@ -161,6 +187,9 @@ type CloudBaseMallRepository = {
   saveBatch: (batch: OcrBatch) => Promise<OcrBatch>
   updateBatch: (batch: OcrBatch) => Promise<OcrBatch>
   listBatches: () => Promise<OcrBatch[]>
+  saveOcrJob: (job: OcrJob) => Promise<OcrJob>
+  updateOcrJob: (job: OcrJob) => Promise<OcrJob>
+  listOcrJobs: (batchId?: string) => Promise<OcrJob[]>
   saveDrafts: (drafts: ProductDraft[]) => Promise<ProductDraft[]>
   replaceDrafts: (batchId: string, drafts: ProductDraft[]) => Promise<ProductDraft[]>
   listDrafts: (batchId?: string) => Promise<ProductDraft[]>
@@ -192,6 +221,26 @@ const toBatch = (document: BatchDocument): OcrBatch => ({
   updatedAt: document.updated_at,
 })
 
+const toOcrJobDocument = (job: OcrJob): OcrJobDocument => ({
+  _id: job.id,
+  batch_id: job.batchId,
+  status: job.status,
+  ...(job.failureReason ? { failure_reason: job.failureReason } : {}),
+  retry_count: job.retryCount,
+  created_at: job.createdAt,
+  updated_at: job.updatedAt,
+})
+
+const toOcrJob = (document: OcrJobDocument): OcrJob => ({
+  id: document._id,
+  batchId: document.batch_id,
+  status: document.status,
+  ...(document.failure_reason ? { failureReason: document.failure_reason } : {}),
+  retryCount: document.retry_count,
+  createdAt: document.created_at,
+  updatedAt: document.updated_at,
+})
+
 const toDraftDocument = (draft: ProductDraft): DraftDocument => ({
   _id: draft.id,
   batch_id: draft.batchId,
@@ -202,6 +251,9 @@ const toDraftDocument = (draft: ProductDraft): DraftDocument => ({
   stock: draft.stock,
   confidence: draft.confidence,
   source_image_url: draft.sourceImageUrl,
+  ...(draft.fieldConfidence ? { field_confidence: draft.fieldConfidence } : {}),
+  ...(draft.fieldSources ? { field_sources: draft.fieldSources } : {}),
+  ...(draft.correctionState ? { correction_state: draft.correctionState } : {}),
   status: draft.status,
 })
 
@@ -215,6 +267,9 @@ const toDraft = (document: DraftDocument): ProductDraft => ({
   stock: document.stock,
   confidence: document.confidence,
   sourceImageUrl: document.source_image_url,
+  ...(document.field_confidence ? { fieldConfidence: document.field_confidence } : {}),
+  ...(document.field_sources ? { fieldSources: document.field_sources } : {}),
+  ...(document.correction_state ? { correctionState: document.correction_state } : {}),
   status: document.status,
 })
 
@@ -350,6 +405,16 @@ export const createCloudBaseMallRepository = (
   },
   async listBatches() {
     return (await store.list<BatchDocument>('ocr_batches')).map(toBatch)
+  },
+  async saveOcrJob(job) {
+    return toOcrJob(await store.insert('ocr_jobs', toOcrJobDocument(job)))
+  },
+  async updateOcrJob(job) {
+    return toOcrJob(await store.replace('ocr_jobs', toOcrJobDocument(job)))
+  },
+  async listOcrJobs(batchId) {
+    const jobs = (await store.list<OcrJobDocument>('ocr_jobs')).map(toOcrJob)
+    return batchId ? jobs.filter((job) => job.batchId === batchId) : jobs
   },
   async saveDrafts(drafts) {
     const saved: ProductDraft[] = []

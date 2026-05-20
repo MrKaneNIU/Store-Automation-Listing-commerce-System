@@ -27,6 +27,7 @@ YYYY-MM-DD-功能名称-prd.md
 贯穿项目的主 PRD：
 
 - `2026-05-08-enterprise-launch-master-prd.md`：企业级上线、持续迭代、真实后端、真实存储、真实微信能力、真实 OCR/AI、UI 重构、发布验收和回滚治理总纲。后续阶段任务必须以它为总路线。
+- `2026-05-19-enterprise-launch-risk-grouped-prd.md`：在主 PRD 基础上，将剩余上线缺口按风险分组重排为生产配置、真实 OCR、订单运营、图片复验、备份回滚、合规发布、监控和最终 readiness gate 的执行总控文档。
 
 Phase 2 路线更新：
 
@@ -35,6 +36,8 @@ Phase 2 路线更新：
 
 最新交付记录：
 
+- `../plans/2026-05-19-risk-group-a-production-config-gate-log.md`
+- `../plans/2026-05-19-risk-group-b-ocr-job-main-chain-log.md`
 - `../plans/2026-05-08-customer-wechat-auth-order-delivery-log.md`
 - `../plans/2026-05-08-harness-hardening-delivery-log.md`
 - `../plans/2026-05-08-ui-boundary-engineering-delivery-log.md`

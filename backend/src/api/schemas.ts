@@ -10,6 +10,7 @@ export type DraftInput = {
   stock: number
   confidence: number
   sourceImageUrl: string
+  correctionState?: 'ocr_raw' | 'manual_corrected'
 }
 
 export type CreateOcrBatchInput = {
@@ -25,6 +26,7 @@ export type DraftPatchInput = Partial<{
   stock: number
   confidence: number
   sourceImageUrl: string
+  correctionState?: 'ocr_raw' | 'manual_corrected'
 }>
 
 export type SupplementImagesInput = {
@@ -127,6 +129,7 @@ const parseDraftInput = (value: unknown): DraftInput => {
     stock: readNonNegativeInteger(value, 'stock'),
     confidence: readConfidence(value),
     sourceImageUrl: readString(value, 'sourceImageUrl'),
+    correctionState: value.correctionState === 'manual_corrected' ? 'manual_corrected' : 'ocr_raw',
   }
 }
 
@@ -152,7 +155,7 @@ export const parseDraftPatchInput = (value: unknown): DraftPatchInput => {
   }
 
   const result: DraftPatchInput = {}
-  const allowedFields = ['productCode', 'productName', 'salePrice', 'spec', 'stock', 'confidence', 'sourceImageUrl']
+  const allowedFields = ['productCode', 'productName', 'salePrice', 'spec', 'stock', 'confidence', 'sourceImageUrl', 'correctionState']
   Object.keys(value).forEach((field) => {
     if (!allowedFields.includes(field)) {
       throw validationError(`${field} is not an editable draft field`)
@@ -166,6 +169,12 @@ export const parseDraftPatchInput = (value: unknown): DraftPatchInput => {
   if (value.stock !== undefined) result.stock = readNonNegativeInteger(value, 'stock')
   if (value.confidence !== undefined) result.confidence = readConfidence(value)
   if (value.sourceImageUrl !== undefined) result.sourceImageUrl = readString(value, 'sourceImageUrl')
+  if (value.correctionState !== undefined) {
+    if (value.correctionState !== 'ocr_raw' && value.correctionState !== 'manual_corrected') {
+      throw validationError('correctionState must be ocr_raw or manual_corrected')
+    }
+    result.correctionState = value.correctionState
+  }
 
   if (Object.keys(result).length === 0) {
     throw validationError('At least one draft field is required')

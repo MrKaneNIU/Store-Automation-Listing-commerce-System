@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { OcrBatch } from '../../domain/batch/types'
+import type { OcrBatch, OcrJob } from '../../domain/batch/types'
 import type { Product, Sku } from '../../domain/catalog/types'
 import type { ProductDraft } from '../../domain/draft/types'
 import type { InventoryLedgerEntry } from '../../domain/inventory/types'
@@ -30,7 +30,19 @@ const draft: ProductDraft = {
   stock: 1,
   confidence: 0.96,
   sourceImageUrl: '/tmp/page-1.png',
+  fieldConfidence: { productCode: 0.9, productName: 0.92 },
+  fieldSources: { productCode: 'ocr', productName: 'ocr' },
+  correctionState: 'ocr_raw',
   status: 'pending',
+}
+
+const ocrJob: OcrJob = {
+  id: 'job-1',
+  batchId: 'batch-1',
+  status: 'queued',
+  retryCount: 0,
+  createdAt: '2026-05-08T00:00:00.000Z',
+  updatedAt: '2026-05-08T00:00:00.000Z',
 }
 
 const product: Product = {
@@ -129,6 +141,32 @@ export const runMallRepositoryContract = (
       expect(await repository.listDrafts()).toEqual([otherBatchDraft, replacement])
     })
 
+    it('saves, lists, and updates OCR jobs by batch without exposing local list mutation', async () => {
+      await factory.reset?.()
+      const repository = factory.createRepository()
+
+      await repository.saveBatch(batch)
+      await repository.saveBatch({ ...batch, id: 'batch-2' })
+      await repository.saveOcrJob(ocrJob)
+      await repository.saveOcrJob({ ...ocrJob, id: 'job-2', batchId: 'batch-2' })
+      const listed = await repository.listOcrJobs('batch-1')
+      listed.push({ ...ocrJob, id: 'local-only-job' })
+      const updated = await repository.updateOcrJob({
+        ...ocrJob,
+        status: 'failed',
+        failureReason: 'provider timeout',
+        updatedAt: '2026-05-08T00:01:00.000Z',
+      })
+
+      expect(updated).toMatchObject({
+        id: 'job-1',
+        status: 'failed',
+        failureReason: 'provider timeout',
+      })
+      expect(await repository.listOcrJobs('batch-1')).toEqual([updated])
+      expect(await repository.listOcrJobs('batch-2')).toEqual([{ ...ocrJob, id: 'job-2', batchId: 'batch-2' }])
+    })
+
     it('saves products and SKUs, then updates products and SKUs by id', async () => {
       await factory.reset?.()
       const repository = factory.createRepository()
@@ -207,6 +245,7 @@ export const runMallRepositoryContract = (
 
 export const repositoryContractFixtures = {
   batch,
+  ocrJob,
   draft,
   product,
   sku,

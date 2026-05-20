@@ -1,0 +1,26 @@
+{
+  "targetEnvId": "cloud1-d7gifjyzl7721b383",
+  "functions": [
+    {
+      "name": "mallApi",
+      "envId": "cloud1-d7gifjyzl7721b383",
+      "environmentVariables": [
+        "WECHAT_APPID",
+        "WECHAT_APPSECRET",
+        "OCR_PROVIDER",
+        "OCR_PROVIDER_ENDPOINT",
+        "OCR_TENCENT_SECRET_ID",
+        "OCR_TENCENT_SECRET_KEY"
+      ]
+    }
+  ],
+  "domains": {
+    "request": ["https://api.example.com"],
+    "upload": ["https://upload.example.com"],
+    "download": ["https://download.example.com"]
+  },
+  "storage": {
+    "bucketReady": true,
+    "httpsTlsVerified": true
+  }
+}

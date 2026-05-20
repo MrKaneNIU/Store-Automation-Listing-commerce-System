@@ -1,4 +1,4 @@
-import type { OcrBatch } from '../../domain/batch/types'
+import type { OcrBatch, OcrJob } from '../../domain/batch/types'
 import type { Product, Sku } from '../../domain/catalog/types'
 import type { ProductDraft } from '../../domain/draft/types'
 import type { InventoryLedgerEntry } from '../../domain/inventory/types'
@@ -6,6 +6,7 @@ import type { Order } from '../../domain/order/types'
 
 export type MockDb = {
   batches: OcrBatch[]
+  ocrJobs: OcrJob[]
   drafts: ProductDraft[]
   products: Product[]
   skus: Sku[]
@@ -15,6 +16,7 @@ export type MockDb = {
 
 export const mockDb: MockDb = {
   batches: [],
+  ocrJobs: [],
   drafts: [],
   products: [],
   skus: [],
@@ -24,6 +26,7 @@ export const mockDb: MockDb = {
 
 export const resetMockDb = () => {
   mockDb.batches = []
+  mockDb.ocrJobs = []
   mockDb.drafts = []
   mockDb.products = []
   mockDb.skus = []

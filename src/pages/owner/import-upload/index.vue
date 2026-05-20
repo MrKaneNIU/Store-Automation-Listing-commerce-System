@@ -73,6 +73,20 @@
 
     <view v-if="message" class="result">{{ message }}</view>
 
+    <view v-if="currentJob" class="result job-result">
+      <text>Job {{ currentJob.id }}：{{ currentJob.status }}</text>
+      <text v-if="currentJob.failureReason">{{ currentJob.failureReason }}</text>
+      <button
+        v-if="currentJob.status === 'failed'"
+        class="secondary"
+        :disabled="isRecognizing"
+        hover-class="press-feedback"
+        @tap="retryJob"
+      >
+        {{ isRecognizing ? '重试中...' : '重试识别' }}
+      </button>
+    </view>
+
     <view v-if="drafts.length > 0" class="draft-list">
       <view class="draft-head">
         <text class="section-title">识别草稿</text>
@@ -95,16 +109,20 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { UploadedImage } from '../../../domain/batch/types'
+import type { OcrJob, UploadedImage } from '../../../domain/batch/types'
 import type { ProductDraft } from '../../../domain/draft/types'
 import { relaunchTo } from '../../../app/navigation'
 import { routes } from '../../../app/routes'
 import { removeOwnerScreenshotDescriptor } from '../../../features/owner-screenshot-import/owner-screenshot-import'
-import { startCloudBaseOwnerScreenshotRecognition } from '../../../features/cloudbase-mall/owner-screenshot-import'
+import {
+  retryCloudBaseOwnerScreenshotRecognitionJob,
+  startCloudBaseOwnerScreenshotRecognition,
+} from '../../../features/cloudbase-mall/owner-screenshot-import'
 import { formatUploadFailureMessage, uploadService } from '../../../services/storage/runtime-upload-service'
 
 const screenshots = ref<UploadedImage[]>([])
 const drafts = ref<ProductDraft[]>([])
+const currentJob = ref<OcrJob | null>(null)
 const message = ref('')
 const isRecognizing = ref(false)
 const isShopNavigating = ref(false)
@@ -162,10 +180,29 @@ const startRecognize = async () => {
   try {
     const result = await startCloudBaseOwnerScreenshotRecognition(screenshots.value)
     drafts.value = result.drafts
+    currentJob.value = result.job ?? null
     message.value = result.message
   } catch (error) {
     drafts.value = []
     message.value = error instanceof Error ? error.message : '截图识别失败，请查看 Console 错误信息'
+  } finally {
+    isRecognizing.value = false
+  }
+}
+
+const retryJob = async () => {
+  if (isRecognizing.value || !currentJob.value) {
+    return
+  }
+
+  isRecognizing.value = true
+  try {
+    const result = await retryCloudBaseOwnerScreenshotRecognitionJob(currentJob.value.id)
+    drafts.value = result.drafts
+    currentJob.value = result.job ?? null
+    message.value = result.message
+  } catch (error) {
+    message.value = error instanceof Error ? error.message : 'OCR job 重试失败，请稍后重试'
   } finally {
     isRecognizing.value = false
   }

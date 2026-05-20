@@ -21,10 +21,6 @@
         <text class="hero-title">{{ pendingOrderCount }} 单待确认</text>
         <text class="hero-desc">确认与取消动作继续走现有订单 facade，库存扣减和审计规则保持不变。</text>
       </view>
-      <view class="hero-meter">
-        <text class="meter-number">{{ viewModel.orders.length }}</text>
-        <text class="meter-label">orders</text>
-      </view>
     </view>
 
     <view v-if="viewModel.orders.length > 0" class="order-list">
@@ -266,9 +262,6 @@ const cancel = async (orderId: string) => {
 }
 
 .hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 168rpx;
-  gap: 24rpx;
   box-sizing: border-box;
   margin-bottom: 26rpx;
   padding: 34rpx;
@@ -304,27 +297,6 @@ const cancel = async (orderId: string) => {
   color: #d7d7d7;
   font-size: 24rpx;
   line-height: 1.55;
-}
-
-.hero-meter {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: space-between;
-  min-width: 0;
-}
-
-.meter-number {
-  font-size: 60rpx;
-  font-weight: 600;
-  line-height: 1;
-}
-
-.meter-label {
-  color: #b8b8b8;
-  font-size: 20rpx;
-  line-height: 1.2;
-  text-align: right;
 }
 
 .order-list {

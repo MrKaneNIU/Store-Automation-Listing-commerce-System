@@ -2,6 +2,9 @@ const SUPPORTED_ACTIONS = [
   'health',
   'listContracts',
   'createOcrBatch',
+  'listOcrJobs',
+  'processOcrJob',
+  'retryOcrJob',
   'listOcrBatches',
   'getCurrentOcrBatch',
   'getLatestDrafts',
@@ -24,6 +27,8 @@ const SUPPORTED_ACTIONS = [
   'bindCustomerPhone',
   'bindStaff',
 ]
+
+const { createTencentCloudOcrProviderFromEnv } = require('./tencentcloud-ocr-provider')
 
 const COLLECTIONS = [
   'ocr_batches',
@@ -146,6 +151,9 @@ const parseCreateOcrBatchInput = (value) => {
 
   return {
     imageUrls: readStringArray(value, 'imageUrls', 'imageUrls must contain at least one image URL'),
+    imageAssetIds: Array.isArray(value.imageAssetIds)
+      ? value.imageAssetIds.filter((assetId) => typeof assetId === 'string' && assetId.trim() !== '')
+      : [],
     drafts: drafts.map((draft) => {
       if (!isRecord(draft)) throw validationError('drafts must contain draft objects')
       const confidence = draft.confidence
@@ -160,6 +168,7 @@ const parseCreateOcrBatchInput = (value) => {
         stock: readNonNegativeInteger(draft, 'stock'),
         confidence,
         sourceImageUrl: readString(draft, 'sourceImageUrl'),
+        correctionState: draft.correctionState === 'manual_corrected' ? 'manual_corrected' : 'ocr_raw',
       }
     }),
   }
@@ -167,7 +176,7 @@ const parseCreateOcrBatchInput = (value) => {
 
 const parseDraftPatchInput = (value) => {
   if (!isRecord(value)) throw validationError('Request body must be a JSON object')
-  const allowed = ['productCode', 'productName', 'salePrice', 'spec', 'stock', 'confidence', 'sourceImageUrl']
+  const allowed = ['productCode', 'productName', 'salePrice', 'spec', 'stock', 'confidence', 'sourceImageUrl', 'correctionState']
   Object.keys(value).forEach((field) => {
     if (!allowed.includes(field)) throw validationError(`${field} is not an editable draft field`)
   })
@@ -184,6 +193,12 @@ const parseDraftPatchInput = (value) => {
     result.confidence = value.confidence
   }
   if (value.sourceImageUrl !== undefined) result.sourceImageUrl = readString(value, 'sourceImageUrl')
+  if (value.correctionState !== undefined) {
+    if (value.correctionState !== 'ocr_raw' && value.correctionState !== 'manual_corrected') {
+      throw validationError('correctionState must be ocr_raw or manual_corrected')
+    }
+    result.correctionState = value.correctionState
+  }
   if (Object.keys(result).length === 0) throw validationError('At least one draft field is required')
   return result
 }
@@ -285,6 +300,7 @@ const toBatchDocument = (batch) => ({
   _id: batch.id,
   status: batch.status,
   image_urls: batch.imageUrls,
+  ...(Array.isArray(batch.imageAssetIds) ? { image_asset_ids: batch.imageAssetIds } : {}),
   created_at: batch.createdAt,
   updated_at: batch.updatedAt,
 })
@@ -293,6 +309,27 @@ const toBatch = (document) => ({
   id: document._id,
   status: document.status,
   imageUrls: document.image_urls,
+  ...(Array.isArray(document.image_asset_ids) ? { imageAssetIds: document.image_asset_ids } : {}),
+  createdAt: document.created_at,
+  updatedAt: document.updated_at,
+})
+
+const toOcrJobDocument = (job) => ({
+  _id: job.id,
+  batch_id: job.batchId,
+  status: job.status,
+  ...(job.failureReason ? { failure_reason: job.failureReason } : {}),
+  retry_count: job.retryCount,
+  created_at: job.createdAt,
+  updated_at: job.updatedAt,
+})
+
+const toOcrJob = (document) => ({
+  id: document._id,
+  batchId: document.batch_id,
+  status: document.status,
+  ...(document.failure_reason ? { failureReason: document.failure_reason } : {}),
+  retryCount: document.retry_count,
   createdAt: document.created_at,
   updatedAt: document.updated_at,
 })
@@ -307,6 +344,9 @@ const toDraftDocument = (draft) => ({
   stock: draft.stock,
   confidence: draft.confidence,
   source_image_url: draft.sourceImageUrl,
+  ...(draft.fieldConfidence ? { field_confidence: draft.fieldConfidence } : {}),
+  ...(draft.fieldSources ? { field_sources: draft.fieldSources } : {}),
+  ...(draft.correctionState ? { correction_state: draft.correctionState } : {}),
   status: draft.status,
 })
 
@@ -320,8 +360,79 @@ const toDraft = (document) => ({
   stock: document.stock,
   confidence: document.confidence,
   sourceImageUrl: document.source_image_url,
+  ...(document.field_confidence ? { fieldConfidence: document.field_confidence } : {}),
+  ...(document.field_sources ? { fieldSources: document.field_sources } : {}),
+  ...(document.correction_state ? { correctionState: document.correction_state } : {}),
   status: document.status,
 })
+
+const markDraftCompletion = (drafts) => drafts.map((draft) => {
+  if (draft.status === 'deleted') return draft
+  const needsCompletion = !draft.productCode.trim()
+    || !draft.productName.trim()
+    || draft.salePrice <= 0
+    || !draft.spec.trim()
+  return { ...draft, status: needsCompletion ? 'needs_completion' : 'pending' }
+})
+
+const createOcrProviderError = (code, message) => ({
+  ok: false,
+  error: { code, message, recoverable: true },
+})
+
+const createHttpOcrProviderFromEnv = (env = process.env, fetcher = fetch, options = {}) => {
+  if (env.OCR_PROVIDER === 'tencentcloud-general-basic') {
+    return createTencentCloudOcrProviderFromEnv(env, { resolveImageUrl: options.resolveImageUrl })
+  }
+
+  return {
+  async recognizeBatch(input, context) {
+    const provider = env.OCR_PROVIDER || ''
+    const endpoint = env.OCR_PROVIDER_ENDPOINT || ''
+    const apiKey = env.OCR_PROVIDER_API_KEY || ''
+    if (!provider || !endpoint || !apiKey) {
+      return createOcrProviderError('configuration_error', 'OCR provider production configuration is incomplete')
+    }
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), Number(env.OCR_PROVIDER_TIMEOUT_MS || 10000))
+    try {
+      const response = await fetcher(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+          'X-OCR-Provider': provider,
+        },
+        body: JSON.stringify({
+          batchId: input.batchId,
+          jobId: input.context.jobId,
+          images: input.images,
+        }),
+        signal: controller.signal,
+      })
+      if (response.status === 429) return createOcrProviderError('rate_limited', 'OCR provider rate limited the request')
+      if (!response.ok) return createOcrProviderError('service_error', 'OCR provider returned a service error')
+      const data = await response.json()
+      if (!data || !Array.isArray(data.drafts) || data.drafts.some((draft) => !draft || typeof draft !== 'object' || Array.isArray(draft))) {
+        return createOcrProviderError('invalid_response', 'OCR provider response format is invalid')
+      }
+      return {
+        ok: true,
+        drafts: markDraftCompletion(data.drafts.map((draft) =>
+          normalizeProviderDraft(input.batchId, draft, input.images[0]?.url || '', context.createId))),
+      }
+    } catch (error) {
+      if (error && error.name === 'AbortError') {
+        return createOcrProviderError('timeout', 'OCR provider request timed out')
+      }
+      return createOcrProviderError('service_error', 'OCR provider request failed')
+    } finally {
+      clearTimeout(timeout)
+    }
+  },
+  }
+}
 
 const toProductDocument = (product) => ({
   _id: product.id,
@@ -507,6 +618,12 @@ const createRepository = (store) => ({
   saveBatch: async (batch) => toBatch(await store.insert('ocr_batches', toBatchDocument(batch))),
   updateBatch: async (batch) => toBatch(await store.replace('ocr_batches', toBatchDocument(batch))),
   listBatches: async () => (await store.list('ocr_batches')).map(toBatch).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+  saveOcrJob: async (job) => toOcrJob(await store.insert('ocr_jobs', toOcrJobDocument(job))),
+  updateOcrJob: async (job) => toOcrJob(await store.replace('ocr_jobs', toOcrJobDocument(job))),
+  listOcrJobs: async (batchId) => {
+    const documents = batchId ? await store.list('ocr_jobs', { batch_id: batchId }) : await store.list('ocr_jobs')
+    return documents.map(toOcrJob).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  },
   saveDrafts: async (drafts) => {
     const saved = []
     for (const draft of drafts) saved.push(toDraft(await store.insert('product_drafts', toDraftDocument(draft))))
@@ -626,6 +743,12 @@ const validateDraftForConfirmation = (draft) => {
 }
 
 const findLatestBatch = async (repository) => (await repository.listBatches()).at(-1)
+
+const findOcrJob = async (repository, jobId) => {
+  const job = (await repository.listOcrJobs()).find((item) => item.id === jobId)
+  if (!job) throw notFoundError('OCR job not found')
+  return job
+}
 
 const findDraft = async (repository, draftId) => {
   const drafts = await repository.listDrafts()
@@ -774,6 +897,7 @@ const apiHandlers = {
       id: context.createId('batch'),
       status: input.drafts.length > 0 ? 'recognized' : 'uploaded',
       imageUrls: input.imageUrls,
+      imageAssetIds: input.imageAssetIds,
       createdAt: timestamp,
       updatedAt: timestamp,
     })
@@ -783,7 +907,82 @@ const apiHandlers = {
       ...draft,
       status: 'pending',
     })))
-    return { batch, drafts }
+    const job = await context.repository.saveOcrJob({
+      id: `job-${batch.id}`,
+      batchId: batch.id,
+      status: 'queued',
+      retryCount: 0,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+    return { batch, job, drafts }
+  },
+  async listOcrJobs(event, context) {
+    await requireResolvedAnyRole(event, context, ['owner'])
+    return { jobs: await context.repository.listOcrJobs(readOptionalString(event.params || {}, 'batchId')) }
+  },
+  async retryOcrJob(event, context) {
+    await requireResolvedAnyRole(event, context, ['owner'])
+    const job = await findOcrJob(context.repository, readString(event.params || {}, 'jobId'))
+    if (job.status !== 'failed') {
+      throw conflictError('Only failed OCR jobs can be retried')
+    }
+    const updated = await context.repository.updateOcrJob({
+      ...job,
+      status: 'retrying',
+      failureReason: undefined,
+      retryCount: job.retryCount + 1,
+      updatedAt: context.now(),
+    })
+    return { job: updated, drafts: await context.repository.listDrafts(job.batchId) }
+  },
+  async processOcrJob(event, context) {
+    await requireResolvedAnyRole(event, context, ['owner'])
+    const job = await findOcrJob(context.repository, readString(event.params || {}, 'jobId'))
+    if (!['queued', 'retrying'].includes(job.status)) {
+      throw conflictError('Only queued or retrying OCR jobs can be processed')
+    }
+    const batch = (await context.repository.listBatches()).find((item) => item.id === job.batchId)
+    if (!batch) throw notFoundError('Batch not found')
+    const running = await context.repository.updateOcrJob({
+      ...job,
+      status: 'running',
+      failureReason: undefined,
+      updatedAt: context.now(),
+    })
+    const result = await context.ocrProvider.recognizeBatch({
+      batchId: batch.id,
+      images: batch.imageUrls.map((url, index) => ({
+        id: `image-${index + 1}`,
+        url,
+        name: `image-${index + 1}`,
+        assetId: Array.isArray(batch.imageAssetIds) ? batch.imageAssetIds[index] : undefined,
+      })),
+      context: {
+        jobId: running.id,
+        requestedAt: running.updatedAt,
+      },
+    }, context)
+    if (!result.ok) {
+      const failed = await context.repository.updateOcrJob({
+        ...running,
+        status: 'failed',
+        failureReason: `${result.error.code}: ${result.error.message}`,
+        updatedAt: context.now(),
+      })
+      return { job: failed, drafts: await context.repository.listDrafts(batch.id) }
+    }
+
+    const existingDrafts = await context.repository.listDrafts(batch.id)
+    const drafts = existingDrafts.length > 0 ? existingDrafts : await context.repository.saveDrafts(result.drafts)
+    const succeeded = await context.repository.updateOcrJob({
+      ...running,
+      status: 'succeeded',
+      failureReason: undefined,
+      updatedAt: context.now(),
+    })
+    await context.repository.updateBatch({ ...batch, status: 'recognized', updatedAt: context.now() })
+    return { job: succeeded, drafts }
   },
   async listOcrBatches(_event, context) {
     return { batches: await context.repository.listBatches() }
@@ -1006,6 +1205,7 @@ const createMallApiHandler = (store, options = {}) => {
     now: options.now || (() => new Date().toISOString()),
     allowTestIdentityRoles: options.allowTestIdentityRoles === true,
     exchangePhoneCode: options.exchangePhoneCode,
+    ocrProvider: options.ocrProvider || createHttpOcrProviderFromEnv(process.env, fetch, { resolveImageUrl: options.resolveImageUrl }),
   }
 
   return async (event = {}) => {
@@ -1062,6 +1262,7 @@ const createMemoryDocumentStore = () => {
 
 module.exports = {
   SUPPORTED_ACTIONS,
+  createHttpOcrProviderFromEnv,
   createMallApiHandler,
   createMemoryDocumentStore,
 }

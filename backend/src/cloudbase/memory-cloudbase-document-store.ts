@@ -1,5 +1,6 @@
 export type CloudBaseCollectionName =
   | 'ocr_batches'
+  | 'ocr_jobs'
   | 'product_drafts'
   | 'products'
   | 'skus'
@@ -33,6 +34,7 @@ type StoreState = Record<CloudBaseCollectionName, CloudBaseDocument[]>
 
 const collectionNames: CloudBaseCollectionName[] = [
   'ocr_batches',
+  'ocr_jobs',
   'product_drafts',
   'products',
   'skus',
@@ -43,6 +45,7 @@ const collectionNames: CloudBaseCollectionName[] = [
 
 const createEmptyState = (): StoreState => ({
   ocr_batches: [],
+  ocr_jobs: [],
   product_drafts: [],
   products: [],
   skus: [],

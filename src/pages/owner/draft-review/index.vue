@@ -1,9 +1,9 @@
-<template>
+﻿<template>
   <view class="page">
     <view class="topbar">
       <view class="brand">
         <text class="kicker">DRAFT REVIEW</text>
-        <text class="title">草稿确认</text>
+        <text class="title">鑽夌纭</text>
       </view>
       <text class="batch">批次 {{ viewModel.latestBatchId || '待生成' }}</text>
     </view>
@@ -31,11 +31,11 @@
       </view>
       <view class="summary-card">
         <text class="summary-value">{{ viewModel.lowConfidenceCount }}</text>
-        <text class="summary-label">低置信度</text>
+        <text class="summary-label">浣庣疆淇″害</text>
       </view>
       <view class="summary-card">
         <text class="summary-value">{{ viewModel.priceConflictCount }}</text>
-        <text class="summary-label">价格冲突</text>
+        <text class="summary-label">浠锋牸鍐茬獊</text>
       </view>
     </view>
 
@@ -65,34 +65,42 @@
           </view>
           <view class="group-meta">
             <text class="group-count">{{ group.drafts.length }} 条</text>
-            <text v-if="group.hasPriceConflict" class="warning">价格冲突</text>
+            <text v-if="group.hasPriceConflict" class="warning">浠锋牸鍐茬獊</text>
           </view>
         </view>
 
         <view v-for="draft in group.drafts" :key="draft.id" class="draft-card">
           <view class="draft-top">
             <view class="draft-heading">
-              <text class="draft-code">{{ draft.productCode || '缺少货号' }}</text>
+              <text class="draft-code">{{ draft.productCode || '缂哄皯璐у彿' }}</text>
               <text class="draft-name">{{ draft.productName || '待填写商品名称' }}</text>
             </view>
             <view class="badges">
               <text v-if="draft.isNeedsCompletion" class="badge danger">待补全</text>
-              <text v-if="draft.isLowConfidence" class="badge warn">低置信度</text>
+              <text v-if="draft.isLowConfidence" class="badge warn">浣庣疆淇″害</text>
+              <text v-if="draft.isManuallyCorrected" class="badge clean">人工校正</text>
               <text v-if="!draft.isNeedsCompletion && !draft.isLowConfidence" class="badge clean">已就绪</text>
             </view>
+
+          <view class="draft-quality">
+            <text>货号 {{ draft.fieldConfidenceLabels.productCode || '-' }} · {{ draft.fieldSourceLabels.productCode || 'ocr' }}</text>
+            <text>名称 {{ draft.fieldConfidenceLabels.productName || '-' }} · {{ draft.fieldSourceLabels.productName || 'ocr' }}</text>
+            <text>售价 {{ draft.fieldConfidenceLabels.salePrice || '-' }} · {{ draft.fieldSourceLabels.salePrice || 'ocr' }}</text>
+            <text>规格 {{ draft.fieldConfidenceLabels.spec || '-' }} · {{ draft.fieldSourceLabels.spec || 'ocr' }}</text>
+          </view>
           </view>
 
           <view class="field-grid">
             <label class="field">
-              <text class="field-label">商品货号</text>
+              <text class="field-label">鍟嗗搧璐у彿</text>
               <input :value="draft.productCode" @input="handleTextInput(draft.id, 'productCode', $event)" />
             </label>
             <label class="field">
-              <text class="field-label">商品名称</text>
+              <text class="field-label">鍟嗗搧鍚嶇О</text>
               <input :value="draft.productName" @input="handleTextInput(draft.id, 'productName', $event)" />
             </label>
             <label class="field">
-              <text class="field-label">销售价</text>
+              <text class="field-label">閿€鍞环</text>
               <input
                 type="digit"
                 :value="String(draft.salePrice || '')"
@@ -100,11 +108,11 @@
               />
             </label>
             <label class="field">
-              <text class="field-label">规格</text>
+              <text class="field-label">瑙勬牸</text>
               <input :value="draft.spec" @input="handleTextInput(draft.id, 'spec', $event)" />
             </label>
             <label class="field">
-              <text class="field-label">库存</text>
+              <text class="field-label">搴撳瓨</text>
               <input
                 type="number"
                 :value="String(draft.stock || '')"
@@ -122,7 +130,7 @@
               size="mini"
               @tap="deleteDraft(draft.id)"
             >
-              {{ deletingDraftId === draft.id ? '删除中...' : '删除草稿' }}
+              {{ deletingDraftId === draft.id ? '鍒犻櫎涓?..' : '鍒犻櫎鑽夌' }}
             </button>
           </view>
         </view>
@@ -139,7 +147,7 @@
         hover-class="press-feedback"
         @tap="confirmLatestBatch"
       >
-        {{ isConfirmingBatch ? '确认中...' : '批量确认并创建商品 SKU' }}
+        {{ isConfirmingBatch ? '纭涓?..' : '鎵归噺纭骞跺垱寤哄晢鍝?SKU' }}
       </button>
     </view>
   </view>

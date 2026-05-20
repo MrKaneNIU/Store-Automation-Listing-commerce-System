@@ -101,4 +101,42 @@ describe('CloudBase mall API client', () => {
       },
     ])
   })
+
+  it('maps OCR job list and retry actions through mallApi', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        return { jobs: [], job: { id: 'job-1' }, drafts: [] } as never
+      },
+    })
+
+    await client.listOcrJobs('batch-1')
+    await client.processOcrJob('job-1')
+    await client.retryOcrJob('job-1')
+
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'listOcrJobs',
+          params: { batchId: 'batch-1' },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'processOcrJob',
+          params: { jobId: 'job-1' },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'retryOcrJob',
+          params: { jobId: 'job-1' },
+        },
+      },
+    ])
+  })
 })

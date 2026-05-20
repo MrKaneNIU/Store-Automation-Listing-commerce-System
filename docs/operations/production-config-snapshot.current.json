@@ -1,0 +1,52 @@
+{
+  "targetEnvId": "cloud1-d7gifjyzl7721b383",
+  "evidenceCapturedAt": "2026-05-20T11:07:22+08:00",
+  "evidenceSource": "CloudBase MCP read-only queries and local manifest/cloudbaserc files",
+  "functions": [
+    {
+      "name": "mallApi",
+      "envId": "cloud1-d7gifjyzl7721b383",
+      "status": "Active",
+      "availableStatus": "Available",
+      "runtime": "Nodejs18.15",
+      "environmentVariables": [
+        "WECHAT_APPID",
+        "WECHAT_APPSECRET",
+        "OCR_PROVIDER",
+        "OCR_PROVIDER_ENDPOINT",
+        "OCR_PROVIDER_TIMEOUT_MS",
+        "OCR_TENCENT_REGION",
+        "OCR_TENCENT_SECRET_ID",
+        "OCR_TENCENT_SECRET_KEY"
+      ]
+    }
+  ],
+  "domains": {
+    "request": [
+      "https://cloud1-d7gifjyzl7721b383-1429982088.tcloudbaseapp.com",
+      "https://weda.cloud.tencent.com",
+      "https://tcb.cloud.tencent.com",
+      "https://weda.cloud.tencent.cn",
+      "https://tcb.cloud.tencent.cn",
+      "https://weda.cloud.tencent.com.cn",
+      "https://tcb.cloud.tencent.com.cn",
+      "https://*.preview.cloudbase.net"
+    ],
+    "upload": [
+      "https://636c-cloud1-d7gifjyzl7721b383-1429982088.tcb.qcloud.la"
+    ],
+    "download": [
+      "https://636c-cloud1-d7gifjyzl7721b383-1429982088.tcb.qcloud.la"
+    ]
+  },
+  "storage": {
+    "bucketReady": true,
+    "bucket": "636c-cloud1-d7gifjyzl7721b383-1429982088",
+    "cdnDomain": "636c-cloud1-d7gifjyzl7721b383-1429982088.tcb.qcloud.la",
+    "httpsTlsVerified": true,
+    "httpsTlsEvidence": "HEAD https://636c-cloud1-d7gifjyzl7721b383-1429982088.tcb.qcloud.la/ established HTTPS and returned HTTP 403 Forbidden, proving TLS connectivity while storage access remains protected."
+  },
+  "permissions": {
+    "functionInvoke": "CUSTOM: auth != null && auth.loginType != 'ANONYMOUS'"
+  }
+}

@@ -1,6 +1,4 @@
-import type { UploadedImage } from '../../domain/batch/types'
 import { markDraftCompletion } from '../../domain/draft/rules'
-import type { ProductDraft } from '../../domain/draft/types'
 import { createId } from '../../domain/shared/ids'
 import type { OcrProvider } from './ocr-provider'
 
@@ -14,7 +12,7 @@ const sampleRows = [
 ]
 
 export const mockOcrProvider: OcrProvider = {
-  async recognizeBatch(batchId: string, images: UploadedImage[]): Promise<ProductDraft[]> {
+  async recognizeBatch({ batchId, images }) {
     const sourceImages = images.length > 0 ? images : [{ id: 'mock-image', url: '/static/logo.png', name: 'mock' }]
     const rowCount = Math.min(sampleRows.length, Math.max(3, sourceImages.length + 4))
     const drafts = sampleRows.slice(0, rowCount).map((row, index) => ({
@@ -30,6 +28,6 @@ export const mockOcrProvider: OcrProvider = {
       status: 'pending' as const,
     }))
 
-    return markDraftCompletion(drafts)
+    return { ok: true, drafts: markDraftCompletion(drafts) }
   },
 }

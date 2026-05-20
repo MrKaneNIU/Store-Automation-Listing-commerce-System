@@ -1,5 +1,3 @@
-import type { UploadedImage } from '../../domain/batch/types'
-
 export type UploadBusinessType = 'ocr_screenshot' | 'product_main_image' | 'product_detail_image'
 
 export type UploadSourceRole = 'owner' | 'staff'
@@ -39,6 +37,13 @@ export type UploadResult = {
   mainImageUrl: string
   imageUrls: string[]
   assets: UploadedAsset[]
+}
+
+export type UploadedImage = {
+  id: string
+  url: string
+  name: string
+  assetId?: string
 }
 
 export type DeleteUploadResult = {

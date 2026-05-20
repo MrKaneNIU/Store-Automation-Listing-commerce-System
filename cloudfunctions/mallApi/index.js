@@ -1,12 +1,20 @@
 const { createMallApiHandler, createMemoryDocumentStore } = require('./mall-api-core')
 
 let cachedStore
+let cachedCloudBaseApp
+
+const getCloudBaseApp = () => {
+  const cloudbase = require('@cloudbase/node-sdk')
+  if (!cachedCloudBaseApp) {
+    cachedCloudBaseApp = cloudbase.init({
+      env: cloudbase.SYMBOL_CURRENT_ENV,
+    })
+  }
+  return cachedCloudBaseApp
+}
 
 const createCloudBaseDocumentStore = () => {
-  const cloudbase = require('@cloudbase/node-sdk')
-  const app = cloudbase.init({
-    env: cloudbase.SYMBOL_CURRENT_ENV,
-  })
+  const app = getCloudBaseApp()
   const db = app.database()
 
   const collection = (name) => db.collection(name)
@@ -36,6 +44,17 @@ const createCloudBaseDocumentStore = () => {
       return work()
     },
   }
+}
+
+const resolveImageUrl = async (fileID) => {
+  const result = await getCloudBaseApp().getTempFileURL({
+    fileList: [{ fileID, maxAge: 3600 }],
+  })
+  const resolved = result.fileList?.[0]?.tempFileURL || result.fileList?.[0]?.download_url
+  if (!resolved) {
+    throw new Error('Failed to resolve OCR image URL from CloudBase fileID')
+  }
+  return resolved
 }
 
 const shouldUseCloudBaseStore = () =>
@@ -143,7 +162,7 @@ const exchangePhoneCode = async (phoneCode) => {
 
 exports.main = async (event = {}) => {
   const identity = shouldAllowTestIdentity() ? event.identity || readRuntimeIdentity() : readRuntimeIdentity()
-  return createMallApiHandler(getStore(), { exchangePhoneCode })({ ...event, ...(identity ? { identity } : {}) })
+  return createMallApiHandler(getStore(), { exchangePhoneCode, resolveImageUrl })({ ...event, ...(identity ? { identity } : {}) })
 }
 exports.__private__ = {
   createMallApiHandler,

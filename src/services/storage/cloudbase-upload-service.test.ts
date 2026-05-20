@@ -43,6 +43,7 @@ describe('cloudbase upload service', () => {
     const { cloudbaseUploadService } = await import('./cloudbase-upload-service')
     const images = await cloudbaseUploadService.chooseImages({ businessType: 'ocr_screenshot', sourceRole: 'owner', entityType: 'ocr_batch' })
     expect(images[0].url).toBe('https://temp-url')
+    expect(images[0].assetId).toBe('cloud://asset-1')
 
     const uploaded = await cloudbaseUploadService.uploadProductImages('product-1', ['/tmp/a.png'])
     expect(uploaded.assets[0].cloudPath).toContain('uploads/product_main_image/staff/product/product-1')

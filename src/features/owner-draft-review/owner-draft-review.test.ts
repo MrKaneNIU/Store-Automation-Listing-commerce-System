@@ -64,6 +64,26 @@ describe('owner draft review ViewModel', () => {
 
     expect(result.message).toBe('')
     expect(mallRepository.listDrafts(batch.id)[0].productName).toBe('Updated Product')
+    expect(mallRepository.listDrafts(batch.id)[0].correctionState).toBe('manual_corrected')
+  })
+
+  it('exposes field confidence, sources, and manual correction markers in the ViewModel', async () => {
+    const { batch } = await prepareBatch()
+    const draft = mallRepository.listDrafts(batch.id)[0]
+    replaceDrafts(batch.id, [{
+      ...draft,
+      fieldConfidence: { productCode: 0.71, productName: 0.93 },
+      fieldSources: { productCode: 'ocr', productName: 'manual' },
+      correctionState: 'manual_corrected',
+    }])
+
+    const view = getOwnerDraftReviewView()
+
+    expect(view.groups[0].drafts[0]).toMatchObject({
+      isManuallyCorrected: true,
+      fieldConfidenceLabels: { productCode: '71%', productName: '93%' },
+      fieldSourceLabels: { productCode: 'ocr', productName: 'manual' },
+    })
   })
 
   it('marks deleted drafts so they do not create products on confirmation', async () => {

@@ -1,4 +1,3 @@
-import type { UploadedImage } from '../../domain/batch/types'
 import { createId } from '../../domain/shared/ids'
 import type {
   DeleteUploadResult,
@@ -7,6 +6,7 @@ import type {
   UploadedAsset,
   UploadResult,
   UploadService,
+  UploadedImage,
 } from './upload-service'
 
 const createMockAsset = (seed: string, index: number): UploadedAsset => ({
@@ -41,7 +41,8 @@ export const mockUploadService: UploadService = {
     return Array.from({ length: count }, (_, index) => ({
       id: createId('image'),
       url: `/static/logo.png?choose=${index + 1}`,
-      name: `云e宝截图-${index + 1}`,
+      name: `mock-image-${index + 1}`,
+      assetId: `mock/${context?.entityId ?? context?.businessType ?? 'upload'}/${index + 1}`,
     }))
   },
   async chooseAndUploadImages(context: UploadContext) {

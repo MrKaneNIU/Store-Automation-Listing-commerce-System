@@ -1,4 +1,6 @@
-import type { DraftValidationIssue, ProductDraft } from './types'
+import type { DraftValidationIssue, OcrDraftField, ProductDraft } from './types'
+
+export const ocrDraftFields: OcrDraftField[] = ['productCode', 'productName', 'salePrice', 'spec']
 
 export const validateDrafts = (drafts: ProductDraft[]) => {
   const issues: DraftValidationIssue[] = []
@@ -32,6 +34,16 @@ export const markDraftCompletion = (drafts: ProductDraft[]) => {
     return issueDraftIds.has(draft.id) ? { ...draft, status: 'needs_completion' as const } : { ...draft, status: 'pending' as const }
   })
 }
+
+export const markDraftManualCorrection = (
+  draft: ProductDraft,
+  field: OcrDraftField,
+  value: string | number,
+): ProductDraft => ({
+  ...draft,
+  [field]: value,
+  correctionState: 'manual_corrected',
+})
 
 export const confirmDrafts = (drafts: ProductDraft[]) => {
   const issues = validateDrafts(drafts)

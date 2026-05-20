@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { confirmDrafts, markDraftCompletion, validateDrafts } from './rules'
+import { confirmDrafts, markDraftCompletion, markDraftManualCorrection, validateDrafts } from './rules'
 import type { ProductDraft } from './types'
 
 const completeDraft: ProductDraft = {
@@ -40,6 +40,28 @@ describe('markDraftCompletion', () => {
 
     expect(drafts[0].status).toBe('pending')
     expect(drafts[1].status).toBe('needs_completion')
+  })
+})
+
+describe('markDraftManualCorrection', () => {
+  it('marks the draft as manually corrected while preserving OCR confidence metadata', () => {
+    const corrected = markDraftManualCorrection(
+      {
+        ...completeDraft,
+        fieldConfidence: { productCode: 0.7 },
+        fieldSources: { productCode: 'ocr' },
+        correctionState: 'ocr_raw',
+      },
+      'productCode',
+      'A1024',
+    )
+
+    expect(corrected).toMatchObject({
+      productCode: 'A1024',
+      correctionState: 'manual_corrected',
+      fieldConfidence: { productCode: 0.7 },
+      fieldSources: { productCode: 'ocr' },
+    })
   })
 })
 

@@ -16,6 +16,8 @@ const routes: RouteDefinition[] = [
   { method: 'POST', pattern: /^\/api\/ocr-batches$/, handler: 'createOcrBatch' },
   { method: 'GET', pattern: /^\/api\/ocr-batches$/, handler: 'listOcrBatches' },
   { method: 'GET', pattern: /^\/api\/ocr-batches\/current$/, handler: 'getCurrentOcrBatch' },
+  { method: 'GET', pattern: /^\/api\/ocr-jobs$/, handler: 'listOcrJobs' },
+  { method: 'POST', pattern: /^\/api\/ocr-jobs\/([^/]+)\/retry$/, handler: 'retryOcrJob', params: ['jobId'] },
   { method: 'GET', pattern: /^\/api\/drafts\/latest$/, handler: 'getLatestDrafts' },
   { method: 'PATCH', pattern: /^\/api\/drafts\/([^/]+)$/, handler: 'updateDraft', params: ['draftId'] },
   { method: 'DELETE', pattern: /^\/api\/drafts\/([^/]+)$/, handler: 'deleteDraft', params: ['draftId'] },
@@ -93,10 +95,21 @@ const hasPathMatch = (pathname: string): boolean => {
   return routes.some((route) => route.pattern.test(pathname))
 }
 
-const extractParams = (route: RouteDefinition, match: RegExpMatchArray): Record<string, string> => {
-  return Object.fromEntries(
+const extractParams = (
+  route: RouteDefinition,
+  match: RegExpMatchArray,
+  requestUrl: string | undefined,
+): Record<string, string> => {
+  const params = Object.fromEntries(
     (route.params ?? []).map((name, index) => [name, ensurePathParam(match[index + 1], name)]),
   )
+  if (route.handler === 'listOcrJobs') {
+    const parsedUrl = new URL(requestUrl || '/', 'http://localhost')
+    const batchId = parsedUrl.searchParams.get('batchId')
+    return batchId ? { ...params, batchId } : params
+  }
+
+  return params
 }
 
 export const createApiRequestHandler = (context: MallApiContext): ApiRequestHandler => {
@@ -118,7 +131,7 @@ export const createApiRequestHandler = (context: MallApiContext): ApiRequestHand
 
     try {
       const body = await readBody(request)
-      const params = extractParams(matched.route, matched.match)
+      const params = extractParams(matched.route, matched.match, request.url)
       await apiHandlers[matched.route.handler]({ method: request.method, body, params, response }, context)
     } catch (error) {
       handleApiError(response, error)

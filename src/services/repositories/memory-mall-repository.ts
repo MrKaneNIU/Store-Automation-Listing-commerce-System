@@ -13,6 +13,17 @@ export const createMemoryMallRepository = (database: MockDb = mockDb): MallRepos
   listBatches() {
     return [...database.batches]
   },
+  saveOcrJob(job) {
+    database.ocrJobs = [...database.ocrJobs, job]
+    return job
+  },
+  updateOcrJob(job) {
+    database.ocrJobs = database.ocrJobs.map((item) => (item.id === job.id ? job : item))
+    return job
+  },
+  listOcrJobs(batchId) {
+    return batchId ? database.ocrJobs.filter((job) => job.batchId === batchId) : [...database.ocrJobs]
+  },
   saveDrafts(drafts) {
     database.drafts = [...database.drafts, ...drafts]
     return drafts

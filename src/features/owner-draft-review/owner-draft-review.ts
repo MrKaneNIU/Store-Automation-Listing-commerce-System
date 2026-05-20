@@ -1,13 +1,18 @@
 import type { ProductDraft } from '../../domain/draft/types'
+import type { OcrDraftField } from '../../domain/draft/types'
+import { markDraftManualCorrection } from '../../domain/draft/rules'
 import { findPriceConflictCodes, groupDraftsByProductCode } from '../draft-review/draft-review'
 import { mallAccess } from '../mall-workflow/mall-access'
 import { mallWorkflow } from '../mall-workflow/mall-workflow'
 
-export type OwnerDraftReviewEditableField = keyof ProductDraft
+export type OwnerDraftReviewEditableField = OcrDraftField | 'stock'
 
 export type OwnerDraftReviewDraftView = ProductDraft & {
   isNeedsCompletion: boolean
   isLowConfidence: boolean
+  isManuallyCorrected: boolean
+  fieldConfidenceLabels: Partial<Record<OcrDraftField, string>>
+  fieldSourceLabels: Partial<Record<OcrDraftField, string>>
 }
 
 export type OwnerDraftReviewGroupView = {
@@ -44,6 +49,13 @@ const toDraftView = (draft: ProductDraft): OwnerDraftReviewDraftView => ({
   ...draft,
   isNeedsCompletion: draft.status === 'needs_completion',
   isLowConfidence: draft.confidence < 0.8,
+  isManuallyCorrected: draft.correctionState === 'manual_corrected',
+  fieldConfidenceLabels: Object.fromEntries(
+    Object.entries(draft.fieldConfidence ?? {}).map(([field, confidence]) => [field, `${Math.round(confidence * 100)}%`]),
+  ),
+  fieldSourceLabels: Object.fromEntries(
+    Object.entries(draft.fieldSources ?? {}).map(([field, source]) => [field, source === 'manual' ? 'manual' : 'ocr']),
+  ),
 })
 
 export const getOwnerDraftReviewView = (): OwnerDraftReviewViewModel => {
@@ -77,7 +89,13 @@ export const updateOwnerDraftReviewDraft = (
     return { message: noBatchMessage }
   }
 
-  const nextDrafts = drafts.map((draft) => (draft.id === draftId ? { ...draft, [field]: value } : draft))
+  const nextDrafts = drafts.map((draft) =>
+    draft.id === draftId
+      ? field === 'stock'
+        ? { ...draft, stock: Number(value) }
+        : markDraftManualCorrection(draft, field, value)
+      : draft,
+  )
   mallAccess.replaceDrafts(latestBatch.id, nextDrafts)
 
   return { message: '' }

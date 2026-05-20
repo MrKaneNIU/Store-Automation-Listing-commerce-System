@@ -176,6 +176,40 @@ describe('Phase 2.4 API contract', () => {
     expect(products.body.data.products).toHaveLength(1)
   })
 
+  it('creates OCR jobs with batches and retries failed jobs without duplicating drafts', async () => {
+    const created = await requestJson(server.baseUrl, '/api/ocr-batches', {
+      method: 'POST',
+      body: JSON.stringify({
+        imageUrls: ['cloud://page-1.png'],
+        drafts: [
+          {
+            productCode: 'A1023',
+            productName: 'Cotton Shirt',
+            salePrice: 129,
+            spec: 'Black/M',
+            stock: 2,
+            confidence: 0.96,
+            sourceImageUrl: 'cloud://page-1.png',
+          },
+        ],
+      }),
+    })
+    const jobs = await requestJson(server.baseUrl, '/api/ocr-jobs?batchId=batch-1')
+    const retryBlocked = await requestJson(server.baseUrl, '/api/ocr-jobs/job-batch-1/retry', { method: 'POST' })
+    const draftsBeforeFailedRetry = await requestJson(server.baseUrl, '/api/drafts/latest')
+
+    expect(created.body.data.job).toMatchObject({
+      id: 'job-batch-1',
+      batchId: 'batch-1',
+      status: 'queued',
+      retryCount: 0,
+    })
+    expect(jobs.body.data.jobs).toEqual([created.body.data.job])
+    expect(retryBlocked.status).toBe(409)
+    expect(retryBlocked.body.error.message).toContain('Only failed OCR jobs can be retried')
+    expect(draftsBeforeFailedRetry.body.data.drafts).toHaveLength(1)
+  })
+
   it('updates draft review rows through validated patch and delete commands', async () => {
     await requestJson(server.baseUrl, '/api/ocr-batches', {
       method: 'POST',

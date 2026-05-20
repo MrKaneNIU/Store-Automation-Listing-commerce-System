@@ -2,7 +2,11 @@ import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
-const { createMallApiHandler, createMemoryDocumentStore } = require('./mall-api-core')
+const {
+  createMallApiHandler,
+  createMemoryDocumentStore,
+  createHttpOcrProviderFromEnv,
+} = require('./mall-api-core')
 
 const createHandler = (options = {}) =>
   createMallApiHandler(createMemoryDocumentStore(), {
@@ -404,6 +408,208 @@ describe('mallApi Phase 4 auth and role permissions', () => {
         ],
       },
     })
+  })
+
+  it('creates OCR jobs and rejects retry unless the job has failed', async () => {
+    const handler = createHandler()
+    const created = await handler({
+      action: 'createOcrBatch',
+      identity: ownerIdentity,
+      payload: {
+        imageUrls: ['cloud://page-1.png'],
+        drafts: [
+          {
+            productCode: 'A1023',
+            productName: 'Cotton Shirt',
+            salePrice: 129,
+            spec: 'Black/M',
+            stock: 2,
+            confidence: 0.96,
+            sourceImageUrl: 'cloud://page-1.png',
+          },
+        ],
+      },
+    })
+    const listed = await handler({
+      action: 'listOcrJobs',
+      identity: ownerIdentity,
+      params: { batchId: created.data.batch.id },
+    })
+    const retryBlocked = await handler({
+      action: 'retryOcrJob',
+      identity: ownerIdentity,
+      params: { jobId: created.data.job.id },
+    })
+    const latestDrafts = await handler({
+      action: 'getLatestDrafts',
+      identity: ownerIdentity,
+    })
+
+    expect(created.data.job).toMatchObject({
+      batchId: created.data.batch.id,
+      status: 'queued',
+      retryCount: 0,
+    })
+    expect(listed.data.jobs).toEqual([created.data.job])
+    expect(retryBlocked).toMatchObject({
+      success: false,
+      error: {
+        code: 'CONFLICT',
+        message: 'Only failed OCR jobs can be retried',
+      },
+    })
+    expect(latestDrafts.data.drafts).toHaveLength(1)
+  })
+
+  it('processes queued OCR jobs through the injected provider without duplicating drafts on retry', async () => {
+    let providerImages = []
+    const handler = createHandler({
+      ocrProvider: {
+        recognizeBatch: async ({ batchId, images }) => {
+          providerImages = images
+          return {
+            ok: true,
+            drafts: [{
+              id: 'draft-provider-1',
+              batchId,
+              productCode: 'A1023',
+              productName: 'Cotton Shirt',
+              salePrice: 129,
+              spec: 'Black/M',
+              stock: 1,
+              confidence: 0.92,
+              sourceImageUrl: 'https://temp.example/page-1.png',
+              status: 'pending',
+            }],
+          }
+        },
+      },
+    })
+    const created = await handler({
+      action: 'createOcrBatch',
+      identity: ownerIdentity,
+      payload: { imageUrls: ['https://stale.example/page-1.png'], imageAssetIds: ['cloud://asset-1'], drafts: [] },
+    })
+    const processed = await handler({
+      action: 'processOcrJob',
+      identity: ownerIdentity,
+      params: { jobId: created.data.job.id },
+    })
+    const retryBlocked = await handler({
+      action: 'retryOcrJob',
+      identity: ownerIdentity,
+      params: { jobId: created.data.job.id },
+    })
+
+    expect(processed).toMatchObject({
+      success: true,
+      data: {
+        job: { status: 'succeeded' },
+        drafts: [{ id: 'draft-provider-1', productCode: 'A1023' }],
+      },
+    })
+    expect(providerImages).toEqual([
+      { id: 'image-1', url: 'https://stale.example/page-1.png', name: 'image-1', assetId: 'cloud://asset-1' },
+    ])
+    expect(retryBlocked.error.code).toBe('CONFLICT')
+  })
+
+  it('records recoverable provider failures on the OCR job without creating products', async () => {
+    const handler = createHandler({
+      ocrProvider: {
+        recognizeBatch: async () => ({
+          ok: false,
+          error: { code: 'timeout', message: 'OCR provider request timed out', recoverable: true },
+        }),
+      },
+    })
+    const created = await handler({
+      action: 'createOcrBatch',
+      identity: ownerIdentity,
+      payload: { imageUrls: ['cloud://page-1.png'], drafts: [] },
+    })
+    const processed = await handler({
+      action: 'processOcrJob',
+      identity: ownerIdentity,
+      params: { jobId: created.data.job.id },
+    })
+    const products = await handler({ action: 'listProducts', identity: ownerIdentity })
+
+    expect(processed).toMatchObject({
+      success: true,
+      data: {
+        job: {
+          status: 'failed',
+          failureReason: 'timeout: OCR provider request timed out',
+        },
+        drafts: [],
+      },
+    })
+    expect(products.data.products).toEqual([])
+  })
+
+  it('uses Tencent Cloud GeneralBasicOCR provider when configured by environment variables', async () => {
+    const provider = createHttpOcrProviderFromEnv({
+      OCR_PROVIDER: 'tencentcloud-general-basic',
+      OCR_TENCENT_SECRET_ID: 'AKIDEXAMPLE',
+      OCR_TENCENT_SECRET_KEY: 'SECRETEXAMPLE',
+      OCR_TENCENT_REGION: 'ap-guangzhou',
+      OCR_PROVIDER_TIMEOUT_MS: '10000',
+    })
+    provider.recognizeBatch = async () => ({
+      ok: true,
+      drafts: [{
+        id: 'draft-1',
+        batchId: 'batch-1',
+        productCode: 'A1023',
+        productName: '圆领针织衫',
+        salePrice: 129,
+        spec: '黑色/M',
+        stock: 0,
+        confidence: 0.95,
+        sourceImageUrl: 'https://example.test/page-1.png',
+        fieldConfidence: {
+          productCode: 0.99,
+          productName: 0.98,
+          salePrice: 0.96,
+          spec: 0.95,
+        },
+        fieldSources: {
+          productCode: 'ocr',
+          productName: 'ocr',
+          salePrice: 'ocr',
+          spec: 'ocr',
+        },
+        correctionState: 'ocr_raw',
+        status: 'pending',
+      }],
+    })
+    const handler = createHandler({ ocrProvider: provider })
+    const created = await handler({
+      action: 'createOcrBatch',
+      identity: ownerIdentity,
+      payload: { imageUrls: ['https://example.test/page-1.png'], drafts: [] },
+    })
+    const processed = await handler({
+      action: 'processOcrJob',
+      identity: ownerIdentity,
+      params: { jobId: created.data.job.id },
+    })
+    const products = await handler({ action: 'listProducts', identity: ownerIdentity })
+
+    expect(processed).toMatchObject({
+      success: true,
+      data: {
+        job: { status: 'succeeded' },
+        drafts: [{
+          productCode: 'A1023',
+          productName: '圆领针织衫',
+          salePrice: 129,
+          spec: '黑色/M',
+        }],
+      },
+    })
+    expect(products.data.products).toEqual([])
   })
 
   it('records ledger entries when merchant confirms or cancels orders', async () => {

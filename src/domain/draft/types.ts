@@ -1,4 +1,6 @@
 export type ProductDraftStatus = 'pending' | 'confirmed' | 'deleted' | 'needs_completion'
+export type OcrDraftField = 'productCode' | 'productName' | 'salePrice' | 'spec'
+export type OcrDraftCorrectionState = 'ocr_raw' | 'manual_corrected'
 
 export type ProductDraft = {
   id: string
@@ -10,6 +12,9 @@ export type ProductDraft = {
   stock: number
   confidence: number
   sourceImageUrl: string
+  fieldConfidence?: Partial<Record<OcrDraftField, number>>
+  fieldSources?: Partial<Record<OcrDraftField, string>>
+  correctionState?: OcrDraftCorrectionState
   status: ProductDraftStatus
 }
 

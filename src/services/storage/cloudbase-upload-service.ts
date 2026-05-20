@@ -1,4 +1,3 @@
-import type { UploadedImage } from '../../domain/batch/types'
 import { createId } from '../../domain/shared/ids'
 import type {
   DeleteUploadResult,
@@ -8,6 +7,7 @@ import type {
   UploadFailureCode,
   UploadResult,
   UploadService,
+  UploadedImage,
 } from './upload-service'
 
 type WxCloudRuntime = {
@@ -237,6 +237,7 @@ export const cloudbaseUploadService: UploadService = {
       id: createId('image'),
       url,
       name: url.split('/').pop() || 'upload-image',
+      assetId: uploaded.assets.find((asset) => asset.url === url)?.assetId,
     }))
   },
   async chooseAndUploadImages(context: UploadContext) {

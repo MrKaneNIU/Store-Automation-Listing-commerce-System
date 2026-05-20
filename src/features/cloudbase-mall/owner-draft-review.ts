@@ -16,6 +16,13 @@ const toDraftView = (draft: ProductDraft): OwnerDraftReviewDraftView => ({
   ...draft,
   isNeedsCompletion: draft.status === 'needs_completion',
   isLowConfidence: draft.confidence < 0.8,
+  isManuallyCorrected: draft.correctionState === 'manual_corrected',
+  fieldConfidenceLabels: Object.fromEntries(
+    Object.entries(draft.fieldConfidence ?? {}).map(([field, confidence]) => [field, `${Math.round(confidence * 100)}%`]),
+  ),
+  fieldSourceLabels: Object.fromEntries(
+    Object.entries(draft.fieldSources ?? {}).map(([field, source]) => [field, source === 'manual' ? 'manual' : 'ocr']),
+  ),
 })
 
 export const getCloudBaseOwnerDraftReviewView = async (
@@ -51,7 +58,10 @@ export const updateCloudBaseOwnerDraftReviewDraft = async (
     return { message: noBatchMessage }
   }
 
-  await client.updateDraft(draftId, { [field]: value })
+  await client.updateDraft(draftId, {
+    [field]: value,
+    ...(field === 'stock' ? {} : { correctionState: 'manual_corrected' as const }),
+  })
   return { message: '' }
 }
 

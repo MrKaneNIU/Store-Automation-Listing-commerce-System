@@ -8,6 +8,16 @@ type OcrBatch = {
   updatedAt: string
 }
 
+type OcrJob = {
+  id: string
+  batchId: string
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'retrying'
+  failureReason?: string
+  retryCount: number
+  createdAt: string
+  updatedAt: string
+}
+
 type ProductDraft = {
   id: string
   batchId: string
@@ -18,6 +28,9 @@ type ProductDraft = {
   stock: number
   confidence: number
   sourceImageUrl: string
+  fieldConfidence?: Partial<Record<'productCode' | 'productName' | 'salePrice' | 'spec', number>>
+  fieldSources?: Partial<Record<'productCode' | 'productName' | 'salePrice' | 'spec', string>>
+  correctionState?: 'ocr_raw' | 'manual_corrected'
   status: 'pending' | 'confirmed' | 'deleted' | 'needs_completion'
 }
 
@@ -74,6 +87,16 @@ type BatchRow = {
   updated_at: string | Date
 }
 
+type OcrJobRow = {
+  id: string
+  batch_id: string
+  status: OcrJob['status']
+  failure_reason: string | null
+  retry_count: number
+  created_at: string | Date
+  updated_at: string | Date
+}
+
 type DraftRow = {
   id: string
   batch_id: string
@@ -84,6 +107,9 @@ type DraftRow = {
   stock: number
   confidence: string | number
   source_image_url: string
+  field_confidence: Record<string, number> | null
+  field_sources: Record<string, string> | null
+  correction_state: ProductDraft['correctionState'] | null
   status: ProductDraft['status']
 }
 
@@ -151,7 +177,20 @@ const toDraft = (row: DraftRow): ProductDraft => ({
   stock: row.stock,
   confidence: Number(row.confidence),
   sourceImageUrl: row.source_image_url,
+  ...(row.field_confidence ? { fieldConfidence: row.field_confidence } : {}),
+  ...(row.field_sources ? { fieldSources: row.field_sources } : {}),
+  ...(row.correction_state ? { correctionState: row.correction_state } : {}),
   status: row.status,
+})
+
+const toOcrJob = (row: OcrJobRow): OcrJob => ({
+  id: row.id,
+  batchId: row.batch_id,
+  status: row.status,
+  ...(row.failure_reason ? { failureReason: row.failure_reason } : {}),
+  retryCount: row.retry_count,
+  createdAt: toIso(row.created_at),
+  updatedAt: toIso(row.updated_at),
 })
 
 const toProduct = (row: ProductRow): Product => ({
@@ -279,9 +318,12 @@ const insertDraft = async (database: DatabaseExecutor, draft: ProductDraft): Pro
         stock,
         confidence,
         source_image_url,
+        field_confidence,
+        field_sources,
+        correction_state,
         status
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13)
       RETURNING *
     `,
     [
@@ -294,6 +336,9 @@ const insertDraft = async (database: DatabaseExecutor, draft: ProductDraft): Pro
       draft.stock,
       draft.confidence,
       draft.sourceImageUrl,
+      draft.fieldConfidence ? JSON.stringify(draft.fieldConfidence) : null,
+      draft.fieldSources ? JSON.stringify(draft.fieldSources) : null,
+      draft.correctionState ?? null,
       draft.status,
     ],
   )
@@ -394,6 +439,46 @@ export const createDatabaseMallRepository = (database: TransactionalDatabaseExec
   async listBatches(): Promise<OcrBatch[]> {
     const { rows } = await database.query<BatchRow>('SELECT * FROM ocr_batches ORDER BY created_at, id')
     return rows.map(toBatch)
+  },
+
+  async saveOcrJob(job: OcrJob): Promise<OcrJob> {
+    const { rows } = await database.query<OcrJobRow>(
+      `
+        INSERT INTO ocr_jobs (id, batch_id, status, failure_reason, retry_count, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING *
+      `,
+      [job.id, job.batchId, job.status, job.failureReason ?? null, job.retryCount, job.createdAt, job.updatedAt],
+    )
+
+    return toOcrJob(firstRow(rows))
+  },
+
+  async updateOcrJob(job: OcrJob): Promise<OcrJob> {
+    const { rows } = await database.query<OcrJobRow>(
+      `
+        UPDATE ocr_jobs
+        SET batch_id = $2,
+            status = $3,
+            failure_reason = $4,
+            retry_count = $5,
+            created_at = $6,
+            updated_at = $7
+        WHERE id = $1
+        RETURNING *
+      `,
+      [job.id, job.batchId, job.status, job.failureReason ?? null, job.retryCount, job.createdAt, job.updatedAt],
+    )
+
+    return toOcrJob(firstRow(rows))
+  },
+
+  async listOcrJobs(batchId?: string): Promise<OcrJob[]> {
+    const { rows } = batchId
+      ? await database.query<OcrJobRow>('SELECT * FROM ocr_jobs WHERE batch_id = $1 ORDER BY created_at, id', [batchId])
+      : await database.query<OcrJobRow>('SELECT * FROM ocr_jobs ORDER BY created_at, id')
+
+    return rows.map(toOcrJob)
   },
 
   async saveDrafts(drafts: ProductDraft[]): Promise<ProductDraft[]> {

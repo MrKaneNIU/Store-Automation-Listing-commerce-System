@@ -1,4 +1,4 @@
-import type { OcrBatch } from '../../domain/batch/types'
+import type { OcrBatch, OcrJob } from '../../domain/batch/types'
 import type { Product, Sku } from '../../domain/catalog/types'
 import type { ProductDraft } from '../../domain/draft/types'
 import type { Order } from '../../domain/order/types'
@@ -13,6 +13,7 @@ type CloudBaseMallApiRequest = {
 
 type CreateOcrBatchInput = {
   imageUrls: string[]
+  imageAssetIds?: string[]
   drafts: Array<{
     productCode: string
     productName: string
@@ -32,6 +33,7 @@ type DraftPatchInput = Partial<{
   stock: number
   confidence: number
   sourceImageUrl: string
+  correctionState: 'ocr_raw' | 'manual_corrected'
 }>
 
 type SupplementProductImagesInput = {
@@ -83,7 +85,10 @@ export type CloudBaseMallApiClient = {
   getCurrentCustomer: () => Promise<{ customer: CustomerIdentity }>
   bindCustomerPhone: (input: BindCustomerPhoneInput) => Promise<{ customer: CustomerIdentity }>
   bindStaff: (input: BindStaffInput) => Promise<{ roleAssignment: RoleAssignment }>
-  createOcrBatch: (input: CreateOcrBatchInput) => Promise<{ batch: OcrBatch; drafts: ProductDraft[] }>
+  createOcrBatch: (input: CreateOcrBatchInput) => Promise<{ batch: OcrBatch; job: OcrJob; drafts: ProductDraft[] }>
+  listOcrJobs: (batchId?: string) => Promise<{ jobs: OcrJob[] }>
+  processOcrJob: (jobId: string) => Promise<{ job: OcrJob; drafts: ProductDraft[] }>
+  retryOcrJob: (jobId: string) => Promise<{ job: OcrJob; drafts: ProductDraft[] }>
   listOcrBatches: () => Promise<{ batches: OcrBatch[] }>
   getCurrentOcrBatch: () => Promise<{ batch: OcrBatch | null }>
   getLatestDrafts: () => Promise<{ batch: OcrBatch | null; drafts: ProductDraft[] }>
@@ -123,6 +128,18 @@ export const createCloudBaseMallApiClient = (
   },
   createOcrBatch(input) {
     return callMallApi(functionClient, { action: 'createOcrBatch', payload: input })
+  },
+  listOcrJobs(batchId) {
+    return callMallApi(functionClient, {
+      action: 'listOcrJobs',
+      ...(batchId ? { params: { batchId } } : {}),
+    })
+  },
+  processOcrJob(jobId) {
+    return callMallApi(functionClient, { action: 'processOcrJob', params: { jobId } })
+  },
+  retryOcrJob(jobId) {
+    return callMallApi(functionClient, { action: 'retryOcrJob', params: { jobId } })
   },
   listOcrBatches() {
     return callMallApi(functionClient, { action: 'listOcrBatches' })

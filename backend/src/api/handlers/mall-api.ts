@@ -9,6 +9,7 @@ import {
 } from '../schemas'
 
 type BatchStatus = 'uploaded' | 'recognized' | 'confirmed'
+type OcrJobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'retrying'
 type DraftStatus = 'pending' | 'confirmed' | 'deleted' | 'needs_completion'
 type ProductStatus = 'pending_images' | 'ready_to_publish' | 'published'
 type OrderStatus = 'pending_merchant_confirm' | 'confirmed' | 'canceled'
@@ -17,6 +18,16 @@ type OcrBatch = {
   id: string
   status: BatchStatus
   imageUrls: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+type OcrJob = {
+  id: string
+  batchId: string
+  status: OcrJobStatus
+  failureReason?: string
+  retryCount: number
   createdAt: string
   updatedAt: string
 }
@@ -31,6 +42,9 @@ type ProductDraft = {
   stock: number
   confidence: number
   sourceImageUrl: string
+  fieldConfidence?: Partial<Record<'productCode' | 'productName' | 'salePrice' | 'spec', number>>
+  fieldSources?: Partial<Record<'productCode' | 'productName' | 'salePrice' | 'spec', string>>
+  correctionState?: 'ocr_raw' | 'manual_corrected'
   status: DraftStatus
 }
 
@@ -82,6 +96,9 @@ export type MallApiRepository = {
   saveBatch: (batch: OcrBatch) => Promise<OcrBatch>
   updateBatch: (batch: OcrBatch) => Promise<OcrBatch>
   listBatches: () => Promise<OcrBatch[]>
+  saveOcrJob: (job: OcrJob) => Promise<OcrJob>
+  updateOcrJob: (job: OcrJob) => Promise<OcrJob>
+  listOcrJobs: (batchId?: string) => Promise<OcrJob[]>
   saveDrafts: (drafts: ProductDraft[]) => Promise<ProductDraft[]>
   replaceDrafts: (batchId: string, drafts: ProductDraft[]) => Promise<ProductDraft[]>
   listDrafts: (batchId?: string) => Promise<ProductDraft[]>
@@ -138,6 +155,15 @@ export const handleApiError = (response: Parameters<typeof sendJson>[0], error: 
 const findLatestBatch = async (repository: MallApiRepository): Promise<OcrBatch | undefined> => {
   const batches = await repository.listBatches()
   return batches.at(-1)
+}
+
+const findOcrJob = async (repository: MallApiRepository, jobId: string): Promise<OcrJob> => {
+  const job = (await repository.listOcrJobs()).find((item) => item.id === jobId)
+  if (!job) {
+    throw notFoundError('OCR job not found')
+  }
+
+  return job
 }
 
 const findDraft = async (
@@ -251,8 +277,36 @@ export const apiHandlers: Record<string, RouteHandler> = {
         status: 'pending',
       })),
     )
+    const job = await context.repository.saveOcrJob({
+      id: `job-${batch.id}`,
+      batchId: batch.id,
+      status: 'queued',
+      retryCount: 0,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
 
-    sendSuccess(request.response, 201, { batch, drafts })
+    sendSuccess(request.response, 201, { batch, job, drafts })
+  },
+
+  async listOcrJobs(request, context) {
+    sendSuccess(request.response, 200, { jobs: await context.repository.listOcrJobs(request.params.batchId) })
+  },
+
+  async retryOcrJob(request, context) {
+    const job = await findOcrJob(context.repository, request.params.jobId)
+    if (job.status !== 'failed') {
+      throw conflictError('Only failed OCR jobs can be retried')
+    }
+
+    const updated = await context.repository.updateOcrJob({
+      ...job,
+      status: 'retrying',
+      failureReason: undefined,
+      retryCount: job.retryCount + 1,
+      updatedAt: context.now(),
+    })
+    sendSuccess(request.response, 200, { job: updated, drafts: await context.repository.listDrafts(job.batchId) })
   },
 
   async listOcrBatches(request, context) {

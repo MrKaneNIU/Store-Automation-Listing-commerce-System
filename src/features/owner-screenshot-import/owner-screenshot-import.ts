@@ -1,14 +1,16 @@
-import type { OcrBatch, UploadedImage } from '../../domain/batch/types'
+import type { OcrBatch, OcrJob, UploadedImage } from '../../domain/batch/types'
 import type { ProductDraft } from '../../domain/draft/types'
 import { createId } from '../../domain/shared/ids'
 import { mallWorkflow } from '../mall-workflow/mall-workflow'
 
 export type OwnerScreenshotRecognitionResult = {
   batch: OcrBatch
+  job?: OcrJob
   drafts: ProductDraft[]
   totalDraftCount: number
   needsCompletionCount: number
   message: string
+  nextAction?: 'retry' | 'review'
 }
 
 export const createOwnerScreenshotDescriptors = (tempFilePaths: string[], existingCount: number): UploadedImage[] =>

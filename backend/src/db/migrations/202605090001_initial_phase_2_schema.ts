@@ -28,6 +28,9 @@ export const initialPhase2SchemaMigration: Migration = {
       stock INTEGER NOT NULL CHECK (stock >= 0),
       confidence NUMERIC(5, 4) NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
       source_image_url TEXT NOT NULL,
+      field_confidence JSONB,
+      field_sources JSONB,
+      correction_state TEXT CHECK (correction_state IN ('ocr_raw', 'manual_corrected')),
       status TEXT NOT NULL CHECK (status IN ('pending', 'needs_completion', 'confirmed', 'deleted')),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -35,6 +38,19 @@ export const initialPhase2SchemaMigration: Migration = {
 
     CREATE INDEX IF NOT EXISTS product_drafts_batch_id_idx ON product_drafts(batch_id);
     CREATE INDEX IF NOT EXISTS product_drafts_status_idx ON product_drafts(status);
+
+    CREATE TABLE IF NOT EXISTS ocr_jobs (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL REFERENCES ocr_batches(id) ON DELETE CASCADE,
+      status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'succeeded', 'failed', 'retrying')),
+      failure_reason TEXT,
+      retry_count INTEGER NOT NULL CHECK (retry_count >= 0),
+      created_at TIMESTAMPTZ NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS ocr_jobs_batch_id_idx ON ocr_jobs(batch_id);
+    CREATE INDEX IF NOT EXISTS ocr_jobs_status_created_at_idx ON ocr_jobs(status, created_at);
 
     CREATE TABLE IF NOT EXISTS products (
       id TEXT PRIMARY KEY,

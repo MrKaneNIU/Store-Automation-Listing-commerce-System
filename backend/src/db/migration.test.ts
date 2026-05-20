@@ -47,6 +47,7 @@ describe('Phase 2 database migrations', () => {
           AND table_name IN (
             'schema_migrations',
             'ocr_batches',
+            'ocr_jobs',
             'product_drafts',
             'products',
             'skus',
@@ -62,6 +63,7 @@ describe('Phase 2 database migrations', () => {
     expect(rows.map((row) => row.table_name)).toEqual([
       'customers',
       'ocr_batches',
+      'ocr_jobs',
       'order_items',
       'orders',
       'product_drafts',

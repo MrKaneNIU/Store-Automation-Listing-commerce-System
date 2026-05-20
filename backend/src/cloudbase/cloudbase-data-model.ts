@@ -148,7 +148,7 @@ export const phase2CloudBaseCollections: CloudBaseCollectionDefinition[] = [
   },
   {
     name: 'ocr_jobs',
-    requiredFields: ['_id', 'batch_id', 'status', 'created_at', 'updated_at'],
+    requiredFields: ['_id', 'batch_id', 'status', 'retry_count', 'created_at', 'updated_at'],
     indexes: [
       { name: 'batch_id', fields: ['batch_id'] },
       { name: 'status_created_at', fields: ['status', 'created_at'] },
