@@ -13,20 +13,20 @@ describe('owner screenshot import facade', () => {
     const descriptors = createOwnerScreenshotDescriptors(['/tmp/a.png', '/tmp/b.png'], existing.length)
 
     expect(descriptors).toHaveLength(2)
-    expect(descriptors[0]).toMatchObject({ url: '/tmp/a.png', name: '云e宝截图2' })
-    expect(descriptors[1]).toMatchObject({ url: '/tmp/b.png', name: '云e宝截图3' })
+    expect(descriptors[0]).toMatchObject({ url: '/tmp/a.png', name: '截图 2' })
+    expect(descriptors[1]).toMatchObject({ url: '/tmp/b.png', name: '截图 3' })
     expect(descriptors.every((descriptor) => descriptor.id.startsWith('image-'))).toBe(true)
   })
 
   it('removes descriptors immutably by image id', () => {
     const descriptors = [
-      { id: 'image-1', url: '/tmp/a.png', name: '云e宝截图1' },
-      { id: 'image-2', url: '/tmp/b.png', name: '云e宝截图2' },
+      { id: 'image-1', url: '/tmp/a.png', name: '截图 1' },
+      { id: 'image-2', url: '/tmp/b.png', name: '截图 2' },
     ]
 
     const nextDescriptors = removeOwnerScreenshotDescriptor(descriptors, 'image-1')
 
-    expect(nextDescriptors).toEqual([{ id: 'image-2', url: '/tmp/b.png', name: '云e宝截图2' }])
+    expect(nextDescriptors).toEqual([{ id: 'image-2', url: '/tmp/b.png', name: '截图 2' }])
     expect(descriptors).toHaveLength(2)
   })
 
@@ -34,7 +34,7 @@ describe('owner screenshot import facade', () => {
     resetMockDb()
 
     const result = await startOwnerScreenshotRecognition([
-      { id: 'image-1', url: '/tmp/page-1.png', name: '云e宝截图1' },
+      { id: 'image-1', url: '/tmp/page-1.png', name: '截图 1' },
     ])
 
     expect(result.batch.status).toBe('recognized')

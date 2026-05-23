@@ -1,6 +1,6 @@
 <template>
   <view class="page">
-    <view class="hero">
+    <view class="hero" :class="`tone-${homepageSettings.backgroundTone}`">
       <view class="topbar" :style="{ top: topbarTop }">
         <button
           class="manage-link"
@@ -13,18 +13,24 @@
       </view>
 
       <view class="hero-visual">
-        <view class="visual-head" />
-        <view class="visual-body" />
-        <view class="visual-skirt" />
-        <view class="visual-train" />
+        <image
+          v-if="homepageSettings.customBackgroundImage"
+          class="hero-background-image"
+          :src="homepageSettings.customBackgroundImage"
+          mode="aspectFill"
+        />
+        <view v-if="!homepageSettings.customBackgroundImage" class="visual-head" />
+        <view v-if="!homepageSettings.customBackgroundImage" class="visual-body" />
+        <view v-if="!homepageSettings.customBackgroundImage" class="visual-skirt" />
+        <view v-if="!homepageSettings.customBackgroundImage" class="visual-train" />
       </view>
       <view class="hero-shade" />
 
       <view class="hero-copy">
         <text class="eyebrow">NEW SEASON</text>
-        <text class="hero-title">柔和廓形</text>
-        <text class="hero-title">今日上新</text>
-        <text class="hero-note">轻盈裙装、通勤套装与限定外套，按小程序 750rpx 视觉比例重构。</text>
+        <text class="hero-title">{{ homepageSettings.titleLineOne }}</text>
+        <text class="hero-title">{{ homepageSettings.titleLineTwo }}</text>
+        <text class="hero-note">{{ homepageSettings.promotionalContent }}</text>
         <button
           class="primary-button"
           :class="{ busy: navigatingRoute === routes.customerProductList }"
@@ -121,14 +127,18 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { navigateTo, redirectTo } from '../../app/navigation'
 import type { AppRoute } from '../../app/routes'
 import { routes } from '../../app/routes'
+import { getAdminWorkbenchEntryRoute } from '../../features/admin-workbench-auth/admin-workbench-entry'
+import { getHomepageSettingsView } from '../../features/homepage-settings/homepage-settings'
 
 const DEFAULT_TOPBAR_TOP = 'calc(env(safe-area-inset-top) + 40rpx)'
 
 const topbarTop = ref(DEFAULT_TOPBAR_TOP)
 const navigatingRoute = ref<AppRoute | ''>('')
+const homepageSettings = ref(getHomepageSettingsView())
 
 const syncTopbarPosition = () => {
   try {
@@ -152,6 +162,9 @@ const syncTopbarPosition = () => {
 }
 
 onMounted(syncTopbarPosition)
+onShow(() => {
+  homepageSettings.value = getHomepageSettingsView()
+})
 
 const stayHome = () => {
   uni.pageScrollTo({ scrollTop: 0, duration: 180 })
@@ -171,8 +184,10 @@ const goOwnerDashboard = () => {
     return
   }
 
-  navigatingRoute.value = routes.ownerDashboard
-  navigateTo(routes.ownerDashboard, {
+  const targetRoute = getAdminWorkbenchEntryRoute()
+
+  navigatingRoute.value = targetRoute
+  navigateTo(targetRoute, {
     onFail: () => {
       navigatingRoute.value = ''
       uni.showToast({
@@ -210,6 +225,14 @@ const showVisualOnlyToast = (title: string) => {
   border-bottom-right-radius: 38rpx;
   border-bottom-left-radius: 38rpx;
   background: #f0f0f0;
+}
+
+.hero.tone-linen {
+  background: #f7f2ea;
+}
+
+.hero.tone-noir {
+  background: #202020;
 }
 
 .topbar {
@@ -266,6 +289,29 @@ const showVisualOnlyToast = (title: string) => {
     linear-gradient(108deg, transparent 0 34%, rgba(5, 5, 5, 0.82) 34.4% 50%, transparent 50.4%),
     radial-gradient(ellipse at 48% 70%, rgba(5, 5, 5, 0.86) 0 32%, transparent 32.5%),
     linear-gradient(160deg, #cfcfcf, #fbfbfb 42%, #9d9d9d);
+}
+
+.hero-background-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.tone-linen .hero-visual {
+  background:
+    radial-gradient(circle at 48% 18%, rgba(255, 255, 255, 0.92) 0 7.4%, transparent 7.8%),
+    linear-gradient(108deg, transparent 0 34%, rgba(92, 82, 72, 0.76) 34.4% 50%, transparent 50.4%),
+    radial-gradient(ellipse at 48% 70%, rgba(118, 103, 89, 0.72) 0 32%, transparent 32.5%),
+    linear-gradient(160deg, #e8dfd4, #fffaf1 42%, #cdbfae);
+}
+
+.tone-noir .hero-visual {
+  background:
+    radial-gradient(circle at 48% 18%, rgba(244, 244, 244, 0.9) 0 7.4%, transparent 7.8%),
+    linear-gradient(108deg, transparent 0 34%, rgba(240, 240, 240, 0.72) 34.4% 50%, transparent 50.4%),
+    radial-gradient(ellipse at 48% 70%, rgba(245, 245, 245, 0.52) 0 32%, transparent 32.5%),
+    linear-gradient(160deg, #242424, #464646 42%, #111111);
 }
 
 .visual-head,

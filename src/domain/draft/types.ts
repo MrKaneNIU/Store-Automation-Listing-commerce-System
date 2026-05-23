@@ -1,6 +1,6 @@
 export type ProductDraftStatus = 'pending' | 'confirmed' | 'deleted' | 'needs_completion'
 export type OcrDraftField = 'productCode' | 'productName' | 'salePrice' | 'spec'
-export type OcrDraftCorrectionState = 'ocr_raw' | 'manual_corrected'
+export type OcrDraftCorrectionState = 'ocr_raw' | 'manual_corrected' | 'accepted'
 
 export type ProductDraft = {
   id: string

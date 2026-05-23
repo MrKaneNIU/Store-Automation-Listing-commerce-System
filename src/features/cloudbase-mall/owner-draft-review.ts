@@ -11,11 +11,19 @@ import type {
 
 const noBatchMessage = '暂无 OCR 批次，请先生成草稿'
 const noDraftsMessage = '暂无草稿，请先完成截图识别'
+const lowConfidenceThreshold = 0.8
+
+const isLowConfidenceResolved = (draft: ProductDraft) =>
+  draft.confidence >= lowConfidenceThreshold
+  || draft.correctionState === 'manual_corrected'
+  || draft.correctionState === 'accepted'
 
 const toDraftView = (draft: ProductDraft): OwnerDraftReviewDraftView => ({
   ...draft,
   isNeedsCompletion: draft.status === 'needs_completion',
-  isLowConfidence: draft.confidence < 0.8,
+  isLowConfidence: draft.confidence < lowConfidenceThreshold,
+  isLowConfidenceResolved: isLowConfidenceResolved(draft),
+  isAccepted: draft.correctionState === 'accepted',
   isManuallyCorrected: draft.correctionState === 'manual_corrected',
   fieldConfidenceLabels: Object.fromEntries(
     Object.entries(draft.fieldConfidence ?? {}).map(([field, confidence]) => [field, `${Math.round(confidence * 100)}%`]),
@@ -41,7 +49,7 @@ export const getCloudBaseOwnerDraftReviewView = async (
     latestBatchId: batch?.id ?? null,
     groups,
     needsCompletionCount: activeDrafts.filter((draft) => draft.status === 'needs_completion').length,
-    lowConfidenceCount: activeDrafts.filter((draft) => draft.confidence < 0.8).length,
+    lowConfidenceCount: activeDrafts.filter((draft) => draft.confidence < lowConfidenceThreshold).length,
     priceConflictCount: priceConflictCodes.size,
     canConfirm: groups.length > 0,
     emptyMessage: noDraftsMessage,
@@ -61,6 +69,20 @@ export const updateCloudBaseOwnerDraftReviewDraft = async (
   await client.updateDraft(draftId, {
     [field]: value,
     ...(field === 'stock' ? {} : { correctionState: 'manual_corrected' as const }),
+  })
+  return { message: '' }
+}
+
+export const acceptCloudBaseOwnerDraftReviewDraft = async (
+  draftId: string,
+  client: CloudBaseMallApiClient = getRuntimeCloudBaseMallApiClient(),
+): Promise<OwnerDraftReviewCommandResult> => {
+  if (!draftId) {
+    return { message: noBatchMessage }
+  }
+
+  await client.updateDraft(draftId, {
+    correctionState: 'accepted',
   })
   return { message: '' }
 }
@@ -90,5 +112,10 @@ export const confirmLatestCloudBaseOwnerDraftReviewBatch = async (
     return { message: `存在 ${result.issues.length} 个必填字段问题，请先补齐草稿` }
   }
 
-  return { message: `已创建 ${result.products.length} 个商品、${result.skus.length} 个 SKU` }
+  return {
+    message: `已创建 ${result.products.length} 个商品、${result.skus.length} 个 SKU`,
+    createdProductCount: result.products.length,
+    createdSkuCount: result.skus.length,
+    ...(result.products.length > 0 ? { nextAction: 'supplementImages' as const } : {}),
+  }
 }

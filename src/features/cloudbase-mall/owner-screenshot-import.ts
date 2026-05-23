@@ -7,9 +7,10 @@ const toResult = (
   batch: OcrBatch,
   job: OcrJob,
   drafts: OwnerScreenshotRecognitionResult['drafts'],
-  action: 'created' | 'retried',
+  action: 'created' | 'retried' | 'refreshed',
 ): OwnerScreenshotRecognitionResult => {
   const needsCompletionCount = drafts.filter((draft) => draft.status === 'needs_completion').length
+  const statusMessage = `OCR job ${job.status}`
 
   if (job.status === 'failed') {
     return {
@@ -19,7 +20,20 @@ const toResult = (
       totalDraftCount: drafts.length,
       needsCompletionCount,
       nextAction: 'retry',
+      statusMessage,
       message: `OCR job ${job.id} ${action === 'retried' ? '重试失败' : '识别失败'}：${job.failureReason || '请稍后重试'}`,
+    }
+  }
+
+  if (job.status === 'queued' || job.status === 'running' || job.status === 'retrying') {
+    return {
+      batch,
+      job,
+      drafts,
+      totalDraftCount: drafts.length,
+      needsCompletionCount,
+      statusMessage,
+      message: `OCR job ${job.id} ${job.status}，正在刷新识别进度`,
     }
   }
 
@@ -30,8 +44,30 @@ const toResult = (
     totalDraftCount: drafts.length,
     needsCompletionCount,
     nextAction: 'review',
+    statusMessage,
     message: `OCR job ${job.id} ${action === 'retried' ? '重试完成' : '已完成'}，生成 ${drafts.length} 条待复核草稿`,
   }
+}
+
+export const refreshCloudBaseOwnerScreenshotRecognitionJob = async (
+  jobId: string,
+  client: CloudBaseMallApiClient = getRuntimeCloudBaseMallApiClient(),
+): Promise<OwnerScreenshotRecognitionResult> => {
+  const { jobs } = await client.listOcrJobs()
+  const job = jobs.find((item) => item.id === jobId)
+  if (!job) {
+    throw new Error('OCR job not found')
+  }
+  const { batch, drafts } = await client.getLatestDrafts()
+  const fallbackBatch: OcrBatch = {
+    id: job.batchId,
+    status: job.status === 'succeeded' ? 'recognized' : 'uploaded',
+    imageUrls: [],
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  }
+
+  return toResult(batch ?? fallbackBatch, job, drafts.filter((draft) => draft.batchId === job.batchId), 'refreshed')
 }
 
 export const startCloudBaseOwnerScreenshotRecognition = async (

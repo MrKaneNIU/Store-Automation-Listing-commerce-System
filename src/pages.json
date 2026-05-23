@@ -8,9 +8,16 @@
       }
     },
     {
+      "path": "pages/login/index",
+      "style": {
+        "navigationBarTitleText": "管理登录",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/owner/dashboard/index",
       "style": {
-        "navigationBarTitleText": "老板工作台",
+        "navigationBarTitleText": "管理工作台",
         "navigationStyle": "custom"
       }
     },
@@ -29,13 +36,46 @@
     {
       "path": "pages/owner/products/index",
       "style": {
-        "navigationBarTitleText": "商品管理"
+        "navigationBarTitleText": "商品管理",
+        "navigationStyle": "custom"
       }
     },
     {
       "path": "pages/owner/orders/index",
       "style": {
-        "navigationBarTitleText": "订单确认"
+        "navigationBarTitleText": "订单确认",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/owner/more/index",
+      "style": {
+        "navigationBarTitleText": "更多",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/owner/no-permission/index",
+      "style": {
+        "navigationBarTitleText": "无权限"
+      }
+    },
+    {
+      "path": "pages/owner/permissions/index",
+      "style": {
+        "navigationBarTitleText": "权限管理"
+      }
+    },
+    {
+      "path": "pages/owner/homepage-settings/index",
+      "style": {
+        "navigationBarTitleText": "首页设置"
+      }
+    },
+    {
+      "path": "pages/owner/account-management/index",
+      "style": {
+        "navigationBarTitleText": "账号管理"
       }
     },
     {

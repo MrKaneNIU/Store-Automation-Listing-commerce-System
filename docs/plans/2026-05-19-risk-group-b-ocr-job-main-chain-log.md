@@ -249,6 +249,33 @@ E2E smoke passed: mp-weixin build artifacts and page routes are present.
 Updated on 2026-05-20 after Tencent Cloud OCR configuration, CloudBase
 deployment, and the PRD B1-B4 audit.
 
+Updated on 2026-05-23 after management-workbench OCR to image-task repair:
+
+- OCR recognition, extracted draft data, and explicit draft acceptance were
+  confirmed by user testing.
+- The post-confirmation gap was isolated to the next chain segment:
+  `confirmBatch` and image-task APIs still depended on the old WeChat role
+  identity while OCR/admin draft actions already used the management-workbench
+  account session.
+- `mallApi` now accepts `adminSession` with `productManagement` for
+  `confirmBatch`, `publishProduct`, `listPendingImageTasks`, and
+  `supplementProductImages`.
+- Owner draft review now returns structured next-step metadata and navigates to
+  staff image tasks after products are created.
+- Added regression coverage in
+  `cloudfunctions/mallApi/mall-api-core.test.js` and
+  `src/pages/owner/draft-review/index.test.ts`.
+- `pnpm.cmd run verify:full` passed on 2026-05-23:
+  49 frontend/cloudfunction test files, 217 tests, coverage 88.8%, backend
+  12 files / 49 tests, audits clean, mp-weixin build and smoke passed.
+- CloudBase `mallApi` was redeployed to `cloud1-d7gifjyzl7721b383`.
+  Deployment request id: `2382fed2-653e-481a-aa25-dd118d7aee69`.
+- Online smoke after function status returned `Active`:
+  `listPendingImageTasks` with management `adminSession` returned
+  `success: true` and no longer required WeChat identity.
+- Detailed handoff:
+  `docs/plans/2026-05-23-admin-workbench-ocr-to-image-task-handoff.md`.
+
 Current CloudBase `mallApi` state:
 
 ```text

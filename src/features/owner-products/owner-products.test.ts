@@ -4,13 +4,27 @@ import { mallRepository } from '../../services/repositories/mall-repository'
 import { resetMockDb } from '../../services/repositories/mock-db'
 import { getOwnerProductsView, publishOwnerProduct, publishReadyOwnerProducts } from './owner-products'
 
+const prepareConfirmableDrafts = (batchId: string) => {
+  mallRepository.replaceDrafts(
+    batchId,
+    mallRepository.listDrafts(batchId).map((draft) => {
+      if (draft.status === 'needs_completion') {
+        return { ...draft, status: 'deleted' as const }
+      }
+
+      if (draft.confidence < 0.8) {
+        return { ...draft, correctionState: 'accepted' as const }
+      }
+
+      return { ...draft, status: 'confirmed' as const }
+    }),
+  )
+}
+
 const prepareProducts = async () => {
   resetMockDb()
   const { batch } = await mallWorkflow.createMockImportBatch([{ id: 'image-1', url: '/tmp/page-1.png', name: '商品页' }])
-  mallRepository.replaceDrafts(
-    batch.id,
-    mallRepository.listDrafts(batch.id).map((draft) => ({ ...draft, status: 'confirmed' as const })),
-  )
+  prepareConfirmableDrafts(batch.id)
   return mallWorkflow.confirmBatch(batch.id)
 }
 

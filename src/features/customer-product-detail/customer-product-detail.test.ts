@@ -9,15 +9,31 @@ import {
   submitCustomerProductDetailOrder,
 } from './customer-product-detail'
 
+const prepareConfirmableDrafts = (batchId: string, stock?: number) => {
+  mallRepository.replaceDrafts(
+    batchId,
+    mallRepository.listDrafts(batchId).map((draft) => {
+      const nextDraft = typeof stock === 'number' ? { ...draft, stock } : draft
+
+      if (nextDraft.status === 'needs_completion') {
+        return { ...nextDraft, status: 'deleted' as const }
+      }
+
+      if (nextDraft.confidence < 0.8) {
+        return { ...nextDraft, correctionState: 'accepted' as const }
+      }
+
+      return { ...nextDraft, status: 'confirmed' as const }
+    }),
+  )
+}
+
 const prepareProduct = async (options?: { publish?: boolean; stock?: number }) => {
   resetMockDb()
   mockWechatAuthService.logout()
 
   const { batch } = await mallWorkflow.createMockImportBatch([{ id: 'image-1', url: '/tmp/page-1.png', name: '商品页' }])
-  mallRepository.replaceDrafts(
-    batch.id,
-    mallRepository.listDrafts(batch.id).map((draft) => ({ ...draft, status: 'confirmed' as const, stock: options?.stock ?? draft.stock })),
-  )
+  prepareConfirmableDrafts(batch.id, options?.stock)
   const result = mallWorkflow.confirmBatch(batch.id)
   const ready = await mallWorkflow.supplementProductImages(result.products[0])
   const product = options?.publish === false ? ready : mallWorkflow.publishProduct(ready)

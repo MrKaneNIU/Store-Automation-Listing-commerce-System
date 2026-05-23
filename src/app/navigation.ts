@@ -41,10 +41,25 @@ const shouldReplaceCurrentPage = (url: NavigationUrl) => {
   return currentRoute === targetRoute || pages.length >= NAVIGATE_STACK_SAFE_DEPTH
 }
 
-const beginNavigation = (url: NavigationUrl) => {
+const beginNavigation = (url: NavigationUrl, options: { replacePending?: boolean } = {}) => {
   const targetRoute = normalizeRoute(url)
 
   if (pendingNavigationRoute) {
+    if (options.replacePending && pendingNavigationRoute !== targetRoute) {
+      pendingNavigationRoute = targetRoute
+      clearPendingNavigationTimer()
+      pendingNavigationTimer = setTimeout(() => {
+        if (pendingNavigationRoute === targetRoute) {
+          pendingNavigationRoute = ''
+        }
+
+        pendingNavigationTimer = null
+      }, NAVIGATION_PENDING_TIMEOUT_MS)
+      ;(pendingNavigationTimer as { unref?: () => void }).unref?.()
+
+      return true
+    }
+
     return false
   }
 
@@ -128,7 +143,7 @@ export const navigateTo = (url: NavigationUrl, options: NavigateOptions = {}) =>
 }
 
 export const redirectTo = (url: NavigationUrl, options: NavigateOptions = {}) => {
-  if (!beginNavigation(url)) {
+  if (!beginNavigation(url, { replacePending: true })) {
     options.onComplete?.()
 
     return

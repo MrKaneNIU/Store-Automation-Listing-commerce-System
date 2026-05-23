@@ -106,7 +106,7 @@
       <button
         class="nav-item"
         :class="{ busy: navigatingRoute === routes.ownerProducts }"
-        :disabled="Boolean(navigatingRoute)"
+        :disabled="navigatingRoute === routes.ownerProducts"
         @tap="goAdminTab(routes.ownerProducts)"
       >
         商品管理
@@ -114,10 +114,18 @@
       <button
         class="nav-item"
         :class="{ busy: navigatingRoute === routes.ownerOrders }"
-        :disabled="Boolean(navigatingRoute)"
+        :disabled="navigatingRoute === routes.ownerOrders"
         @tap="goAdminTab(routes.ownerOrders)"
       >
         订单确认
+      </button>
+      <button
+        class="nav-item"
+        :class="{ busy: navigatingRoute === routes.ownerMore }"
+        :disabled="navigatingRoute === routes.ownerMore"
+        @tap="goAdminTab(routes.ownerMore)"
+      >
+        更多
       </button>
     </view>
   </view>
@@ -129,6 +137,7 @@ import { onHide, onShow } from '@dcloudio/uni-app'
 import { navigateTo, redirectTo, relaunchTo } from '../../../app/navigation'
 import type { AppRoute } from '../../../app/routes'
 import { routes } from '../../../app/routes'
+import { ensureAdminWorkbenchSession } from '../../../features/admin-workbench-auth/admin-workbench-guard'
 
 const DEFAULT_PAGE_TOP_PADDING = 'calc(env(safe-area-inset-top) + 12rpx)'
 const TOP_CONTENT_GAP_RPX = 12
@@ -154,6 +163,10 @@ const syncPageTopPadding = () => {
 onMounted(syncPageTopPadding)
 
 onShow(() => {
+  if (!ensureAdminWorkbenchSession('workbenchAccess')) {
+    return
+  }
+
   navigatingRoute.value = ''
   isShopNavigating.value = false
 })
@@ -190,12 +203,16 @@ const goEntry = (route: AppRoute) => {
 }
 
 const goAdminTab = (route: AppRoute) => {
-  if (navigatingRoute.value) {
+  if (navigatingRoute.value === route) {
     return
   }
 
   navigatingRoute.value = route
-  redirectTo(route)
+  redirectTo(route, {
+    onComplete: () => {
+      navigatingRoute.value = ''
+    },
+  })
 }
 
 const goShop = () => {
@@ -204,7 +221,11 @@ const goShop = () => {
   }
 
   isShopNavigating.value = true
-  relaunchTo(routes.customerProductList)
+  relaunchTo(routes.customerProductList, {
+    onComplete: () => {
+      isShopNavigating.value = false
+    },
+  })
 }
 </script>
 
@@ -478,20 +499,26 @@ const goShop = () => {
   right: 24rpx;
   bottom: calc(20rpx + env(safe-area-inset-bottom));
   left: 24rpx;
+  z-index: 8;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10rpx;
   box-sizing: border-box;
   min-height: 124rpx;
   padding: 12rpx;
   border-radius: 38rpx;
-  background: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.97);
   box-shadow: 0 22rpx 52rpx rgba(12, 12, 12, 0.12);
 }
 
 .nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-width: 0;
+  height: 92rpx;
   min-height: 92rpx;
+  box-sizing: border-box;
   margin: 0;
   padding: 0 10rpx;
   border-radius: 30rpx;
@@ -499,14 +526,19 @@ const goShop = () => {
   color: #7a7a7a;
   font-size: 24rpx;
   font-weight: 500;
-  line-height: 92rpx;
+  line-height: 1.2;
   text-align: center;
+  white-space: nowrap;
   transition: opacity 120ms ease, transform 120ms ease;
 }
 
 .nav-item.active {
   background: #202020;
   color: #ffffff;
+}
+
+.admin-nav .busy {
+  transform: none;
 }
 
 .busy {

@@ -93,6 +93,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import { ensureAdminWorkbenchSession } from '../../../features/admin-workbench-auth/admin-workbench-guard'
 import type { StaffImageTasksViewModel } from '../../../features/staff-image-tasks/staff-image-tasks'
 import {
   getCloudBaseStaffImageTasksView,
@@ -144,6 +145,10 @@ const refreshView = (options: RefreshOptions = { showLoading: true }) => {
 }
 
 onShow(() => {
+  if (!ensureAdminWorkbenchSession('productManagement')) {
+    return
+  }
+
   void refreshView()
 })
 

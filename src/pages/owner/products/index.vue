@@ -1,18 +1,10 @@
 <template>
-  <view class="page">
+  <view class="page" :style="{ paddingTop: pageTopPadding }">
     <view class="topbar">
       <view class="brand">
         <text class="kicker">MERCHANDISE ROOM</text>
         <text class="title">商品管理</text>
       </view>
-      <button
-        class="shop-link"
-        :class="{ busy: navigatingRoute === routes.customerProductList }"
-        :disabled="Boolean(navigatingRoute)"
-        @tap="goShop"
-      >
-        商城
-      </button>
     </view>
 
     <view class="hero">
@@ -99,7 +91,7 @@
       <button
         class="nav-item"
         :class="{ busy: navigatingRoute === routes.ownerDashboard }"
-        :disabled="Boolean(navigatingRoute)"
+        :disabled="navigatingRoute === routes.ownerDashboard"
         @tap="goAdminTab(routes.ownerDashboard)"
       >
         工作台
@@ -108,21 +100,30 @@
       <button
         class="nav-item"
         :class="{ busy: navigatingRoute === routes.ownerOrders }"
-        :disabled="Boolean(navigatingRoute)"
+        :disabled="navigatingRoute === routes.ownerOrders"
         @tap="goAdminTab(routes.ownerOrders)"
       >
         订单确认
+      </button>
+      <button
+        class="nav-item"
+        :class="{ busy: navigatingRoute === routes.ownerMore }"
+        :disabled="navigatingRoute === routes.ownerMore"
+        @tap="goAdminTab(routes.ownerMore)"
+      >
+        更多
       </button>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { redirectTo, relaunchTo } from '../../../app/navigation'
+import { redirectTo } from '../../../app/navigation'
 import type { AppRoute } from '../../../app/routes'
 import { routes } from '../../../app/routes'
+import { ensureAdminWorkbenchSession } from '../../../features/admin-workbench-auth/admin-workbench-guard'
 import {
   type OwnerProductStatusFilter,
   type OwnerProductsViewModel,
@@ -134,6 +135,10 @@ import {
 } from '../../../features/cloudbase-mall/owner-products'
 
 const selectedStatus = ref<OwnerProductStatusFilter>('all')
+const DEFAULT_PAGE_TOP_PADDING = 'calc(env(safe-area-inset-top) + 12rpx)'
+const TOP_CONTENT_GAP_RPX = 12
+
+const pageTopPadding = ref(DEFAULT_PAGE_TOP_PADDING)
 const message = ref('')
 const navigatingRoute = ref<AppRoute | ''>('')
 const publishingProductId = ref('')
@@ -150,22 +155,33 @@ const stayProducts = () => {
   uni.pageScrollTo({ scrollTop: 0, duration: 180 })
 }
 
+const syncPageTopPadding = () => {
+  try {
+    const systemInfo = uni.getSystemInfoSync()
+    const rpxToPx = systemInfo.windowWidth / 750
+    const statusBarHeight = systemInfo.statusBarHeight
+
+    if (typeof statusBarHeight === 'number' && Number.isFinite(statusBarHeight) && statusBarHeight > 0) {
+      pageTopPadding.value = `${Math.ceil(statusBarHeight + TOP_CONTENT_GAP_RPX * rpxToPx)}px`
+    }
+  } catch {
+    pageTopPadding.value = DEFAULT_PAGE_TOP_PADDING
+  }
+}
+
+onMounted(syncPageTopPadding)
+
 const goAdminTab = (route: AppRoute) => {
-  if (navigatingRoute.value) {
+  if (navigatingRoute.value === route) {
     return
   }
 
   navigatingRoute.value = route
-  redirectTo(route)
-}
-
-const goShop = () => {
-  if (navigatingRoute.value) {
-    return
-  }
-
-  navigatingRoute.value = routes.customerProductList
-  relaunchTo(routes.customerProductList)
+  redirectTo(route, {
+    onComplete: () => {
+      navigatingRoute.value = ''
+    },
+  })
 }
 
 const refreshView = async () => {
@@ -173,6 +189,12 @@ const refreshView = async () => {
 }
 
 onShow(() => {
+  navigatingRoute.value = ''
+
+  if (!ensureAdminWorkbenchSession('productManagement')) {
+    return
+  }
+
   void refreshView()
 })
 
@@ -217,7 +239,7 @@ const publishReadyProducts = async () => {
 .page {
   min-height: 100vh;
   box-sizing: border-box;
-  padding: 32rpx 32rpx calc(188rpx + env(safe-area-inset-bottom));
+  padding: calc(env(safe-area-inset-top) + 12rpx) 32rpx calc(188rpx + env(safe-area-inset-bottom));
   background: #f8f8f8;
   color: #202020;
 }
@@ -252,23 +274,6 @@ const publishReadyProducts = async () => {
   white-space: nowrap;
 }
 
-.shop-link {
-  flex: 0 0 auto;
-  min-width: 112rpx;
-  min-height: 60rpx;
-  margin: 0;
-  padding: 0 28rpx;
-  border-radius: 999rpx;
-  background: #ffffff;
-  color: #202020;
-  font-size: 24rpx;
-  font-weight: 500;
-  line-height: 60rpx;
-  box-shadow: 0 12rpx 30rpx rgba(12, 12, 12, 0.06);
-  transition: opacity 120ms ease, transform 120ms ease;
-}
-
-.shop-link::after,
 .filter-pill::after,
 .primary::after,
 .publish-button::after,
@@ -600,20 +605,26 @@ const publishReadyProducts = async () => {
   right: 24rpx;
   bottom: calc(20rpx + env(safe-area-inset-bottom));
   left: 24rpx;
+  z-index: 8;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10rpx;
   box-sizing: border-box;
   min-height: 124rpx;
   padding: 12rpx;
   border-radius: 38rpx;
-  background: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.97);
   box-shadow: 0 22rpx 52rpx rgba(12, 12, 12, 0.12);
 }
 
 .nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-width: 0;
+  height: 92rpx;
   min-height: 92rpx;
+  box-sizing: border-box;
   margin: 0;
   padding: 0 10rpx;
   border-radius: 30rpx;
@@ -621,14 +632,19 @@ const publishReadyProducts = async () => {
   color: #7a7a7a;
   font-size: 24rpx;
   font-weight: 500;
-  line-height: 92rpx;
+  line-height: 1.2;
   text-align: center;
+  white-space: nowrap;
   transition: opacity 120ms ease, transform 120ms ease;
 }
 
 .nav-item.active {
   background: #202020;
   color: #ffffff;
+}
+
+.admin-nav .busy {
+  transform: none;
 }
 
 .busy {

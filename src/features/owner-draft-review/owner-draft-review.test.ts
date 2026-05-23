@@ -4,6 +4,7 @@ import { mallRepository } from '../../services/repositories/mall-repository'
 import { resetMockDb } from '../../services/repositories/mock-db'
 import { mallWorkflow } from '../mall-workflow/mall-workflow'
 import {
+  acceptOwnerDraftReviewDraft,
   confirmLatestOwnerDraftReviewBatch,
   deleteOwnerDraftReviewDraft,
   getOwnerDraftReviewView,
@@ -102,6 +103,7 @@ describe('owner draft review ViewModel', () => {
   it('blocks confirmation when required draft fields are missing and marks the draft for completion', async () => {
     const { batch } = await prepareBatch()
     const draft = mallRepository.listDrafts(batch.id)[0]
+    replaceDrafts(batch.id, [{ ...draft, confidence: 0.96 }])
     updateOwnerDraftReviewDraft(draft.id, 'productCode', '')
 
     const result = confirmLatestOwnerDraftReviewBatch()
@@ -113,6 +115,23 @@ describe('owner draft review ViewModel', () => {
     expect(view.needsCompletionCount).toBe(1)
     expect(view.groups[0].drafts[0].isNeedsCompletion).toBe(true)
     expect(mallRepository.listProducts()).toHaveLength(0)
+  })
+
+  it('blocks low confidence drafts until the owner explicitly accepts or corrects them', async () => {
+    const { batch } = await prepareBatch()
+    const draft = mallRepository.listDrafts(batch.id)[0]
+    replaceDrafts(batch.id, [{ ...draft, confidence: 0.72, correctionState: 'ocr_raw' }])
+
+    const blocked = confirmLatestOwnerDraftReviewBatch()
+    expect(blocked.message).toContain('1')
+    expect(mallRepository.listDrafts(batch.id)[0].status).toBe('needs_completion')
+    expect(mallRepository.listProducts()).toHaveLength(0)
+
+    acceptOwnerDraftReviewDraft(draft.id)
+    const confirmed = confirmLatestOwnerDraftReviewBatch()
+
+    expect(confirmed.message).toContain('1')
+    expect(mallRepository.listProducts()).toHaveLength(1)
   })
 
   it('confirms complete drafts and duplicate confirmation does not create duplicate products or SKUs', async () => {

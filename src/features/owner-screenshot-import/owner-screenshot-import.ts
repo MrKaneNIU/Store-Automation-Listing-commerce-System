@@ -11,13 +11,14 @@ export type OwnerScreenshotRecognitionResult = {
   needsCompletionCount: number
   message: string
   nextAction?: 'retry' | 'review'
+  statusMessage?: string
 }
 
 export const createOwnerScreenshotDescriptors = (tempFilePaths: string[], existingCount: number): UploadedImage[] =>
   tempFilePaths.map((url, index) => ({
     id: createId('image'),
     url,
-    name: `云e宝截图${existingCount + index + 1}`,
+    name: `截图 ${existingCount + index + 1}`,
   }))
 
 export const removeOwnerScreenshotDescriptor = (screenshots: UploadedImage[], imageId: string): UploadedImage[] =>
@@ -33,6 +34,7 @@ export const startOwnerScreenshotRecognition = async (
     ...result,
     totalDraftCount: result.drafts.length,
     needsCompletionCount,
+    statusMessage: result.batch.status,
     message: `已创建批次 ${result.batch.id}，生成 ${result.drafts.length} 条草稿，其中 ${needsCompletionCount} 条待补全`,
   }
 }

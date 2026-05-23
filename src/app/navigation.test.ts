@@ -56,6 +56,27 @@ describe('navigation responsiveness guard', () => {
     )
   })
 
+  it('allows redirect replacements to override stale pending navigation targets', () => {
+    uniMock.navigateTo.mockImplementation(() => undefined)
+
+    navigateTo(routes.ownerDashboard)
+    redirectTo(routes.ownerProducts)
+
+    expect(uniMock.redirectTo).toHaveBeenCalledTimes(1)
+    expect(uniMock.redirectTo).toHaveBeenCalledWith(
+      expect.objectContaining({ url: routes.ownerProducts }),
+    )
+  })
+
+  it('does not duplicate a redirect while the same target is already pending', () => {
+    uniMock.redirectTo.mockImplementation(() => undefined)
+
+    redirectTo(routes.ownerProducts)
+    redirectTo(routes.ownerProducts)
+
+    expect(uniMock.redirectTo).toHaveBeenCalledTimes(1)
+  })
+
   it('releases stale pending navigation when the platform never completes the route call', () => {
     vi.useFakeTimers()
     uniMock.navigateTo.mockImplementation(() => undefined)
@@ -88,15 +109,15 @@ describe('navigation responsiveness guard', () => {
     expect(onComplete).toHaveBeenCalledTimes(1)
   })
 
-  it('notifies redirected callers when navigation is blocked by an existing pending request', () => {
+  it('notifies redirected callers when the same redirect target is already pending', () => {
     const onComplete = vi.fn()
 
-    uniMock.navigateTo.mockImplementation(() => undefined)
+    uniMock.redirectTo.mockImplementation(() => undefined)
 
-    navigateTo(routes.customerProductDetail)
+    redirectTo(routes.customerHome)
     redirectTo(routes.customerHome, { onComplete })
 
-    expect(uniMock.redirectTo).not.toHaveBeenCalled()
+    expect(uniMock.redirectTo).toHaveBeenCalledTimes(1)
     expect(onComplete).toHaveBeenCalledTimes(1)
   })
 

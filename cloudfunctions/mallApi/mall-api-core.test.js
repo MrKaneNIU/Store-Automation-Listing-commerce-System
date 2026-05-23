@@ -52,6 +52,24 @@ const customerIdentity = {
   roles: ['customer'],
 }
 
+const adminProductSession = {
+  account: 'admin',
+  role: 'creator',
+  permissions: ['workbenchAccess', 'productManagement'],
+}
+
+const staffProductSession = {
+  account: 'staff-product',
+  role: 'staff',
+  permissions: ['workbenchAccess', 'productManagement'],
+}
+
+const staffOrderSession = {
+  account: 'staff-order',
+  role: 'staff',
+  permissions: ['workbenchAccess', 'orderConfirmation'],
+}
+
 const createProductFixture = async (handler) => {
   const created = await handler({
     action: 'createOcrBatch',
@@ -459,6 +477,111 @@ describe('mallApi Phase 4 auth and role permissions', () => {
       },
     })
     expect(latestDrafts.data.drafts).toHaveLength(1)
+  })
+
+  it('creates OCR jobs from the admin workbench session without requiring WeChat identity', async () => {
+    const handler = createHandler()
+    const created = await handler({
+      action: 'createOcrBatch',
+      adminSession: staffProductSession,
+      payload: {
+        imageUrls: ['cloud://page-1.png'],
+        drafts: [],
+      },
+    })
+    const listed = await handler({
+      action: 'listOcrJobs',
+      adminSession: staffProductSession,
+      params: { batchId: created.data.batch.id },
+    })
+
+    expect(created).toMatchObject({
+      success: true,
+      data: {
+        batch: { status: 'uploaded' },
+        job: { status: 'queued' },
+      },
+    })
+    expect(listed.data.jobs).toEqual([created.data.job])
+  })
+
+  it('continues from admin OCR drafts to pending image tasks without requiring WeChat identity', async () => {
+    const handler = createHandler()
+    const created = await handler({
+      action: 'createOcrBatch',
+      adminSession: staffProductSession,
+      payload: {
+        imageUrls: ['cloud://page-1.png'],
+        drafts: [
+          {
+            productCode: 'A1023',
+            productName: 'Cotton Shirt',
+            salePrice: 129,
+            spec: 'Black/M',
+            stock: 2,
+            confidence: 0.96,
+            sourceImageUrl: 'cloud://page-1.png',
+          },
+        ],
+      },
+    })
+    const confirmed = await handler({
+      action: 'confirmBatch',
+      adminSession: staffProductSession,
+      params: { batchId: created.data.batch.id },
+    })
+    const pending = await handler({
+      action: 'listPendingImageTasks',
+      adminSession: staffProductSession,
+    })
+    const supplemented = await handler({
+      action: 'supplementProductImages',
+      adminSession: staffProductSession,
+      params: { productId: confirmed.data.products[0]?.id },
+      payload: {
+        mainImageUrl: 'cloud://main.jpg',
+        imageUrls: ['cloud://main.jpg'],
+      },
+    })
+
+    expect(confirmed).toMatchObject({
+      success: true,
+      data: {
+        products: [{ status: 'pending_images' }],
+        skus: [{ productCode: 'A1023' }],
+      },
+    })
+    expect(pending).toMatchObject({
+      success: true,
+      data: {
+        products: [{ productCode: 'A1023', status: 'pending_images' }],
+      },
+    })
+    expect(supplemented).toMatchObject({
+      success: true,
+      data: {
+        product: { productCode: 'A1023', status: 'ready_to_publish' },
+      },
+    })
+  })
+
+  it('rejects OCR jobs when the admin workbench session lacks product permission', async () => {
+    const handler = createHandler()
+    const result = await handler({
+      action: 'createOcrBatch',
+      adminSession: staffOrderSession,
+      payload: {
+        imageUrls: ['cloud://page-1.png'],
+        drafts: [],
+      },
+    })
+
+    expect(result).toMatchObject({
+      success: false,
+      error: {
+        code: 'FORBIDDEN',
+      },
+    })
   })
 
   it('processes queued OCR jobs through the injected provider without duplicating drafts on retry', async () => {

@@ -3,12 +3,18 @@ import type { Product, Sku } from '../../domain/catalog/types'
 import type { ProductDraft } from '../../domain/draft/types'
 import type { Order } from '../../domain/order/types'
 import type { CustomerSession } from '../auth/customer-session'
+import { getAdminWorkbenchSession } from '../auth/admin-workbench-session'
 import type { CloudBaseFunctionClient } from './cloudbase-function-client'
 
 type CloudBaseMallApiRequest = {
   action: string
   params?: Record<string, string>
   payload?: unknown
+  adminSession?: {
+    account: string
+    role: 'creator' | 'owner' | 'staff'
+    permissions: string[]
+  }
 }
 
 type CreateOcrBatchInput = {
@@ -33,7 +39,7 @@ type DraftPatchInput = Partial<{
   stock: number
   confidence: number
   sourceImageUrl: string
-  correctionState: 'ocr_raw' | 'manual_corrected'
+  correctionState: 'ocr_raw' | 'manual_corrected' | 'accepted'
 }>
 
 type SupplementProductImagesInput = {
@@ -112,7 +118,22 @@ export type CloudBaseMallApiClient = {
 const callMallApi = <TData>(
   functionClient: CloudBaseFunctionClient,
   request: CloudBaseMallApiRequest,
-): Promise<TData> => functionClient.call<TData>('mallApi', request)
+): Promise<TData> => {
+  const adminSession = getAdminWorkbenchSession()
+
+  return functionClient.call<TData>('mallApi', {
+    ...request,
+    ...(adminSession
+      ? {
+          adminSession: {
+            account: adminSession.account,
+            role: adminSession.role,
+            permissions: adminSession.permissions,
+          },
+        }
+      : {}),
+  })
+}
 
 export const createCloudBaseMallApiClient = (
   functionClient: CloudBaseFunctionClient,

@@ -155,7 +155,6 @@ describe('CloudBase mall facades', () => {
       },
       drafts: [],
     }))
-
     const result = await startCloudBaseOwnerScreenshotRecognition(
       [{ id: 'image-1', url: '/tmp/page-1.png', name: 'product-page' }],
       createClient({ createOcrBatch, processOcrJob }),
@@ -165,6 +164,25 @@ describe('CloudBase mall facades', () => {
     expect(processOcrJob).toHaveBeenCalledWith('job-batch-cloud')
     expect(result.nextAction).toBe('retry')
     expect(result.drafts).toEqual([])
+  })
+
+  it('does not require customer WeChat identity before starting OCR recognition', async () => {
+    const getCurrentCustomer = vi.fn(async () => {
+      throw new Error('UNAUTHORIZED: Verified WeChat identity is required')
+    })
+    const createOcrBatch = vi.fn(async () => ({ batch, job: queuedJob, drafts: [] }))
+    const processOcrJob = vi.fn(async () => ({ job: queuedJob, drafts: [] }))
+
+    await expect(startCloudBaseOwnerScreenshotRecognition(
+      [{ id: 'image-1', url: '/tmp/page-1.png', name: 'product-page' }],
+      createClient({ getCurrentCustomer, createOcrBatch, processOcrJob }),
+    )).resolves.toMatchObject({
+      job: queuedJob,
+      drafts: [],
+    })
+
+    expect(getCurrentCustomer).not.toHaveBeenCalled()
+    expect(createOcrBatch).toHaveBeenCalledTimes(1)
   })
 
   it('retries a failed OCR job through mallApi without creating duplicate drafts', async () => {

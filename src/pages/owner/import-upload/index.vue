@@ -19,7 +19,7 @@
       <view class="hero-copy">
         <text class="hero-label">OCR BATCH</text>
         <text class="hero-title">{{ screenshots.length }} / 9 张截图</text>
-        <text class="hero-desc">选择云 e 宝商品页、规格页或弹窗截图，识别后继续生成草稿，不直接创建商品。</text>
+        <text class="hero-desc">选择淘宝商品页、规格页或弹窗截图，识别后继续生成草稿，不直接创建商品。</text>
       </view>
       <view class="hero-meter">
         <text class="meter-number">{{ drafts.length }}</text>
@@ -74,17 +74,25 @@
     <view v-if="message" class="result">{{ message }}</view>
 
     <view v-if="currentJob" class="result job-result">
-      <text>Job {{ currentJob.id }}：{{ currentJob.status }}</text>
-      <text v-if="currentJob.failureReason">{{ currentJob.failureReason }}</text>
-      <button
-        v-if="currentJob.status === 'failed'"
-        class="secondary"
-        :disabled="isRecognizing"
-        hover-class="press-feedback"
-        @tap="retryJob"
-      >
-        {{ isRecognizing ? '重试中...' : '重试识别' }}
-      </button>
+      <view class="job-meta">
+        <text>Job {{ currentJob.id }}：{{ currentJob.status }}</text>
+        <text v-if="currentJob.failureReason">{{ currentJob.failureReason }}</text>
+        <text v-if="currentJob.retryCount > 0">已重试 {{ currentJob.retryCount }} 次</text>
+      </view>
+      <view class="job-actions">
+        <button class="secondary" :disabled="isRefreshingJob || isRecognizing" hover-class="press-feedback" @tap="refreshJob">
+          {{ isRefreshingJob ? '刷新中...' : '刷新状态' }}
+        </button>
+        <button
+          v-if="currentJob.status === 'failed'"
+          class="secondary"
+          :disabled="isRecognizing"
+          hover-class="press-feedback"
+          @tap="retryJob"
+        >
+          {{ isRecognizing ? '重试中...' : '重试识别' }}
+        </button>
+      </view>
     </view>
 
     <view v-if="drafts.length > 0" class="draft-list">
@@ -108,13 +116,16 @@
 </template>
 
 <script setup lang="ts">
+import { onHide, onShow } from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import type { OcrJob, UploadedImage } from '../../../domain/batch/types'
 import type { ProductDraft } from '../../../domain/draft/types'
 import { relaunchTo } from '../../../app/navigation'
 import { routes } from '../../../app/routes'
+import { ensureAdminWorkbenchSession } from '../../../features/admin-workbench-auth/admin-workbench-guard'
 import { removeOwnerScreenshotDescriptor } from '../../../features/owner-screenshot-import/owner-screenshot-import'
 import {
+  refreshCloudBaseOwnerScreenshotRecognitionJob,
   retryCloudBaseOwnerScreenshotRecognitionJob,
   startCloudBaseOwnerScreenshotRecognition,
 } from '../../../features/cloudbase-mall/owner-screenshot-import'
@@ -125,8 +136,10 @@ const drafts = ref<ProductDraft[]>([])
 const currentJob = ref<OcrJob | null>(null)
 const message = ref('')
 const isRecognizing = ref(false)
+const isRefreshingJob = ref(false)
 const isShopNavigating = ref(false)
 const isChoosingScreenshots = ref(false)
+let refreshTimer: number | null = null
 
 const chooseScreenshots = () => {
   if (isChoosingScreenshots.value) {
@@ -163,7 +176,29 @@ const goShop = () => {
   }
 
   isShopNavigating.value = true
-  relaunchTo(routes.customerProductList)
+  relaunchTo(routes.customerProductList, {
+    onComplete: () => {
+      isShopNavigating.value = false
+    },
+  })
+}
+
+const refreshJob = async () => {
+  if (isRefreshingJob.value || !currentJob.value) {
+    return
+  }
+
+  isRefreshingJob.value = true
+  try {
+    const result = await refreshCloudBaseOwnerScreenshotRecognitionJob(currentJob.value.id)
+    currentJob.value = result.job ?? null
+    drafts.value = result.drafts
+    message.value = `${result.statusMessage || result.message}`
+  } catch (error) {
+    message.value = error instanceof Error ? error.message : 'OCR job 刷新失败'
+  } finally {
+    isRefreshingJob.value = false
+  }
 }
 
 const startRecognize = async () => {
@@ -207,6 +242,37 @@ const retryJob = async () => {
     isRecognizing.value = false
   }
 }
+
+const startPolling = () => {
+  if (refreshTimer !== null) {
+    return
+  }
+
+  refreshTimer = setInterval(() => {
+    void refreshJob()
+  }, 5000) as unknown as number
+}
+
+const stopPolling = () => {
+  if (refreshTimer === null) {
+    return
+  }
+
+  clearInterval(refreshTimer)
+  refreshTimer = null
+}
+
+onShow(() => {
+  if (!ensureAdminWorkbenchSession('productManagement')) {
+    return
+  }
+
+  startPolling()
+})
+
+onHide(() => {
+  stopPolling()
+})
 </script>
 
 <style scoped>
@@ -376,7 +442,8 @@ const retryJob = async () => {
 
 .primary,
 .secondary,
-.remove-button {
+.remove-button,
+.accept {
   min-width: 0;
   min-height: 68rpx;
   margin: 0;
@@ -399,9 +466,15 @@ const retryJob = async () => {
 }
 
 .secondary,
-.remove-button {
+.remove-button,
+.accept {
   color: #707070;
   background: #f4f4f4;
+}
+
+.accept {
+  color: #2fa85c;
+  background: rgba(47, 168, 92, 0.12);
 }
 
 .image-grid {
@@ -506,6 +579,25 @@ const retryJob = async () => {
   line-height: 1.45;
 }
 
+.job-result {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.job-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+  color: #202020;
+}
+
+.job-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
 .draft-list {
   display: flex;
   flex-direction: column;
@@ -608,5 +700,21 @@ const retryJob = async () => {
 .press-feedback {
   opacity: 0.76;
   transform: scale(0.97);
+}
+
+@media (max-width: 390px) {
+  .hero {
+    flex-direction: column;
+  }
+
+  .hero-meter {
+    flex-basis: auto;
+    min-height: 112rpx;
+  }
+
+  .summary-grid,
+  .field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>

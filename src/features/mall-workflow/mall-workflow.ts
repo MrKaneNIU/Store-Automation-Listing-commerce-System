@@ -105,10 +105,10 @@ export const mallWorkflow = {
   ) {
     const sku = mallRepository.listSkus(product.id).find((item) => item.id === skuId)
     if (!sku) {
-      throw new Error('SKU 涓嶅瓨鍦?')
+      throw new Error('SKU 不存在')
     }
     if (!canCreateOrder(product, sku, params.quantity)) {
-      throw new Error('鍟嗗搧鏈笂鏋舵垨搴撳瓨涓嶈冻')
+      throw new Error('商品未上架或库存不足')
     }
 
     const normalizedKey = params.idempotencyKey?.trim()
@@ -142,11 +142,11 @@ export const mallWorkflow = {
     },
   ) {
     if (!params.session?.phoneNumber) {
-      throw new Error('璇峰厛瀹屾垚寰俊鎵嬫満鍙锋巿鏉?')
+      throw new Error('请先完成微信手机号授权')
     }
 
     return mallWorkflow.createOrder(product, skuId, {
-      customerName: params.session.nickname ?? '寰俊鐢ㄦ埛',
+      customerName: params.session.nickname ?? '微信用户',
       customerPhone: params.session.phoneNumber,
       customerId: params.session.customerId,
       customerAuthSource: params.session.authSource,
@@ -157,10 +157,10 @@ export const mallWorkflow = {
   confirmOrder(orderId: string) {
     const order = mallRepository.listOrders().find((item) => item.id === orderId)
     if (!order) {
-      throw new Error('璁㈠崟涓嶅瓨鍦?')
+      throw new Error('订单不存在')
     }
     if (order.status !== 'pending_merchant_confirm') {
-      throw new Error('鍙湁寰呭晢瀹剁‘璁よ鍗曞彲浠ョ‘璁?')
+      throw new Error('只有待商家确认订单可以确认')
     }
     const confirmed = mallRepository.updateOrder(confirmOrder(order))
     saveInventoryLedgerEntry({
@@ -177,10 +177,10 @@ export const mallWorkflow = {
   cancelOrder(orderId: string) {
     const order = mallRepository.listOrders().find((item) => item.id === orderId)
     if (!order) {
-      throw new Error('璁㈠崟涓嶅瓨鍦?')
+      throw new Error('订单不存在')
     }
     if (order.status !== 'pending_merchant_confirm') {
-      throw new Error('鍙湁寰呭晢瀹剁‘璁よ鍗曞彲浠ュ彇娑?')
+      throw new Error('只有待商家确认订单可以取消')
     }
     order.items.forEach((item) => {
       const sku = mallRepository.listSkus().find((currentSku) => currentSku.id === item.skuId)

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { confirmDrafts, markDraftCompletion, markDraftManualCorrection, validateDrafts } from './rules'
+import {
+  confirmDrafts,
+  isLowConfidenceDraftResolved,
+  markDraftCompletion,
+  markDraftManualCorrection,
+  markDraftAccepted,
+  validateDrafts,
+} from './rules'
 import type { ProductDraft } from './types'
 
 const completeDraft: ProductDraft = {
@@ -28,6 +35,23 @@ describe('validateDrafts', () => {
     ])
 
     expect(issues.map((issue) => issue.field)).toEqual(['productCode', 'productName', 'salePrice', 'spec'])
+  })
+
+  it('blocks low confidence drafts until they are manually corrected or explicitly accepted', () => {
+    const issues = validateDrafts([
+      {
+        ...completeDraft,
+        confidence: 0.72,
+        correctionState: 'ocr_raw',
+      },
+    ])
+
+    expect(issues).toEqual([
+      expect.objectContaining({
+        draftId: 'draft-1',
+        field: 'confidence',
+      }),
+    ])
   })
 })
 
@@ -62,6 +86,18 @@ describe('markDraftManualCorrection', () => {
       fieldConfidence: { productCode: 0.7 },
       fieldSources: { productCode: 'ocr' },
     })
+  })
+})
+
+describe('low confidence resolution', () => {
+  it('allows explicitly accepted low confidence drafts to pass confirmation', () => {
+    const accepted = markDraftAccepted({
+      ...completeDraft,
+      confidence: 0.74,
+    })
+
+    expect(isLowConfidenceDraftResolved(accepted)).toBe(true)
+    expect(validateDrafts([accepted])).toEqual([])
   })
 })
 

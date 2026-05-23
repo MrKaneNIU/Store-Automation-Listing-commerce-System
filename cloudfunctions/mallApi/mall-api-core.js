@@ -168,7 +168,7 @@ const parseCreateOcrBatchInput = (value) => {
         stock: readNonNegativeInteger(draft, 'stock'),
         confidence,
         sourceImageUrl: readString(draft, 'sourceImageUrl'),
-        correctionState: draft.correctionState === 'manual_corrected' ? 'manual_corrected' : 'ocr_raw',
+        correctionState: ['manual_corrected', 'accepted'].includes(draft.correctionState) ? draft.correctionState : 'ocr_raw',
       }
     }),
   }
@@ -194,8 +194,8 @@ const parseDraftPatchInput = (value) => {
   }
   if (value.sourceImageUrl !== undefined) result.sourceImageUrl = readString(value, 'sourceImageUrl')
   if (value.correctionState !== undefined) {
-    if (value.correctionState !== 'ocr_raw' && value.correctionState !== 'manual_corrected') {
-      throw validationError('correctionState must be ocr_raw or manual_corrected')
+    if (!['ocr_raw', 'manual_corrected', 'accepted'].includes(value.correctionState)) {
+      throw validationError('correctionState must be ocr_raw, manual_corrected, or accepted')
     }
     result.correctionState = value.correctionState
   }
@@ -289,6 +289,29 @@ const requireAnyRole = (event, roles) => {
     throw forbiddenError('Permission denied')
   }
   return identity
+}
+
+const normalizeAdminSession = (session) => {
+  if (!isRecord(session)) return null
+  const account = readOptionalStringFromRecord(session, 'account')
+  const role = readOptionalStringFromRecord(session, 'role')
+  const permissions = Array.isArray(session.permissions)
+    ? session.permissions.filter((permission) => typeof permission === 'string')
+    : []
+  if (!account || !['creator', 'owner', 'staff'].includes(role)) return null
+  return { account, role, permissions }
+}
+
+const hasAdminPermission = (session, permission) =>
+  session.role === 'creator' || session.permissions.includes(permission)
+
+const requireAdminOrResolvedAnyRole = async (event, context, roles, permission) => {
+  const adminSession = normalizeAdminSession(event.adminSession)
+  if (adminSession) {
+    if (!hasAdminPermission(adminSession, permission)) throw forbiddenError('Permission denied')
+    return adminSession
+  }
+  return requireResolvedAnyRole(event, context, roles)
 }
 
 const createIdFactory = () => {
@@ -739,6 +762,9 @@ const validateDraftForConfirmation = (draft) => {
   if (!draft.productName.trim()) issues.push('productName is required')
   if (!draft.spec.trim()) issues.push('spec is required')
   if (draft.salePrice <= 0) issues.push('salePrice must be greater than 0')
+  if (draft.confidence < 0.8 && draft.correctionState !== 'manual_corrected' && draft.correctionState !== 'accepted') {
+    issues.push('low confidence drafts must be manually corrected or explicitly accepted before confirmation')
+  }
   return issues
 }
 
@@ -890,7 +916,7 @@ const apiHandlers = {
     return { roleAssignment }
   },
   async createOcrBatch(event, context) {
-    await requireResolvedAnyRole(event, context, ['owner'])
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
     const input = parseCreateOcrBatchInput(event.payload)
     const timestamp = context.now()
     const batch = await context.repository.saveBatch({
@@ -918,11 +944,11 @@ const apiHandlers = {
     return { batch, job, drafts }
   },
   async listOcrJobs(event, context) {
-    await requireResolvedAnyRole(event, context, ['owner'])
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
     return { jobs: await context.repository.listOcrJobs(readOptionalString(event.params || {}, 'batchId')) }
   },
   async retryOcrJob(event, context) {
-    await requireResolvedAnyRole(event, context, ['owner'])
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
     const job = await findOcrJob(context.repository, readString(event.params || {}, 'jobId'))
     if (job.status !== 'failed') {
       throw conflictError('Only failed OCR jobs can be retried')
@@ -937,7 +963,7 @@ const apiHandlers = {
     return { job: updated, drafts: await context.repository.listDrafts(job.batchId) }
   },
   async processOcrJob(event, context) {
-    await requireResolvedAnyRole(event, context, ['owner'])
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
     const job = await findOcrJob(context.repository, readString(event.params || {}, 'jobId'))
     if (!['queued', 'retrying'].includes(job.status)) {
       throw conflictError('Only queued or retrying OCR jobs can be processed')
@@ -995,7 +1021,7 @@ const apiHandlers = {
     return { batch: batch || null, drafts: batch ? await context.repository.listDrafts(batch.id) : [] }
   },
   async updateDraft(event, context) {
-    await requireResolvedAnyRole(event, context, ['owner'])
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
     const patch = parseDraftPatchInput(event.payload)
     const { draft, batchDrafts } = await findDraft(context.repository, readString(event.params || {}, 'draftId'))
     const updatedDraft = { ...draft, ...patch }
@@ -1003,14 +1029,14 @@ const apiHandlers = {
     return { draft: updatedDraft }
   },
   async deleteDraft(event, context) {
-    await requireResolvedAnyRole(event, context, ['owner'])
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
     const { draft, batchDrafts } = await findDraft(context.repository, readString(event.params || {}, 'draftId'))
     const deletedDraft = { ...draft, status: 'deleted' }
     await context.repository.replaceDrafts(draft.batchId, batchDrafts.map((item) => (item.id === draft.id ? deletedDraft : item)))
     return { draft: deletedDraft }
   },
   async confirmBatch(event, context) {
-    await requireResolvedAnyRole(event, context, ['owner'])
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
     const batchId = readString(event.params || {}, 'batchId')
     const batch = (await context.repository.listBatches()).find((item) => item.id === batchId)
     if (!batch) throw notFoundError('Batch not found')
@@ -1056,7 +1082,7 @@ const apiHandlers = {
     return { products: products.map((product) => toPublishedProductSummary(product, skus)) }
   },
   async publishProduct(event, context) {
-    await requireResolvedAnyRole(event, context, ['owner'])
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
     const product = await findProduct(context.repository, readString(event.params || {}, 'productId'))
     const skus = await context.repository.listSkus(product.id)
     if (!product.mainImageUrl || skus.length === 0) {
@@ -1070,11 +1096,11 @@ const apiHandlers = {
     return { skus: await context.repository.listSkus(productId) }
   },
   async listPendingImageTasks(_event, context) {
-    await requireResolvedAnyRole(_event, context, ['owner', 'staff'])
+    await requireAdminOrResolvedAnyRole(_event, context, ['owner', 'staff'], 'productManagement')
     return { products: (await context.repository.listProducts()).filter((product) => product.status === 'pending_images') }
   },
   async supplementProductImages(event, context) {
-    await requireResolvedAnyRole(event, context, ['owner', 'staff'])
+    await requireAdminOrResolvedAnyRole(event, context, ['owner', 'staff'], 'productManagement')
     const input = parseSupplementImagesInput(event.payload)
     const product = await findProduct(context.repository, readString(event.params || {}, 'productId'))
     return {
