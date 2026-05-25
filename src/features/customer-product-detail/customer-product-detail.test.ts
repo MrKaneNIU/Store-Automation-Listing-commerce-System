@@ -65,15 +65,35 @@ describe('customer product detail ViewModel', () => {
     expect(view.canSubmitOrder).toBe(false)
   })
 
+  it('shows a product description with a fallback when it is empty', async () => {
+    const { product } = await prepareProduct()
+
+    const emptyDescriptionView = getCustomerProductDetailView(product.id)
+    mallRepository.updateProduct({ ...product, description: '进口羊毛混纺，适合通勤叠穿。' })
+    const describedView = getCustomerProductDetailView(product.id)
+
+    expect(emptyDescriptionView.descriptionText).toBe('暂无商品简介，商家正在完善中。')
+    expect(describedView.descriptionText).toBe('进口羊毛混纺，适合通勤叠穿。')
+  })
+
   it('marks out-of-stock SKUs as disabled and rejects selection', async () => {
-    const { product, sku } = await prepareProduct({ stock: 0 })
+    const { product, sku } = await prepareProduct()
+    mallRepository.updateSku({ ...sku, stock: 0 })
+    mallRepository.saveProducts([], [
+      {
+        ...sku,
+        id: 'sku-saleable',
+        spec: 'White/L',
+        stock: 1,
+      },
+    ])
 
     const view = getCustomerProductDetailView(product.id, sku.id)
     const selection = selectCustomerProductSku(product.id, sku.id)
 
     expect(view.skus[0]).toMatchObject({ id: sku.id, isDisabled: true, isSelected: true })
     expect(view.canSubmitOrder).toBe(false)
-    expect(selection).toEqual({ selectedSkuId: '', message: '该规格暂无库存' })
+    expect(selection).toEqual({ selectedSkuId: sku.id, message: '该规格暂无库存' })
   })
 
   it('does not create an order or reserve stock when phone authorization is canceled', async () => {

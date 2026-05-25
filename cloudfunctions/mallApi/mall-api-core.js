@@ -14,6 +14,10 @@ const SUPPORTED_ACTIONS = [
   'listProducts',
   'listPublishedProducts',
   'listPublishedProductSummaries',
+  'updateProductDescription',
+  'updateSku',
+  'restockSkus',
+  'clearSkuStock',
   'publishProduct',
   'listSkus',
   'listPendingImageTasks',
@@ -208,6 +212,39 @@ const parseSupplementImagesInput = (value) => {
   return {
     mainImageUrl: readString(value, 'mainImageUrl'),
     imageUrls: readStringArray(value, 'imageUrls', 'imageUrls must contain at least one image URL'),
+  }
+}
+
+const parseProductDescriptionInput = (value) => {
+  if (!isRecord(value)) throw validationError('Request body must be a JSON object')
+  const description = typeof value.description === 'string' ? value.description.trim() : null
+  if (description === null) throw validationError('description must be a string')
+  if (description.length > 120) throw validationError('description must be 120 characters or fewer')
+  return { description }
+}
+
+const parseSkuUpdateInput = (value) => {
+  if (!isRecord(value)) throw validationError('Request body must be a JSON object')
+  return {
+    spec: readString(value, 'spec').trim(),
+    salePrice: readPositiveNumber(value, 'salePrice'),
+    stock: readNonNegativeInteger(value, 'stock'),
+    reason: readString(value, 'reason').trim(),
+  }
+}
+
+const parseRestockSkusInput = (value) => {
+  if (!isRecord(value)) throw validationError('Request body must be a JSON object')
+  return {
+    quantity: readPositiveInteger(value, 'quantity'),
+    reason: readString(value, 'reason').trim(),
+  }
+}
+
+const parseClearSkuStockInput = (value) => {
+  if (!isRecord(value)) throw validationError('Request body must be a JSON object')
+  return {
+    reason: readString(value, 'reason').trim(),
   }
 }
 
@@ -461,6 +498,7 @@ const toProductDocument = (product) => ({
   _id: product.id,
   product_code: product.productCode,
   product_name: product.productName,
+  description: product.description || '',
   main_image_url: product.mainImageUrl,
   image_urls: product.imageUrls,
   status: product.status,
@@ -473,6 +511,7 @@ const toProduct = (document) => ({
   id: document._id,
   productCode: document.product_code,
   productName: document.product_name,
+  description: document.description || '',
   mainImageUrl: document.main_image_url,
   imageUrls: document.image_urls,
   status: document.status,
@@ -629,12 +668,39 @@ const toAuditLogDocument = (auditLog) => ({
 })
 
 const toPublishedProductSummary = (product, skus) => {
-  const prices = skus.filter((sku) => sku.productId === product.id).map((sku) => sku.salePrice)
+  const prices = skus.filter((sku) => sku.productId === product.id && sku.stock > 0).map((sku) => sku.salePrice)
 
   return {
     ...product,
     minPrice: prices.length > 0 ? Math.min(...prices) : '-',
   }
+}
+
+const validateProductForPublish = (product, skus) => {
+  const productSkus = skus.filter((sku) => sku.productId === product.id)
+  const saleableSkus = productSkus.filter((sku) => sku.stock > 0)
+  const normalizedSpecs = productSkus.map((sku) => sku.spec.trim()).filter(Boolean)
+  const messages = []
+
+  if (!product.mainImageUrl.trim()) {
+    messages.push('缺少主图，无法上架')
+  }
+  if (productSkus.length === 0) {
+    messages.push('没有可售规格，无法上架')
+  } else if (saleableSkus.length === 0) {
+    messages.push('全部规格暂无库存，请先补库存')
+  }
+  if (saleableSkus.some((sku) => sku.salePrice <= 0)) {
+    messages.push('存在价格为 0 的规格，请先补全售价')
+  }
+  if (saleableSkus.some((sku) => !sku.spec.trim())) {
+    messages.push('存在规格名为空的规格，请先补全规格名')
+  }
+  if (normalizedSpecs.length !== new Set(normalizedSpecs).size) {
+    messages.push('存在重复规格，请先合并或修改')
+  }
+
+  return messages
 }
 
 const createRepository = (store) => ({
@@ -733,6 +799,7 @@ const createProductsFromDrafts = (drafts, context) => {
           id: context.createId('product'),
           productCode: draft.productCode,
           productName: draft.productName,
+          description: '',
           mainImageUrl: '',
           imageUrls: [],
           status: 'pending_images',
@@ -788,6 +855,24 @@ const findProduct = async (repository, productId) => {
   if (!product) throw notFoundError('Product not found')
   return product
 }
+
+const findSku = async (repository, productId, skuId) => {
+  const sku = (await repository.listSkus(productId)).find((item) => item.id === skuId)
+  if (!sku) throw notFoundError('SKU not found')
+  return sku
+}
+
+const saveManualInventoryLedgerEntry = async (context, sku, quantityDelta, reason) =>
+  context.repository.saveInventoryLedgerEntry({
+    id: context.createId('ledger'),
+    skuId: sku.id,
+    action: 'adjust',
+    quantityDelta,
+    sourceType: 'manual',
+    sourceId: sku.id,
+    note: reason,
+    createdAt: context.now(),
+  })
 
 const findOrder = async (repository, orderId) => {
   const order = (await repository.listOrders()).find((item) => item.id === orderId)
@@ -1073,20 +1158,38 @@ const apiHandlers = {
     return { products: await context.repository.listProducts() }
   },
   async listPublishedProducts(_event, context) {
-    return { products: (await context.repository.listProducts()).filter((product) => product.status === 'published') }
+    const products = await context.repository.listProducts()
+    const skus = await context.repository.listSkus()
+    return {
+      products: products.filter((product) => product.status === 'published' && validateProductForPublish(product, skus).length === 0),
+    }
   },
   async listPublishedProductSummaries(_event, context) {
-    const products = (await context.repository.listProducts()).filter((product) => product.status === 'published')
+    const allProducts = await context.repository.listProducts()
     const skus = await context.repository.listSkus()
+    const products = allProducts.filter((product) => product.status === 'published' && validateProductForPublish(product, skus).length === 0)
 
     return { products: products.map((product) => toPublishedProductSummary(product, skus)) }
+  },
+  async updateProductDescription(event, context) {
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
+    const input = parseProductDescriptionInput(event.payload)
+    const product = await findProduct(context.repository, readString(event.params || {}, 'productId'))
+    return {
+      product: await context.repository.updateProduct({
+        ...product,
+        description: input.description,
+        updatedAt: context.now(),
+      }),
+    }
   },
   async publishProduct(event, context) {
     await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
     const product = await findProduct(context.repository, readString(event.params || {}, 'productId'))
     const skus = await context.repository.listSkus(product.id)
-    if (!product.mainImageUrl || skus.length === 0) {
-      throw conflictError('Product requires a main image and at least one SKU before publishing')
+    const publishMessages = validateProductForPublish(product, skus)
+    if (publishMessages.length > 0) {
+      throw conflictError(publishMessages[0])
     }
     return { product: await context.repository.updateProduct({ ...product, status: 'published', updatedAt: context.now() }) }
   },
@@ -1094,6 +1197,53 @@ const apiHandlers = {
     const productId = readString(event.params || {}, 'productId')
     await findProduct(context.repository, productId)
     return { skus: await context.repository.listSkus(productId) }
+  },
+  async updateSku(event, context) {
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
+    const productId = readString(event.params || {}, 'productId')
+    const skuId = readString(event.params || {}, 'skuId')
+    const input = parseSkuUpdateInput(event.payload)
+    await findProduct(context.repository, productId)
+    const sku = await findSku(context.repository, productId, skuId)
+    const updated = await context.repository.updateSku({
+      ...sku,
+      spec: input.spec,
+      salePrice: input.salePrice,
+      stock: input.stock,
+    })
+    const quantityDelta = input.stock - sku.stock
+    if (quantityDelta !== 0) {
+      await saveManualInventoryLedgerEntry(context, sku, quantityDelta, input.reason)
+    }
+    return { sku: updated }
+  },
+  async restockSkus(event, context) {
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
+    const productId = readString(event.params || {}, 'productId')
+    const input = parseRestockSkusInput(event.payload)
+    await findProduct(context.repository, productId)
+    const skus = await context.repository.listSkus(productId)
+    const updatedSkus = []
+    for (const sku of skus) {
+      updatedSkus.push(await context.repository.updateSku({ ...sku, stock: sku.stock + input.quantity }))
+      await saveManualInventoryLedgerEntry(context, sku, input.quantity, input.reason)
+    }
+    return { skus: updatedSkus }
+  },
+  async clearSkuStock(event, context) {
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
+    const productId = readString(event.params || {}, 'productId')
+    const input = parseClearSkuStockInput(event.payload)
+    await findProduct(context.repository, productId)
+    const skus = await context.repository.listSkus(productId)
+    const updatedSkus = []
+    for (const sku of skus) {
+      updatedSkus.push(await context.repository.updateSku({ ...sku, stock: 0 }))
+      if (sku.stock !== 0) {
+        await saveManualInventoryLedgerEntry(context, sku, -sku.stock, input.reason)
+      }
+    }
+    return { skus: updatedSkus }
   },
   async listPendingImageTasks(_event, context) {
     await requireAdminOrResolvedAnyRole(_event, context, ['owner', 'staff'], 'productManagement')

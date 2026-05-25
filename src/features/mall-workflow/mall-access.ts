@@ -1,4 +1,5 @@
 import type { ProductStatus } from '../../domain/catalog/types'
+import { canPublishProduct } from '../../domain/catalog/rules'
 import type { ProductDraft } from '../../domain/draft/types'
 import { mallRepository } from '../../services/repositories/mall-repository'
 
@@ -25,7 +26,9 @@ export const mallAccess = {
     return mallRepository.listProducts().filter((product) => product.status === status)
   },
   listPublishedProducts() {
-    return mallAccess.listProductsByStatus('published')
+    return mallAccess
+      .listProductsByStatus('published')
+      .filter((product) => canPublishProduct(product, mallRepository.listSkus(product.id)))
   },
   listPendingImageProducts() {
     return mallAccess.listProductsByStatus('pending_images')
@@ -37,7 +40,7 @@ export const mallAccess = {
     return mallRepository.listSkus(productId).length
   },
   getMinSkuPrice(productId: string) {
-    const prices = mallRepository.listSkus(productId).map((sku) => sku.salePrice)
+    const prices = mallRepository.listSkus(productId).filter((sku) => sku.stock > 0).map((sku) => sku.salePrice)
     return prices.length > 0 ? Math.min(...prices) : '-'
   },
   listOrders() {

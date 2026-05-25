@@ -38,6 +38,7 @@ type Product = {
   id: string
   productCode: string
   productName: string
+  description: string
   mainImageUrl: string
   imageUrls: string[]
   status: 'pending_images' | 'ready_to_publish' | 'published'
@@ -129,6 +130,7 @@ type ProductDocument = {
   _id: string
   product_code: string
   product_name: string
+  description?: string
   main_image_url: string
   image_urls: string[]
   status: Product['status']
@@ -277,6 +279,7 @@ const toProductDocument = (product: Product): ProductDocument => ({
   _id: product.id,
   product_code: product.productCode,
   product_name: product.productName,
+  description: product.description,
   main_image_url: product.mainImageUrl,
   image_urls: product.imageUrls,
   status: product.status,
@@ -289,6 +292,7 @@ const toProduct = (document: ProductDocument): Product => ({
   id: document._id,
   productCode: document.product_code,
   productName: document.product_name,
+  description: document.description ?? '',
   mainImageUrl: document.main_image_url,
   imageUrls: document.image_urls,
   status: document.status,

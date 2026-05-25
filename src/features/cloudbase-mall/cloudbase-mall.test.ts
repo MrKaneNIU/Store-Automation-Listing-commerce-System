@@ -5,8 +5,19 @@ import {
   retryCloudBaseOwnerScreenshotRecognitionJob,
   startCloudBaseOwnerScreenshotRecognition,
 } from './owner-screenshot-import'
-import { getCloudBaseOwnerProductsView } from './owner-products'
-import { submitCloudBaseCustomerProductDetailOrder } from './customer-product-detail'
+import {
+  clearCloudBaseOwnerProductSkuStock,
+  getCloudBaseOwnerProductsView,
+  getCloudBaseOwnerProductSkuInventoryView,
+  restockCloudBaseOwnerProductSkus,
+  updateCloudBaseOwnerProductDescription,
+  updateCloudBaseOwnerProductSku,
+} from './owner-products'
+import {
+  getCloudBaseCustomerProductDetailView,
+  selectCloudBaseCustomerProductSku,
+  submitCloudBaseCustomerProductDetailOrder,
+} from './customer-product-detail'
 import {
   confirmLatestCloudBaseOwnerDraftReviewBatch,
   deleteCloudBaseOwnerDraftReviewDraft,
@@ -45,6 +56,10 @@ const createClient = (overrides: Partial<CloudBaseMallApiClient>): CloudBaseMall
     listProducts: missing,
     listPublishedProducts: missing,
     listPublishedProductSummaries: missing,
+    updateProductDescription: missing,
+    updateSku: missing,
+    restockSkus: missing,
+    clearSkuStock: missing,
     publishProduct: missing,
     listSkus: missing,
     listPendingImageTasks: missing,
@@ -62,6 +77,7 @@ const product = {
   id: 'product-1',
   productCode: 'A1023',
   productName: 'Cotton Shirt',
+  description: '轻盈棉质衬衫，适合日常通勤。',
   status: 'published' as const,
   mainImageUrl: '/static/logo.png',
   imageUrls: ['/static/logo.png'],
@@ -218,6 +234,66 @@ describe('CloudBase mall facades', () => {
     expect(client.listSkus).toHaveBeenCalledWith('product-1')
   })
 
+  it('updates product descriptions through mallApi', async () => {
+    const updateProductDescription = vi.fn(async () => ({
+      product: { ...product, description: '进口羊毛混纺，适合通勤叠穿。' },
+    }))
+    const client = createClient({ updateProductDescription })
+
+    await expect(updateCloudBaseOwnerProductDescription(product.id, '进口羊毛混纺，适合通勤叠穿。', client)).resolves.toEqual({
+      message: '商品简介已保存',
+    })
+    expect(updateProductDescription).toHaveBeenCalledWith('product-1', {
+      description: '进口羊毛混纺，适合通勤叠穿。',
+    })
+  })
+
+  it('loads and updates owner SKU inventory through mallApi', async () => {
+    const client = createClient({
+      listProducts: vi.fn(async () => ({ products: [product] })),
+      listSkus: vi.fn(async () => ({ skus: [sku] })),
+      updateSku: vi.fn(async () => ({ sku: { ...sku, spec: 'Black/XL', salePrice: 139, stock: 5 } })),
+      restockSkus: vi.fn(async () => ({ skus: [{ ...sku, stock: 6 }] })),
+      clearSkuStock: vi.fn(async () => ({ skus: [{ ...sku, stock: 0 }] })),
+    })
+
+    await expect(getCloudBaseOwnerProductSkuInventoryView(product.id, client)).resolves.toMatchObject({
+      product: { id: product.id },
+      skus: [{ id: sku.id, customerStatusPreview: '可下单' }],
+    })
+    await expect(updateCloudBaseOwnerProductSku(product.id, sku.id, {
+      spec: 'Black/XL',
+      salePrice: 139,
+      stock: 5,
+      reason: '补货入库',
+    }, client)).resolves.toEqual({ message: '规格库存已保存' })
+    await expect(restockCloudBaseOwnerProductSkus(product.id, 4, '补货入库', client)).resolves.toEqual({ message: '已补货 1 个规格' })
+    await expect(clearCloudBaseOwnerProductSkuStock(product.id, '盘点清零', client)).resolves.toEqual({ message: '已清零 1 个规格' })
+
+    expect(client.updateSku).toHaveBeenCalledWith(product.id, sku.id, {
+      spec: 'Black/XL',
+      salePrice: 139,
+      stock: 5,
+      reason: '补货入库',
+    })
+    expect(client.restockSkus).toHaveBeenCalledWith(product.id, { quantity: 4, reason: '补货入库' })
+    expect(client.clearSkuStock).toHaveBeenCalledWith(product.id, { reason: '盘点清零' })
+  })
+
+  it('shows CloudBase product detail descriptions with the empty fallback', async () => {
+    const client = createClient({
+      listPublishedProducts: vi.fn(async () => ({ products: [product, { ...product, id: 'product-2', description: '' }] })),
+      listSkus: vi.fn(async () => ({ skus: [sku] })),
+    })
+
+    await expect(getCloudBaseCustomerProductDetailView(product.id, '', client)).resolves.toMatchObject({
+      descriptionText: '轻盈棉质衬衫，适合日常通勤。',
+    })
+    await expect(getCloudBaseCustomerProductDetailView('product-2', '', client)).resolves.toMatchObject({
+      descriptionText: '暂无商品简介，商家正在完善中。',
+    })
+  })
+
   it('loads and mutates draft review state through mallApi', async () => {
     const client = createClient({
       getLatestDrafts: vi.fn(async () => ({ batch, drafts: [draft] })),
@@ -331,5 +407,42 @@ describe('CloudBase mall facades', () => {
       skuId: 'sku-1',
       session: authorizedSession,
     }))
+  })
+
+  it('keeps out-of-stock SKU selection visible while blocking checkout through mallApi', async () => {
+    const soldOutSku = { ...sku, stock: 0 }
+    const client = createClient({
+      listPublishedProducts: vi.fn(async () => ({ products: [product] })),
+      listSkus: vi.fn(async () => ({ skus: [soldOutSku] })),
+    })
+
+    await expect(selectCloudBaseCustomerProductSku(product.id, soldOutSku.id, client)).resolves.toEqual({
+      selectedSkuId: soldOutSku.id,
+      message: '该规格暂无库存',
+    })
+    await expect(getCloudBaseCustomerProductDetailView(product.id, soldOutSku.id, client)).resolves.toMatchObject({
+      skus: [{ id: soldOutSku.id, isDisabled: true, isSelected: true, stock: 0 }],
+      canSubmitOrder: false,
+    })
+  })
+  it('surfaces CloudBase owner publish block reasons from the shared validation', async () => {
+    const readyProduct = { ...product, status: 'ready_to_publish' as const }
+    const soldOutSku = { ...sku, stock: 0 }
+    const client = createClient({
+      listProducts: vi.fn(async () => ({ products: [readyProduct] })),
+      listSkus: vi.fn(async () => ({ skus: [soldOutSku] })),
+    })
+
+    await expect(getCloudBaseOwnerProductsView('ready_to_publish', client)).resolves.toMatchObject({
+      canBatchPublish: false,
+      readyProductCount: 0,
+      products: [
+        {
+          id: readyProduct.id,
+          canPublish: false,
+          publishBlockReasons: ['全部规格暂无库存，请先补库存'],
+        },
+      ],
+    })
   })
 })

@@ -10,6 +10,7 @@ import type {
   SelectCustomerProductSkuResult,
   SubmitCustomerProductDetailOrderResult,
 } from '../customer-product-detail/customer-product-detail'
+import { productDescriptionFallbackText } from '../customer-product-detail/customer-product-detail'
 
 const productUnavailableMessage = '商品不存在或未上架'
 const selectAvailableSkuMessage = '请选择有库存的规格'
@@ -41,6 +42,7 @@ export const getCloudBaseCustomerProductDetailView = async (
 
   return {
     product,
+    descriptionText: product?.description.trim() ? product.description : productDescriptionFallbackText,
     skus,
     isPublished: Boolean(product),
     canSubmitOrder: Boolean(product && selectedSku && !selectedSku.isDisabled),
@@ -59,8 +61,11 @@ export const selectCloudBaseCustomerProductSku = async (
   if (!view.product || !view.isPublished) {
     return { selectedSkuId: '', message: productUnavailableMessage }
   }
-  if (!sku || sku.isDisabled) {
+  if (!sku) {
     return { selectedSkuId: '', message: outOfStockMessage }
+  }
+  if (sku.isDisabled) {
+    return { selectedSkuId: sku.id, message: outOfStockMessage }
   }
 
   return { selectedSkuId: sku.id, message: '' }

@@ -24,8 +24,12 @@ const routes: RouteDefinition[] = [
   { method: 'POST', pattern: /^\/api\/batches\/([^/]+)\/confirm$/, handler: 'confirmBatch', params: ['batchId'] },
   { method: 'GET', pattern: /^\/api\/products$/, handler: 'listProducts' },
   { method: 'GET', pattern: /^\/api\/products\/published$/, handler: 'listPublishedProducts' },
+  { method: 'PATCH', pattern: /^\/api\/products\/([^/]+)\/description$/, handler: 'updateProductDescription', params: ['productId'] },
   { method: 'POST', pattern: /^\/api\/products\/([^/]+)\/publish$/, handler: 'publishProduct', params: ['productId'] },
   { method: 'GET', pattern: /^\/api\/products\/([^/]+)\/skus$/, handler: 'listSkus', params: ['productId'] },
+  { method: 'PATCH', pattern: /^\/api\/products\/([^/]+)\/skus\/([^/]+)$/, handler: 'updateSku', params: ['productId', 'skuId'] },
+  { method: 'POST', pattern: /^\/api\/products\/([^/]+)\/skus\/restock$/, handler: 'restockSkus', params: ['productId'] },
+  { method: 'POST', pattern: /^\/api\/products\/([^/]+)\/skus\/clear$/, handler: 'clearSkuStock', params: ['productId'] },
   { method: 'GET', pattern: /^\/api\/image-tasks\/pending$/, handler: 'listPendingImageTasks' },
   {
     method: 'POST',

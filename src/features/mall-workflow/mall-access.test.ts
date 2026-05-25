@@ -32,6 +32,7 @@ const product: Product = {
   id: 'product-1',
   productCode: 'A1023',
   productName: 'Test Product',
+  description: '',
   mainImageUrl: '/tmp/main.png',
   imageUrls: ['/tmp/main.png'],
   status: 'published',

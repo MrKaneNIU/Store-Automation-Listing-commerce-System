@@ -16,6 +16,7 @@ export type CustomerProductDetailSkuView = {
 
 export type CustomerProductDetailViewModel = {
   product: Product | null
+  descriptionText: string
   skus: CustomerProductDetailSkuView[]
   isPublished: boolean
   canSubmitOrder: boolean
@@ -40,6 +41,7 @@ export type SubmitCustomerProductDetailOrderResult =
     }
 
 const productUnavailableMessage = '商品不存在或未上架'
+export const productDescriptionFallbackText = '暂无商品简介，商家正在完善中。'
 const selectAvailableSkuMessage = '请选择有库存的规格'
 const outOfStockMessage = '该规格暂无库存'
 const canceledAuthMessage = '已取消授权，未创建订单'
@@ -64,6 +66,7 @@ export const getCustomerProductDetailView = (
 
   return {
     product,
+    descriptionText: product?.description.trim() ? product.description : productDescriptionFallbackText,
     skus,
     isPublished,
     canSubmitOrder: Boolean(isPublished && selectedSku && !selectedSku.isDisabled),
@@ -78,8 +81,11 @@ export const selectCustomerProductSku = (productId: string, skuId: string): Sele
   if (!view.product || !view.isPublished) {
     return { selectedSkuId: '', message: productUnavailableMessage }
   }
-  if (!sku || sku.isDisabled) {
+  if (!sku) {
     return { selectedSkuId: '', message: outOfStockMessage }
+  }
+  if (sku.isDisabled) {
+    return { selectedSkuId: sku.id, message: outOfStockMessage }
   }
 
   return { selectedSkuId: sku.id, message: '' }

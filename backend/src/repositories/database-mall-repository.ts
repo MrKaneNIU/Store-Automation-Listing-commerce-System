@@ -38,6 +38,7 @@ type Product = {
   id: string
   productCode: string
   productName: string
+  description: string
   mainImageUrl: string
   imageUrls: string[]
   status: 'pending_images' | 'ready_to_publish' | 'published'
@@ -117,6 +118,7 @@ type ProductRow = {
   id: string
   product_code: string
   product_name: string
+  description: string
   main_image_url: string
   image_urls: string[]
   status: Product['status']
@@ -197,6 +199,7 @@ const toProduct = (row: ProductRow): Product => ({
   id: row.id,
   productCode: row.product_code,
   productName: row.product_name,
+  description: row.description,
   mainImageUrl: row.main_image_url,
   imageUrls: row.image_urls,
   status: row.status,
@@ -266,6 +269,7 @@ const insertProduct = async (database: DatabaseExecutor, product: Product): Prom
         id,
         product_code,
         product_name,
+        description,
         main_image_url,
         image_urls,
         status,
@@ -273,13 +277,14 @@ const insertProduct = async (database: DatabaseExecutor, product: Product): Prom
         created_at,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `,
     [
       product.id,
       product.productCode,
       product.productName,
+      product.description,
       product.mainImageUrl,
       product.imageUrls,
       product.status,
@@ -531,12 +536,13 @@ export const createDatabaseMallRepository = (database: TransactionalDatabaseExec
         UPDATE products
         SET product_code = $2,
             product_name = $3,
-            main_image_url = $4,
-            image_urls = $5,
-            status = $6,
-            created_from_batch_id = $7,
-            created_at = $8,
-            updated_at = $9
+            description = $4,
+            main_image_url = $5,
+            image_urls = $6,
+            status = $7,
+            created_from_batch_id = $8,
+            created_at = $9,
+            updated_at = $10
         WHERE id = $1
         RETURNING *
       `,
@@ -544,6 +550,7 @@ export const createDatabaseMallRepository = (database: TransactionalDatabaseExec
         product.id,
         product.productCode,
         product.productName,
+        product.description,
         product.mainImageUrl,
         product.imageUrls,
         product.status,

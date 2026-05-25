@@ -57,4 +57,13 @@ describe('customer product list ViewModel', () => {
     expect(view.products).toEqual([])
     expect(view.emptyMessage).toBe('暂无已上架商品')
   })
+  it('hides published products that no longer have saleable stock', async () => {
+    const { publishedProduct } = await prepareProducts()
+    mallWorkflow.clearProductSkuStock(publishedProduct, '盘点清零')
+
+    const view = getCustomerProductListView()
+
+    expect(view.products).toEqual([])
+    expect(view.emptyMessage).not.toBe('')
+  })
 })

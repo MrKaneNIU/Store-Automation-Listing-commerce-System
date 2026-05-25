@@ -1,6 +1,6 @@
 import type { UploadedImage } from '../../domain/batch/types'
 import { createProductsFromDrafts, canPublishProduct } from '../../domain/catalog/rules'
-import type { Product } from '../../domain/catalog/types'
+import type { Product, Sku } from '../../domain/catalog/types'
 import { confirmDrafts } from '../../domain/draft/rules'
 import { canCreateOrder, cancelOrder, createPendingOrder, confirmOrder } from '../../domain/order/rules'
 import { createId, nowIso } from '../../domain/shared/ids'
@@ -90,6 +90,69 @@ export const mallWorkflow = {
       return product
     }
     return mallRepository.updateProduct({ ...product, status: 'published', updatedAt: nowIso() })
+  },
+  updateProductDescription(product: Product, description: string) {
+    return mallRepository.updateProduct({ ...product, description, updatedAt: nowIso() })
+  },
+  updateSkuOperationsData(
+    sku: Sku,
+    patch: {
+      spec: string
+      salePrice: number
+      stock: number
+      reason: string
+    },
+  ) {
+    const quantityDelta = patch.stock - sku.stock
+    const updatedSku = mallRepository.updateSku({
+      ...sku,
+      spec: patch.spec,
+      salePrice: patch.salePrice,
+      stock: patch.stock,
+    })
+
+    if (quantityDelta !== 0) {
+      saveInventoryLedgerEntry({
+        skuId: sku.id,
+        action: 'adjust',
+        quantityDelta,
+        sourceType: 'manual',
+        sourceId: sku.id,
+        note: patch.reason,
+      })
+    }
+
+    return updatedSku
+  },
+  restockProductSkus(product: Product, quantity: number, reason: string) {
+    return mallRepository.listSkus(product.id).map((sku) => {
+      const updatedSku = mallRepository.updateSku({ ...sku, stock: sku.stock + quantity })
+      saveInventoryLedgerEntry({
+        skuId: sku.id,
+        action: 'adjust',
+        quantityDelta: quantity,
+        sourceType: 'manual',
+        sourceId: sku.id,
+        note: reason,
+      })
+      return updatedSku
+    })
+  },
+  clearProductSkuStock(product: Product, reason: string) {
+    return mallRepository.listSkus(product.id).map((sku) => {
+      const updatedSku = mallRepository.updateSku({ ...sku, stock: 0 })
+      if (sku.stock !== 0) {
+        saveInventoryLedgerEntry({
+          skuId: sku.id,
+          action: 'adjust',
+          quantityDelta: -sku.stock,
+          sourceType: 'manual',
+          sourceId: sku.id,
+          note: reason,
+        })
+      }
+      return updatedSku
+    })
   },
   createOrder(
     product: Product,

@@ -259,11 +259,85 @@ describe('Phase 2.4 API contract', () => {
     const published = await requestJson(server.baseUrl, '/api/products/product-3/publish', { method: 'POST' })
     const publishedProducts = await requestJson(server.baseUrl, '/api/products/published')
     const skus = await requestJson(server.baseUrl, '/api/products/product-3/skus')
+    const described = await requestJson(server.baseUrl, '/api/products/product-3/description', {
+      method: 'PATCH',
+      body: JSON.stringify({ description: '进口羊毛混纺，适合通勤叠穿。' }),
+    })
+    const refreshedProducts = await requestJson(server.baseUrl, '/api/products')
 
+    expect(pending.body.data.products[0].description).toBe('')
     expect(supplemented.body.data.product.status).toBe('ready_to_publish')
     expect(published.body.data.product.status).toBe('published')
     expect(publishedProducts.body.data.products).toHaveLength(1)
     expect(skus.body.data.skus[0]).toMatchObject({ id: 'sku-4', productId: 'product-3' })
+    expect(described.body.data.product).toMatchObject({
+      id: 'product-3',
+      description: '进口羊毛混纺，适合通勤叠穿。',
+    })
+    expect(refreshedProducts.body.data.products[0].description).toBe('进口羊毛混纺，适合通勤叠穿。')
+  })
+
+  it('updates SKU inventory operations and records manual inventory ledger entries', async () => {
+    await seedConfirmedProduct(server.baseUrl)
+
+    const updated = await requestJson(server.baseUrl, '/api/products/product-3/skus/sku-4', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        spec: 'Black/XL',
+        salePrice: 139,
+        stock: 5,
+        reason: '补货入库',
+      }),
+    })
+    const restocked = await requestJson(server.baseUrl, '/api/products/product-3/skus/restock', {
+      method: 'POST',
+      body: JSON.stringify({ quantity: 4, reason: '补货入库' }),
+    })
+    const cleared = await requestJson(server.baseUrl, '/api/products/product-3/skus/clear', {
+      method: 'POST',
+      body: JSON.stringify({ reason: '盘点清零' }),
+    })
+    const skus = await requestJson(server.baseUrl, '/api/products/product-3/skus')
+    const ledger = await database.executor.query<{ quantity_delta: number; source_type: string }>(
+      'SELECT quantity_delta, source_type FROM inventory_ledger ORDER BY created_at, id',
+    )
+
+    expect(updated.body.data.sku).toMatchObject({
+      id: 'sku-4',
+      spec: 'Black/XL',
+      salePrice: 139,
+      stock: 5,
+    })
+    expect(restocked.body.data.skus[0].stock).toBe(9)
+    expect(cleared.body.data.skus[0].stock).toBe(0)
+    expect(skus.body.data.skus[0]).toMatchObject({ spec: 'Black/XL', salePrice: 139, stock: 0 })
+    expect(ledger.rows).toEqual([
+      { quantity_delta: 3, source_type: 'manual' },
+      { quantity_delta: 4, source_type: 'manual' },
+      { quantity_delta: -9, source_type: 'manual' },
+    ])
+  })
+
+  it('blocks publishing and published listing when no SKU is saleable', async () => {
+    await seedConfirmedProduct(server.baseUrl)
+    await requestJson(server.baseUrl, '/api/image-tasks/product-3/supplement', {
+      method: 'POST',
+      body: JSON.stringify({
+        mainImageUrl: 'cloud://main.png',
+        imageUrls: ['cloud://main.png'],
+      }),
+    })
+    await requestJson(server.baseUrl, '/api/products/product-3/skus/clear', {
+      method: 'POST',
+      body: JSON.stringify({ reason: '盘点清零' }),
+    })
+
+    const blocked = await requestJson(server.baseUrl, '/api/products/product-3/publish', { method: 'POST' })
+    const publishedProducts = await requestJson(server.baseUrl, '/api/products/published')
+
+    expect(blocked.status).toBe(409)
+    expect(blocked.body.error.message).toBe('全部规格暂无库存，请先补库存')
+    expect(publishedProducts.body.data.products).toEqual([])
   })
 
   it('rejects unauthorized customer order requests without creating an order', async () => {

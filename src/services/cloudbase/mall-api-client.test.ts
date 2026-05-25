@@ -102,6 +102,79 @@ describe('CloudBase mall API client', () => {
     ])
   })
 
+  it('maps product description updates through mallApi', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        return { product: { id: 'product-1' } } as never
+      },
+    })
+
+    await client.updateProductDescription('product-1', { description: '进口羊毛混纺，适合通勤叠穿。' })
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'updateProductDescription',
+          params: { productId: 'product-1' },
+          payload: { description: '进口羊毛混纺，适合通勤叠穿。' },
+        },
+      },
+    ])
+  })
+
+  it('maps SKU inventory operations through mallApi', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        return { sku: { id: 'sku-1' }, skus: [] } as never
+      },
+    })
+
+    await client.updateSku('product-1', 'sku-1', {
+      spec: 'Black/XL',
+      salePrice: 139,
+      stock: 5,
+      reason: '补货入库',
+    })
+    await client.restockSkus('product-1', { quantity: 4, reason: '补货入库' })
+    await client.clearSkuStock('product-1', { reason: '盘点清零' })
+
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'updateSku',
+          params: { productId: 'product-1', skuId: 'sku-1' },
+          payload: {
+            spec: 'Black/XL',
+            salePrice: 139,
+            stock: 5,
+            reason: '补货入库',
+          },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'restockSkus',
+          params: { productId: 'product-1' },
+          payload: { quantity: 4, reason: '补货入库' },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'clearSkuStock',
+          params: { productId: 'product-1' },
+          payload: { reason: '盘点清零' },
+        },
+      },
+    ])
+  })
+
   it('maps OCR job list and retry actions through mallApi', async () => {
     const calls: Array<{ name: string; data: unknown }> = []
     const client = createCloudBaseMallApiClient({

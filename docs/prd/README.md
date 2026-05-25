@@ -29,6 +29,10 @@ YYYY-MM-DD-功能名称-prd.md
 - `2026-05-08-enterprise-launch-master-prd.md`：企业级上线、持续迭代、真实后端、真实存储、真实微信能力、真实 OCR/AI、UI 重构、发布验收和回滚治理总纲。后续阶段任务必须以它为总路线。
 - `2026-05-19-enterprise-launch-risk-grouped-prd.md`：在主 PRD 基础上，将剩余上线缺口按风险分组重排为生产配置、真实 OCR、订单运营、图片复验、备份回滚、合规发布、监控和最终 readiness gate 的执行总控文档。
 
+商品管理增强：
+
+- `2026-05-25-product-management-operations-prd.md`：商品管理运营能力补齐，覆盖商品简介编辑、SKU/库存编辑工作台、上架前校验和客户详情展示规则。
+
 Phase 2 路线更新：
 
 - `2026-05-09-phase-2-real-backend-persistence-prd.md`：Phase 2 后端与持久化阶段 PRD。2026-05-09 起已更新为 CloudBase 官方路线；文档中保留 PostgreSQL 工程基线的历史说明，但后续默认不再以 `DATABASE_URL` / SQL migration 作为实施方向。
@@ -36,6 +40,7 @@ Phase 2 路线更新：
 
 最新交付记录：
 
+- `../plans/2026-05-25-product-management-operations-delivery-log.md`
 - `../plans/2026-05-19-risk-group-a-production-config-gate-log.md`
 - `../plans/2026-05-19-risk-group-b-ocr-job-main-chain-log.md`
 - `../plans/2026-05-08-customer-wechat-auth-order-delivery-log.md`

@@ -4,6 +4,7 @@ export type Product = {
   id: string
   productCode: string
   productName: string
+  description: string
   mainImageUrl: string
   imageUrls: string[]
   status: ProductStatus

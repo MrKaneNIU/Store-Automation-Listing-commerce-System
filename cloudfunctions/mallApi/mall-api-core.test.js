@@ -428,6 +428,36 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     })
   })
 
+  it('blocks publishing and customer summaries when a product has no saleable SKU', async () => {
+    const handler = createHandler()
+    const { product } = await createProductFixture(handler)
+    await handler({
+      action: 'clearSkuStock',
+      identity: ownerIdentity,
+      params: { productId: product.id },
+      payload: { reason: '盘点清零' },
+    })
+
+    const blocked = await handler({
+      action: 'publishProduct',
+      identity: ownerIdentity,
+      params: { productId: product.id },
+    })
+    const summaries = await handler({
+      action: 'listPublishedProductSummaries',
+      identity: customerIdentity,
+    })
+
+    expect(blocked).toMatchObject({
+      success: false,
+      error: {
+        code: 'CONFLICT',
+        message: '全部规格暂无库存，请先补库存',
+      },
+    })
+    expect(summaries.data.products).toEqual([])
+  })
+
   it('creates OCR jobs and rejects retry unless the job has failed', async () => {
     const handler = createHandler()
     const created = await handler({
@@ -789,6 +819,62 @@ describe('mallApi Phase 4 auth and role permissions', () => {
       },
     })
     expect(ledger.map((entry) => entry.action)).toEqual(['reserve', 'confirm'])
+  })
+
+  it('updates SKU inventory operations and writes manual ledger entries', async () => {
+    const store = createStore()
+    const handler = createMallApiHandler(store, {
+      createId: (() => {
+        let index = 0
+        return (prefix) => `${prefix}-${++index}`
+      })(),
+      now: () => '2026-05-11T00:00:00.000Z',
+      allowTestIdentityRoles: true,
+    })
+    const { product, sku } = await createProductFixture(handler)
+
+    const updated = await handler({
+      action: 'updateSku',
+      identity: ownerIdentity,
+      params: { productId: product.id, skuId: sku.id },
+      payload: {
+        spec: 'Black/XL',
+        salePrice: 139,
+        stock: 5,
+        reason: '补货入库',
+      },
+    })
+    const restocked = await handler({
+      action: 'restockSkus',
+      identity: ownerIdentity,
+      params: { productId: product.id },
+      payload: { quantity: 4, reason: '补货入库' },
+    })
+    const cleared = await handler({
+      action: 'clearSkuStock',
+      identity: ownerIdentity,
+      params: { productId: product.id },
+      payload: { reason: '盘点清零' },
+    })
+    const ledger = await store.list('inventory_ledger')
+
+    expect(updated).toMatchObject({
+      success: true,
+      data: {
+        sku: { id: sku.id, spec: 'Black/XL', salePrice: 139, stock: 5 },
+      },
+    })
+    expect(restocked.data.skus[0].stock).toBe(9)
+    expect(cleared.data.skus[0].stock).toBe(0)
+    expect(ledger.map((entry) => ({
+      action: entry.action,
+      quantityDelta: entry.quantity_delta,
+      sourceType: entry.source_type,
+    }))).toEqual([
+      { action: 'adjust', quantityDelta: 3, sourceType: 'manual' },
+      { action: 'adjust', quantityDelta: 4, sourceType: 'manual' },
+      { action: 'adjust', quantityDelta: -9, sourceType: 'manual' },
+    ])
   })
 
   it('allows staff image supplementation but denies staff publishing', async () => {

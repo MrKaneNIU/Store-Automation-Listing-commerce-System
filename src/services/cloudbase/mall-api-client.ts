@@ -47,6 +47,26 @@ type SupplementProductImagesInput = {
   imageUrls: string[]
 }
 
+type UpdateProductDescriptionInput = {
+  description: string
+}
+
+type UpdateSkuInput = {
+  spec: string
+  salePrice: number
+  stock: number
+  reason: string
+}
+
+type RestockSkusInput = {
+  quantity: number
+  reason: string
+}
+
+type ClearSkuStockInput = {
+  reason: string
+}
+
 type CustomerIdentity = {
   id: string
   openid: string
@@ -104,6 +124,10 @@ export type CloudBaseMallApiClient = {
   listProducts: () => Promise<{ products: Product[] }>
   listPublishedProducts: () => Promise<{ products: Product[] }>
   listPublishedProductSummaries: () => Promise<{ products: PublishedProductSummary[] }>
+  updateProductDescription: (productId: string, input: UpdateProductDescriptionInput) => Promise<{ product: Product }>
+  updateSku: (productId: string, skuId: string, input: UpdateSkuInput) => Promise<{ sku: Sku }>
+  restockSkus: (productId: string, input: RestockSkusInput) => Promise<{ skus: Sku[] }>
+  clearSkuStock: (productId: string, input: ClearSkuStockInput) => Promise<{ skus: Sku[] }>
   publishProduct: (productId: string) => Promise<{ product: Product }>
   listSkus: (productId: string) => Promise<{ skus: Sku[] }>
   listPendingImageTasks: () => Promise<{ products: Product[] }>
@@ -188,6 +212,18 @@ export const createCloudBaseMallApiClient = (
   },
   listPublishedProductSummaries() {
     return callMallApi(functionClient, { action: 'listPublishedProductSummaries' })
+  },
+  updateProductDescription(productId, input) {
+    return callMallApi(functionClient, { action: 'updateProductDescription', params: { productId }, payload: input })
+  },
+  updateSku(productId, skuId, input) {
+    return callMallApi(functionClient, { action: 'updateSku', params: { productId, skuId }, payload: input })
+  },
+  restockSkus(productId, input) {
+    return callMallApi(functionClient, { action: 'restockSkus', params: { productId }, payload: input })
+  },
+  clearSkuStock(productId, input) {
+    return callMallApi(functionClient, { action: 'clearSkuStock', params: { productId }, payload: input })
   },
   publishProduct(productId) {
     return callMallApi(functionClient, { action: 'publishProduct', params: { productId } })

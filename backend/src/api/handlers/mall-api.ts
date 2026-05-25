@@ -2,9 +2,13 @@ import { backendErrorCodes } from '../../http/errors'
 import { createErrorEnvelope, createSuccessEnvelope, sendJson } from '../../http/response'
 import { conflictError, notFoundError, unauthorizedError, validationError, type ApiError } from '../errors'
 import {
+  parseClearSkuStockInput,
   parseCreateOcrBatchInput,
   parseCustomerOrderInput,
   parseDraftPatchInput,
+  parseProductDescriptionInput,
+  parseRestockSkusInput,
+  parseSkuUpdateInput,
   parseSupplementImagesInput,
 } from '../schemas'
 
@@ -52,6 +56,7 @@ type Product = {
   id: string
   productCode: string
   productName: string
+  description: string
   mainImageUrl: string
   imageUrls: string[]
   status: ProductStatus
@@ -110,6 +115,17 @@ export type MallApiRepository = {
   saveOrder: (order: Order) => Promise<Order>
   updateOrder: (order: Order) => Promise<Order>
   listOrders: () => Promise<Order[]>
+  saveInventoryLedgerEntry: (entry: {
+    id: string
+    skuId: string
+    orderId?: string
+    action: 'reserve' | 'release' | 'confirm' | 'adjust'
+    quantityDelta: number
+    sourceType: 'order' | 'manual'
+    sourceId: string
+    note: string
+    createdAt: string
+  }) => Promise<unknown>
 }
 
 export type MallApiContext = {
@@ -191,6 +207,60 @@ const listProductOrThrow = async (repository: MallApiRepository, productId: stri
   return product
 }
 
+const listSkuOrThrow = async (repository: MallApiRepository, productId: string, skuId: string): Promise<Sku> => {
+  const sku = (await repository.listSkus(productId)).find((item) => item.id === skuId)
+  if (!sku) {
+    throw notFoundError('SKU not found')
+  }
+
+  return sku
+}
+
+const validateProductForPublish = (product: Product, skus: Sku[]): string[] => {
+  const productSkus = skus.filter((sku) => sku.productId === product.id)
+  const saleableSkus = productSkus.filter((sku) => sku.stock > 0)
+  const normalizedSpecs = productSkus.map((sku) => sku.spec.trim()).filter(Boolean)
+  const messages: string[] = []
+
+  if (!product.mainImageUrl.trim()) {
+    messages.push('缺少主图，无法上架')
+  }
+  if (productSkus.length === 0) {
+    messages.push('没有可售规格，无法上架')
+  } else if (saleableSkus.length === 0) {
+    messages.push('全部规格暂无库存，请先补库存')
+  }
+  if (saleableSkus.some((sku) => sku.salePrice <= 0)) {
+    messages.push('存在价格为 0 的规格，请先补全售价')
+  }
+  if (saleableSkus.some((sku) => !sku.spec.trim())) {
+    messages.push('存在规格名为空的规格，请先补全规格名')
+  }
+  if (normalizedSpecs.length !== new Set(normalizedSpecs).size) {
+    messages.push('存在重复规格，请先合并或修改')
+  }
+
+  return messages
+}
+
+const saveManualInventoryLedgerEntry = (
+  context: MallApiContext,
+  sku: Sku,
+  quantityDelta: number,
+  reason: string,
+): Promise<unknown> => {
+  return context.repository.saveInventoryLedgerEntry({
+    id: context.createId('ledger'),
+    skuId: sku.id,
+    action: 'adjust',
+    quantityDelta,
+    sourceType: 'manual',
+    sourceId: sku.id,
+    note: reason,
+    createdAt: context.now(),
+  })
+}
+
 const listOrderOrThrow = async (repository: MallApiRepository, orderId: string): Promise<Order> => {
   const order = (await repository.listOrders()).find((item) => item.id === orderId)
   if (!order) {
@@ -225,6 +295,7 @@ const createProductsFromDrafts = (
           id: context.createId('product'),
           productCode: draft.productCode,
           productName: draft.productName,
+          description: '',
           mainImageUrl: '',
           imageUrls: [],
           status: 'pending_images',
@@ -383,15 +454,29 @@ export const apiHandlers: Record<string, RouteHandler> = {
   },
 
   async listPublishedProducts(request, context) {
-    const products = (await context.repository.listProducts()).filter((product) => product.status === 'published')
-    sendSuccess(request.response, 200, { products })
+    const products = await context.repository.listProducts()
+    const skus = await context.repository.listSkus()
+    const publishedProducts = products.filter((product) => product.status === 'published' && validateProductForPublish(product, skus).length === 0)
+    sendSuccess(request.response, 200, { products: publishedProducts })
+  },
+
+  async updateProductDescription(request, context) {
+    const input = parseProductDescriptionInput(request.body)
+    const product = await listProductOrThrow(context.repository, request.params.productId)
+    const updated = await context.repository.updateProduct({
+      ...product,
+      description: input.description,
+      updatedAt: context.now(),
+    })
+    sendSuccess(request.response, 200, { product: updated })
   },
 
   async publishProduct(request, context) {
     const product = await listProductOrThrow(context.repository, request.params.productId)
     const skus = await context.repository.listSkus(product.id)
-    if (!product.mainImageUrl || skus.length === 0) {
-      throw conflictError('Product requires a main image and at least one SKU before publishing')
+    const publishMessages = validateProductForPublish(product, skus)
+    if (publishMessages.length > 0) {
+      throw conflictError(publishMessages[0])
     }
 
     const updated = await context.repository.updateProduct({
@@ -405,6 +490,52 @@ export const apiHandlers: Record<string, RouteHandler> = {
   async listSkus(request, context) {
     await listProductOrThrow(context.repository, request.params.productId)
     sendSuccess(request.response, 200, { skus: await context.repository.listSkus(request.params.productId) })
+  },
+
+  async updateSku(request, context) {
+    const input = parseSkuUpdateInput(request.body)
+    await listProductOrThrow(context.repository, request.params.productId)
+    const sku = await listSkuOrThrow(context.repository, request.params.productId, request.params.skuId)
+    const updated = await context.repository.updateSku({
+      ...sku,
+      spec: input.spec,
+      salePrice: input.salePrice,
+      stock: input.stock,
+    })
+    const quantityDelta = input.stock - sku.stock
+    if (quantityDelta !== 0) {
+      await saveManualInventoryLedgerEntry(context, sku, quantityDelta, input.reason)
+    }
+
+    sendSuccess(request.response, 200, { sku: updated })
+  },
+
+  async restockSkus(request, context) {
+    const input = parseRestockSkusInput(request.body)
+    await listProductOrThrow(context.repository, request.params.productId)
+    const updatedSkus: Sku[] = []
+
+    for (const sku of await context.repository.listSkus(request.params.productId)) {
+      updatedSkus.push(await context.repository.updateSku({ ...sku, stock: sku.stock + input.quantity }))
+      await saveManualInventoryLedgerEntry(context, sku, input.quantity, input.reason)
+    }
+
+    sendSuccess(request.response, 200, { skus: updatedSkus })
+  },
+
+  async clearSkuStock(request, context) {
+    const input = parseClearSkuStockInput(request.body)
+    await listProductOrThrow(context.repository, request.params.productId)
+    const updatedSkus: Sku[] = []
+
+    for (const sku of await context.repository.listSkus(request.params.productId)) {
+      updatedSkus.push(await context.repository.updateSku({ ...sku, stock: 0 }))
+      if (sku.stock !== 0) {
+        await saveManualInventoryLedgerEntry(context, sku, -sku.stock, input.reason)
+      }
+    }
+
+    sendSuccess(request.response, 200, { skus: updatedSkus })
   },
 
   async listPendingImageTasks(request, context) {

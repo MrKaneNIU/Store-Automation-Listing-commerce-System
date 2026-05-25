@@ -66,7 +66,7 @@
 
         <text class="title">{{ viewModel.product.productName }}</text>
         <text class="detail-price">{{ selectedPrice }}</text>
-        <text class="detail-copy">利落廓形与精致比例适合通勤和晚间场景。浏览本页不会触发登录，下单时才进入微信授权。</text>
+        <text class="detail-copy">{{ viewModel.descriptionText }}</text>
 
         <view class="selector-row">
           <view class="select-box">
@@ -89,7 +89,6 @@
             :key="sku.id"
             class="spec-pill"
             :class="{ active: sku.isSelected, disabled: sku.isDisabled }"
-            :disabled="sku.isDisabled"
             @tap="selectSku(sku.id)"
           >
             <text>{{ sku.spec }}</text>
@@ -137,6 +136,27 @@
           </view>
         </view>
       </view>
+
+      <view v-if="phoneCodeRequest" class="modal-layer">
+        <view class="modal-sheet">
+          <button class="modal-close" aria-label="关闭手机号授权弹窗" @tap="resolvePhoneCode(null)">
+            <text>×</text>
+          </button>
+          <text class="modal-kicker">PHONE ACCESS</text>
+          <text class="modal-title">授权手机号</text>
+          <text class="modal-copy">微信会返回一次性手机号授权 code，后端会用它换取真实手机号并创建订单。</text>
+          <view class="modal-actions">
+            <button class="secondary-action" @tap="resolvePhoneCode(null)">暂不授权</button>
+            <button
+              class="primary-button compact"
+              open-type="getPhoneNumber"
+              @getphonenumber="handlePhoneNumberAuthorization"
+            >
+              <text>微信授权</text>
+            </button>
+          </view>
+        </view>
+      </view>
     </view>
 
     <view v-else class="empty-state">
@@ -169,20 +189,35 @@ import {
   selectCloudBaseCustomerProductSku,
   submitCloudBaseCustomerProductDetailOrder,
 } from '../../../features/cloudbase-mall/customer-product-detail'
+import { createCloudBaseWechatAuthService } from '../../../services/auth/cloudbase-wechat-auth-service'
 
 type AuthPrompt = {
   content: string
   resolve: (value: boolean) => void
 }
 
+type PhoneCodeRequest = {
+  resolve: (value: string | null) => void
+}
+
+type PhoneNumberAuthorizationEvent = {
+  detail?: {
+    code?: string
+    errMsg?: string
+  }
+}
+
 const productId = ref('')
 const selectedSkuId = ref('')
 const message = ref('')
 const authPrompt = ref<AuthPrompt | null>(null)
+const phoneCodeRequest = ref<PhoneCodeRequest | null>(null)
 const isDetailLoading = ref(true)
 const isBackNavigating = ref(false)
+const customerAuthService = createCloudBaseWechatAuthService()
 const viewModel = ref<CustomerProductDetailViewModel>({
   product: null,
+  descriptionText: '暂无商品简介，商家正在完善中。',
   skus: [],
   isPublished: false,
   canSubmitOrder: false,
@@ -264,6 +299,22 @@ const resolveAuthPrompt = (value: boolean) => {
   prompt?.resolve(value)
 }
 
+const requestPhoneCode = () =>
+  new Promise<string | null>((resolve) => {
+    phoneCodeRequest.value = { resolve }
+  })
+
+const resolvePhoneCode = (code: string | null) => {
+  const request = phoneCodeRequest.value
+  phoneCodeRequest.value = null
+  request?.resolve(code)
+}
+
+const handlePhoneNumberAuthorization = (event: PhoneNumberAuthorizationEvent) => {
+  const code = event.detail?.code
+  resolvePhoneCode(code && code.trim() ? code : null)
+}
+
 const submitOrder = async () => {
   if (!viewModel.value.canSubmitOrder) {
     message.value = '请选择有库存的规格'
@@ -274,8 +325,10 @@ const submitOrder = async () => {
     productId: productId.value,
     skuId: selectedSkuId.value,
     quantity: 1,
+    authService: customerAuthService,
     confirmLogin: () => confirmModal('浏览商品不需要登录。只有你确认下单时，真实小程序才会触发微信快捷登录。'),
     confirmPhoneAuthorization: () => confirmModal('需要授权微信绑定手机号，用于商家确认订单。'),
+    requestPhoneNumber: requestPhoneCode,
   })
   message.value = result.message
   await refreshView({ showLoading: false })

@@ -49,6 +49,7 @@ const product: Product = {
   id: 'product-1',
   productCode: 'A1023',
   productName: 'Test Product',
+  description: '',
   mainImageUrl: '',
   imageUrls: [],
   status: 'pending_images',

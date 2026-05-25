@@ -56,6 +56,7 @@ export const initialPhase2SchemaMigration: Migration = {
       id TEXT PRIMARY KEY,
       product_code TEXT NOT NULL UNIQUE,
       product_name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
       main_image_url TEXT NOT NULL DEFAULT '',
       image_urls TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
       status TEXT NOT NULL CHECK (status IN ('pending_images', 'ready_to_publish', 'published')),

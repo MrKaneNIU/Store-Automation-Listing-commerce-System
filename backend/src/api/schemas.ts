@@ -34,6 +34,26 @@ export type SupplementImagesInput = {
   imageUrls: string[]
 }
 
+export type ProductDescriptionInput = {
+  description: string
+}
+
+export type SkuUpdateInput = {
+  spec: string
+  salePrice: number
+  stock: number
+  reason: string
+}
+
+export type RestockSkusInput = {
+  quantity: number
+  reason: string
+}
+
+export type ClearSkuStockInput = {
+  reason: string
+}
+
 export type CustomerOrderInput = {
   productId: string
   skuId: string
@@ -66,6 +86,15 @@ const readOptionalString = (input: JsonObject, field: string): string | undefine
   }
   if (typeof value !== 'string' || value.trim() === '') {
     throw validationError(`${field} must be a non-empty string`)
+  }
+
+  return value
+}
+
+const readEditableString = (input: JsonObject, field: string): string => {
+  const value = input[field]
+  if (typeof value !== 'string') {
+    throw validationError(`${field} must be a string`)
   }
 
   return value
@@ -191,6 +220,53 @@ export const parseSupplementImagesInput = (value: unknown): SupplementImagesInpu
   return {
     mainImageUrl: readString(value, 'mainImageUrl'),
     imageUrls: readStringArray(value, 'imageUrls', 'imageUrls must contain at least one image URL'),
+  }
+}
+
+export const parseProductDescriptionInput = (value: unknown): ProductDescriptionInput => {
+  if (!isObject(value)) {
+    throw validationError('Request body must be a JSON object')
+  }
+
+  const description = readEditableString(value, 'description').trim()
+  if (description.length > 120) {
+    throw validationError('description must be 120 characters or fewer')
+  }
+
+  return { description }
+}
+
+export const parseSkuUpdateInput = (value: unknown): SkuUpdateInput => {
+  if (!isObject(value)) {
+    throw validationError('Request body must be a JSON object')
+  }
+
+  return {
+    spec: readString(value, 'spec').trim(),
+    salePrice: readPositiveNumber(value, 'salePrice'),
+    stock: readNonNegativeInteger(value, 'stock'),
+    reason: readString(value, 'reason').trim(),
+  }
+}
+
+export const parseRestockSkusInput = (value: unknown): RestockSkusInput => {
+  if (!isObject(value)) {
+    throw validationError('Request body must be a JSON object')
+  }
+
+  return {
+    quantity: readPositiveInteger(value, 'quantity'),
+    reason: readString(value, 'reason').trim(),
+  }
+}
+
+export const parseClearSkuStockInput = (value: unknown): ClearSkuStockInput => {
+  if (!isObject(value)) {
+    throw validationError('Request body must be a JSON object')
+  }
+
+  return {
+    reason: readString(value, 'reason').trim(),
   }
 }
 
