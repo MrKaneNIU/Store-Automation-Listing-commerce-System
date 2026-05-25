@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const ownerPageSource = (page: string) => readFileSync(resolve(__dirname, page), 'utf8')
+const productsNavigationSource = () => readFileSync(resolve(__dirname, 'products/useOwnerProductsPageState.ts'), 'utf8')
 
 describe('owner navigation recovery contract', () => {
   it('resets tab navigation locks when route changes complete or are blocked', () => {
@@ -19,9 +20,14 @@ describe('owner navigation recovery contract', () => {
 
     for (const page of pages) {
       const source = ownerPageSource(page)
+      const navigationSource = page === 'products/index.vue' ? productsNavigationSource() : source
 
-      expect(source, page).toContain('onComplete')
-      expect(source, page).toContain("navigatingRoute.value = ''")
+      if (page === 'products/index.vue') {
+        expect(source, page).toContain("import { useOwnerProductsPageState } from './useOwnerProductsPageState'")
+      }
+
+      expect(navigationSource, page).toContain('onComplete')
+      expect(navigationSource, page).toContain("navigatingRoute.value = ''")
     }
   })
 

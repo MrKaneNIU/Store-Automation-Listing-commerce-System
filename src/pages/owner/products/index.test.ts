@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
 const source = readFileSync(path.resolve(__dirname, 'index.vue'), 'utf8')
+const stateSource = readFileSync(path.resolve(__dirname, 'useOwnerProductsPageState.ts'), 'utf8')
 
 describe('owner products description editing wiring', () => {
   it('renders product description summaries and the edit entry', () => {
@@ -12,22 +13,24 @@ describe('owner products description editing wiring', () => {
   })
 
   it('saves descriptions through the CloudBase owner products facade', () => {
-    expect(source).toContain('updateCloudBaseOwnerProductDescription')
+    expect(source).toContain("import { useOwnerProductsPageState } from './useOwnerProductsPageState'")
+    expect(source).not.toContain('updateCloudBaseOwnerProductDescription')
+    expect(stateSource).toContain('updateCloudBaseOwnerProductDescription')
     expect(source).toContain('saveDescription')
     expect(source).not.toContain('mockDb')
     expect(source).not.toContain('mallRepository')
   })
 
   it('clears the modal editing state after a successful description save', () => {
-    expect(source).toContain("if (result.message === '商品简介已保存') {")
-    expect(source).toContain('resetDescriptionEditor()')
-    expect(source).not.toContain("if (result.message === '商品简介已保存') {\n      closeDescriptionEditor()")
+    expect(stateSource).toContain("if (result.message === '商品简介已保存') {")
+    expect(stateSource).toContain('resetDescriptionEditor()')
+    expect(stateSource).not.toContain("if (result.message === '商品简介已保存') {\n      closeDescriptionEditor()")
   })
 
   it('opens the editor with an empty draft when older product records have no description', () => {
     expect(source).toContain("openDescriptionEditor(product.id, product.description || '')")
-    expect(source).toContain("const openDescriptionEditor = (productId: string, description = '')")
-    expect(source).toContain("descriptionDraft.value = description || ''")
+    expect(stateSource).toContain("const openDescriptionEditor = (productId: string, description = '')")
+    expect(stateSource).toContain("descriptionDraft.value = description || ''")
   })
 
   it('keeps the first phase description editor limited to 120 characters', () => {
@@ -38,10 +41,11 @@ describe('owner products description editing wiring', () => {
 
   it('renders the SKU inventory workbench through CloudBase owner products facade calls', () => {
     expect(source).toContain('规格库存')
-    expect(source).toContain('getCloudBaseOwnerProductSkuInventoryView')
-    expect(source).toContain('updateCloudBaseOwnerProductSku')
-    expect(source).toContain('restockCloudBaseOwnerProductSkus')
-    expect(source).toContain('clearCloudBaseOwnerProductSkuStock')
+    expect(source).not.toContain('getCloudBaseOwnerProductSkuInventoryView')
+    expect(stateSource).toContain('getCloudBaseOwnerProductSkuInventoryView')
+    expect(stateSource).toContain('updateCloudBaseOwnerProductSku')
+    expect(stateSource).toContain('restockCloudBaseOwnerProductSkus')
+    expect(stateSource).toContain('clearCloudBaseOwnerProductSkuStock')
     expect(source).toContain('class="sku-row"')
     expect(source).not.toContain('mallRepository')
   })
