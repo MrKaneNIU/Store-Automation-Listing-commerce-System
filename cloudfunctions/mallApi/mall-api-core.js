@@ -1441,4 +1441,5 @@ module.exports = {
   createHttpOcrProviderFromEnv,
   createMallApiHandler,
   createMemoryDocumentStore,
+  validateProductForPublish,
 }

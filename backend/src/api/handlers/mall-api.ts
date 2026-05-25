@@ -216,7 +216,7 @@ const listSkuOrThrow = async (repository: MallApiRepository, productId: string, 
   return sku
 }
 
-const validateProductForPublish = (product: Product, skus: Sku[]): string[] => {
+export const validateProductForPublish = (product: Product, skus: Sku[]): string[] => {
   const productSkus = skus.filter((sku) => sku.productId === product.id)
   const saleableSkus = productSkus.filter((sku) => sku.stock > 0)
   const normalizedSpecs = productSkus.map((sku) => sku.spec.trim()).filter(Boolean)

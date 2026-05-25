@@ -1,6 +1,21 @@
+import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
 import { canPublishProduct, createProductsFromDrafts, validateProductForPublish } from './rules'
+import type { Product, Sku } from './types'
 import type { ProductDraft } from '../draft/types'
+
+const require = createRequire(import.meta.url)
+
+type ProductPublishValidationCase = {
+  name: string
+  product: Product
+  skus: Sku[]
+  expectedMessages: string[]
+}
+
+const { productPublishValidationCases } = require('../../../tests/contracts/product-publish-validation-cases.cjs') as {
+  productPublishValidationCases: ProductPublishValidationCase[]
+}
 
 const baseDraft = {
   batchId: 'batch-1',
@@ -191,5 +206,12 @@ describe('validateProductForPublish', () => {
         { ...sku, id: 'sku-2', spec: ' Black/M ' },
       ]).messages,
     ).toEqual(['存在重复规格，请先合并或修改'])
+  })
+
+  it.each(productPublishValidationCases)('matches the shared publish validation contract: $name', (contractCase) => {
+    const result = validateProductForPublish(contractCase.product, contractCase.skus)
+
+    expect(result.messages).toEqual(contractCase.expectedMessages)
+    expect(result.canPublish).toBe(contractCase.expectedMessages.length === 0)
   })
 })

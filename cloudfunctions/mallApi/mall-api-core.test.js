@@ -6,7 +6,9 @@ const {
   createMallApiHandler,
   createMemoryDocumentStore,
   createHttpOcrProviderFromEnv,
+  validateProductForPublish,
 } = require('./mall-api-core')
+const { productPublishValidationCases } = require('../../tests/contracts/product-publish-validation-cases.cjs')
 
 const createHandler = (options = {}) =>
   createMallApiHandler(createMemoryDocumentStore(), {
@@ -903,5 +905,11 @@ describe('mallApi Phase 4 auth and role permissions', () => {
         code: 'FORBIDDEN',
       },
     })
+  })
+})
+
+describe('mallApi publish validation contract', () => {
+  it.each(productPublishValidationCases)('matches the shared publish validation contract: $name', (contractCase) => {
+    expect(validateProductForPublish(contractCase.product, contractCase.skus)).toEqual(contractCase.expectedMessages)
   })
 })

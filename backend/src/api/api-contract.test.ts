@@ -1,4 +1,5 @@
 import { createServer } from 'node:http'
+import { createRequire } from 'node:module'
 import type { Server } from 'node:http'
 import { newDb } from 'pg-mem'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -6,7 +7,21 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { DatabaseExecutor, TransactionalDatabaseExecutor } from '../db/client'
 import { applyMigrations } from '../db/migrate'
 import { createDatabaseMallRepository } from '../repositories/database-mall-repository'
+import { validateProductForPublish as validateBackendProductForPublish } from './handlers/mall-api'
 import { createApiRequestHandler } from './routes'
+
+const require = createRequire(import.meta.url)
+
+type ProductPublishValidationCase = {
+  name: string
+  product: Parameters<typeof validateBackendProductForPublish>[0]
+  skus: Parameters<typeof validateBackendProductForPublish>[1]
+  expectedMessages: string[]
+}
+
+const { productPublishValidationCases } = require('../../../tests/contracts/product-publish-validation-cases.cjs') as {
+  productPublishValidationCases: ProductPublishValidationCase[]
+}
 
 type TestDatabase = {
   executor: TransactionalDatabaseExecutor
@@ -392,6 +407,14 @@ describe('Phase 2.4 API contract', () => {
     expect(invalidConfirm.status).toBe(409)
     expect(invalidConfirm.body.error.code).toBe('CONFLICT')
     expect(skus.body.data.skus[0].stock).toBe(2)
+  })
+})
+
+describe('backend publish validation contract', () => {
+  it.each(productPublishValidationCases)('matches the shared publish validation contract: $name', (contractCase) => {
+    expect(validateBackendProductForPublish(contractCase.product, contractCase.skus)).toEqual(
+      contractCase.expectedMessages,
+    )
   })
 })
 
