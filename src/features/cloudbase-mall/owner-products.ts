@@ -2,6 +2,8 @@ import type { Product, ProductStatus } from '../../domain/catalog/types'
 import { validateProductForPublish } from '../../domain/catalog/rules'
 import { getRuntimeCloudBaseMallApiClient } from '../../services/cloudbase/runtime-mall-api-client'
 import type { CloudBaseMallApiClient } from '../../services/cloudbase/mall-api-client'
+import { resolveProductImageFields } from '../../services/storage/product-image-url'
+import { uploadService } from '../../services/storage/runtime-upload-service'
 import {
   ownerProductStatusOptions,
   productDescriptionMaxLength,
@@ -26,9 +28,10 @@ const toListItem = async (
 ): Promise<OwnerProductListItem> => {
   const { skus } = await client.listSkus(product.id)
   const validation = validateProductForPublish(product, skus)
+  const renderableProduct = await resolveProductImageFields(product, uploadService)
 
   return {
-    ...product,
+    ...renderableProduct,
     statusLabel: statusLabels[product.status],
     skuCount: skus.length,
     canPublish: product.status === 'ready_to_publish' && validation.canPublish,
@@ -73,6 +76,22 @@ export const publishReadyCloudBaseOwnerProducts = async (
 
   await Promise.all(readyProducts.map((product) => client.publishProduct(product.id)))
   return { message: `已上架 ${readyProducts.length} 个商品` }
+}
+
+export const unpublishCloudBaseOwnerProduct = async (
+  productId: string,
+  client: CloudBaseMallApiClient = getRuntimeCloudBaseMallApiClient(),
+): Promise<OwnerProductCommandResult> => {
+  const { product } = await client.unpublishProduct(productId)
+  return { message: `${product.productCode} 已下架` }
+}
+
+export const deleteCloudBaseOwnerProduct = async (
+  productId: string,
+  client: CloudBaseMallApiClient = getRuntimeCloudBaseMallApiClient(),
+): Promise<OwnerProductCommandResult> => {
+  const { product, deletedSkuCount } = await client.deleteProduct(productId)
+  return { message: `${product.productCode} 已删除，移除 ${deletedSkuCount} 个规格` }
 }
 
 export const updateCloudBaseOwnerProductDescription = async (

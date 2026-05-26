@@ -158,6 +158,9 @@ const readImageSize = async (filePath: string): Promise<number> => {
   return 0
 }
 
+const shouldPersistCloudFileIds = (context: UploadContext): boolean =>
+  context.businessType === 'product_main_image' || context.businessType === 'product_detail_image'
+
 const uploadFiles = async (filePaths: string[], context: UploadContext): Promise<UploadResult> => {
   const runtime = ensureRuntime()
   const assets: UploadedAsset[] = []
@@ -203,9 +206,12 @@ const uploadFiles = async (filePaths: string[], context: UploadContext): Promise
     }
   }
 
+  const useCloudFileIds = shouldPersistCloudFileIds(context)
+  const imageUrls = assets.map((asset) => (useCloudFileIds ? asset.assetId : asset.url))
+
   return {
-    mainImageUrl: assets[0]?.url ?? '',
-    imageUrls: assets.map((asset) => asset.url),
+    mainImageUrl: imageUrls[0] ?? '',
+    imageUrls,
     assets,
   }
 }

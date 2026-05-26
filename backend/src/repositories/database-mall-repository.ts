@@ -563,6 +563,15 @@ export const createDatabaseMallRepository = (database: TransactionalDatabaseExec
     return toProduct(firstRow(rows))
   },
 
+  async deleteProduct(productId: string): Promise<Product | null> {
+    const { rows } = await database.query<ProductRow>(
+      'DELETE FROM products WHERE id = $1 RETURNING *',
+      [productId],
+    )
+
+    return rows[0] ? toProduct(rows[0]) : null
+  },
+
   async listProducts(): Promise<Product[]> {
     const { rows } = await database.query<ProductRow>('SELECT * FROM products ORDER BY created_at, id')
     return rows.map(toProduct)
@@ -572,6 +581,15 @@ export const createDatabaseMallRepository = (database: TransactionalDatabaseExec
     const { rows } = productId
       ? await database.query<SkuRow>('SELECT * FROM skus WHERE product_id = $1 ORDER BY id', [productId])
       : await database.query<SkuRow>('SELECT * FROM skus ORDER BY id')
+
+    return rows.map(toSku)
+  },
+
+  async deleteSkus(productId: string): Promise<Sku[]> {
+    const { rows } = await database.query<SkuRow>(
+      'DELETE FROM skus WHERE product_id = $1 RETURNING *',
+      [productId],
+    )
 
     return rows.map(toSku)
   },

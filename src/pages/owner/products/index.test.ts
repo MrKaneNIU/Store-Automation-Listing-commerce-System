@@ -55,4 +55,13 @@ describe('owner products description editing wiring', () => {
     expect(source).toContain('class="publish-issue"')
     expect(source).not.toContain('mallRepository')
   })
+
+  it('renders owner unpublish and delete actions through the page state composable', () => {
+    expect(source).toContain('unpublishProduct(product.id)')
+    expect(source).toContain('deleteProduct(product.id, product.productCode)')
+    expect(source).not.toContain('unpublishCloudBaseOwnerProduct')
+    expect(source).not.toContain('deleteCloudBaseOwnerProduct')
+    expect(stateSource).toContain('unpublishCloudBaseOwnerProduct')
+    expect(stateSource).toContain('deleteCloudBaseOwnerProduct')
+  })
 })

@@ -12,14 +12,17 @@ import type {
 } from '../../../features/owner-products/owner-products'
 import {
   clearCloudBaseOwnerProductSkuStock,
+  deleteCloudBaseOwnerProduct,
   getCloudBaseOwnerProductsView,
   getCloudBaseOwnerProductSkuInventoryView,
   publishCloudBaseOwnerProduct,
   publishReadyCloudBaseOwnerProducts,
   restockCloudBaseOwnerProductSkus,
+  unpublishCloudBaseOwnerProduct,
   updateCloudBaseOwnerProductSku,
   updateCloudBaseOwnerProductDescription,
 } from '../../../features/cloudbase-mall/owner-products'
+import { isRenderableProductImageUrl } from '../../../services/storage/product-image-url'
 
 type SkuDraft = {
   id: string
@@ -30,6 +33,35 @@ type SkuDraft = {
 
 const DEFAULT_PAGE_TOP_PADDING = 'calc(env(safe-area-inset-top) + 12rpx)'
 const TOP_CONTENT_GAP_RPX = 12
+
+export const isRenderableOwnerProductImageUrl = isRenderableProductImageUrl
+
+const getActionErrorDetail = (error: unknown) => {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim()
+  }
+
+  if (typeof error === 'string' && error.trim()) {
+    return error.trim()
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    const errorLike = error as { errMsg?: unknown; message?: unknown }
+    if (typeof errorLike.message === 'string' && errorLike.message.trim()) {
+      return errorLike.message.trim()
+    }
+    if (typeof errorLike.errMsg === 'string' && errorLike.errMsg.trim()) {
+      return errorLike.errMsg.trim()
+    }
+  }
+
+  return ''
+}
+
+const formatActionFailureMessage = (actionLabel: string, error: unknown) => {
+  const detail = getActionErrorDetail(error)
+  return detail ? `${actionLabel}失败：${detail}` : `${actionLabel}失败，请稍后重试`
+}
 
 const createEmptyProductsView = (): OwnerProductsViewModel => ({
   statusOptions: [],
@@ -53,6 +85,7 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
   const message = ref('')
   const navigatingRoute = ref<AppRoute | ''>('')
   const publishingProductId = ref('')
+  const lifecycleProductId = ref('')
   const isBatchPublishing = ref(false)
   const editingProductId = ref('')
   const descriptionDraft = ref('')
@@ -182,6 +215,8 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
       message.value = result.message
       await loadSkuInventory(inventoryProductId.value)
       await refreshView()
+    } catch (error) {
+      message.value = formatActionFailureMessage('保存规格库存', error)
     } finally {
       isSavingSkuInventory.value = false
     }
@@ -202,6 +237,8 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
       message.value = result.message
       await loadSkuInventory(inventoryProductId.value)
       await refreshView()
+    } catch (error) {
+      message.value = formatActionFailureMessage('补货', error)
     } finally {
       isSavingSkuInventory.value = false
     }
@@ -218,6 +255,8 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
       message.value = result.message
       await loadSkuInventory(inventoryProductId.value)
       await refreshView()
+    } catch (error) {
+      message.value = formatActionFailureMessage('清零库存', error)
     } finally {
       isSavingSkuInventory.value = false
     }
@@ -237,13 +276,15 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
         resetDescriptionEditor()
         await refreshView()
       }
+    } catch (error) {
+      message.value = formatActionFailureMessage('保存商品简介', error)
     } finally {
       isSavingDescription.value = false
     }
   }
 
   const publish = async (productId: string) => {
-    if (publishingProductId.value || isBatchPublishing.value) {
+    if (publishingProductId.value || lifecycleProductId.value || isBatchPublishing.value) {
       return
     }
 
@@ -253,13 +294,75 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
       const result = await publishCloudBaseOwnerProduct(productId)
       message.value = result.message
       await refreshView()
+    } catch (error) {
+      message.value = formatActionFailureMessage('上架商品', error)
     } finally {
       publishingProductId.value = ''
     }
   }
 
+  const unpublishProduct = async (productId: string) => {
+    if (publishingProductId.value || lifecycleProductId.value || isBatchPublishing.value) {
+      return
+    }
+
+    lifecycleProductId.value = productId
+    try {
+      const result = await unpublishCloudBaseOwnerProduct(productId)
+      message.value = result.message
+      await refreshView()
+    } catch (error) {
+      message.value = formatActionFailureMessage('下架商品', error)
+    } finally {
+      lifecycleProductId.value = ''
+    }
+  }
+
+  const confirmDeleteProduct = (productCode?: string) =>
+    new Promise<boolean>((resolve) => {
+      const subject = productCode ? `商品 ${productCode}` : '该商品'
+
+      uni.showModal({
+        title: '删除商品',
+        content: `删除后${subject}和规格会从商品管理中移除，历史订单不受影响。`,
+        confirmText: '删除',
+        cancelText: '取消',
+        confirmColor: '#9f2b2b',
+        success: (result) => resolve(Boolean(result.confirm)),
+        fail: () => resolve(false),
+      })
+    })
+
+  const deleteProduct = async (productId: string, productCode?: string) => {
+    if (publishingProductId.value || lifecycleProductId.value || isBatchPublishing.value) {
+      return
+    }
+
+    const confirmed = await confirmDeleteProduct(productCode)
+    if (!confirmed) {
+      return
+    }
+
+    lifecycleProductId.value = productId
+    try {
+      const result = await deleteCloudBaseOwnerProduct(productId)
+      message.value = result.message
+      if (inventoryProductId.value === productId) {
+        resetSkuInventory()
+      }
+      if (editingProductId.value === productId) {
+        resetDescriptionEditor()
+      }
+      await refreshView()
+    } catch (error) {
+      message.value = formatActionFailureMessage('删除商品', error)
+    } finally {
+      lifecycleProductId.value = ''
+    }
+  }
+
   const publishReadyProducts = async () => {
-    if (isBatchPublishing.value || publishingProductId.value) {
+    if (isBatchPublishing.value || publishingProductId.value || lifecycleProductId.value) {
       return
     }
 
@@ -269,6 +372,8 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
       const result = await publishReadyCloudBaseOwnerProducts()
       message.value = result.message
       await refreshView()
+    } catch (error) {
+      message.value = formatActionFailureMessage('批量上架', error)
     } finally {
       isBatchPublishing.value = false
     }
@@ -299,6 +404,7 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
     message,
     navigatingRoute,
     publishingProductId,
+    lifecycleProductId,
     isBatchPublishing,
     editingProductId,
     descriptionDraft,
@@ -309,6 +415,7 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
     restockQuantityText,
     inventoryReason,
     descriptionFallbackText,
+    isRenderableOwnerProductImageUrl,
     viewModel,
     skuInventoryView,
     skuDrafts,
@@ -327,6 +434,8 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
     clearSkuStock,
     saveDescription,
     publish,
+    unpublishProduct,
+    deleteProduct,
     publishReadyProducts,
   }
 }

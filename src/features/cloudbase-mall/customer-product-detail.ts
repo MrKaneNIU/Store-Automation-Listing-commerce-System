@@ -4,6 +4,8 @@ import { mockWechatAuthService } from '../../services/auth/mock-wechat-auth-serv
 import type { WechatAuthService } from '../../services/auth/wechat-auth-service'
 import { getRuntimeCloudBaseMallApiClient } from '../../services/cloudbase/runtime-mall-api-client'
 import type { CloudBaseMallApiClient } from '../../services/cloudbase/mall-api-client'
+import { resolveProductImageFields } from '../../services/storage/product-image-url'
+import { uploadService } from '../../services/storage/runtime-upload-service'
 import type {
   CustomerProductDetailSkuView,
   CustomerProductDetailViewModel,
@@ -37,12 +39,13 @@ export const getCloudBaseCustomerProductDetailView = async (
   client: CloudBaseMallApiClient = getRuntimeCloudBaseMallApiClient(),
 ): Promise<CustomerProductDetailViewModel> => {
   const product = await findPublishedProduct(productId, client)
+  const renderableProduct = product ? await resolveProductImageFields(product, uploadService) : null
   const skus = product ? (await client.listSkus(product.id)).skus.map((sku) => toSkuView(sku, selectedSkuId)) : []
   const selectedSku = skus.find((sku) => sku.id === selectedSkuId)
 
   return {
-    product,
-    descriptionText: product?.description.trim() ? product.description : productDescriptionFallbackText,
+    product: renderableProduct,
+    descriptionText: renderableProduct?.description.trim() ? renderableProduct.description : productDescriptionFallbackText,
     skus,
     isPublished: Boolean(product),
     canSubmitOrder: Boolean(product && selectedSku && !selectedSku.isDisabled),

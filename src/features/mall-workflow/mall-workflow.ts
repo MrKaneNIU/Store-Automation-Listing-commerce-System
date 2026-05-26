@@ -91,6 +91,14 @@ export const mallWorkflow = {
     }
     return mallRepository.updateProduct({ ...product, status: 'published', updatedAt: nowIso() })
   },
+  unpublishProduct(product: Product) {
+    return mallRepository.updateProduct({ ...product, status: 'ready_to_publish', updatedAt: nowIso() })
+  },
+  deleteProduct(product: Product) {
+    const deletedSkus = mallRepository.deleteSkus(product.id)
+    const deletedProduct = mallRepository.deleteProduct(product.id) ?? product
+    return { product: deletedProduct, deletedSkuCount: deletedSkus.length }
+  },
   updateProductDescription(product: Product, description: string) {
     return mallRepository.updateProduct({ ...product, description, updatedAt: nowIso() })
   },

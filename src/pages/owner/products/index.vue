@@ -52,7 +52,12 @@
     <view v-if="viewModel.products.length > 0" class="product-list">
       <view v-for="product in viewModel.products" :key="product.id" class="product-card">
         <view class="image-shell">
-          <image v-if="product.mainImageUrl" class="thumb" :src="product.mainImageUrl" mode="aspectFill" />
+          <image
+            v-if="isRenderableOwnerProductImageUrl(product.mainImageUrl)"
+            class="thumb"
+            :src="product.mainImageUrl"
+            mode="aspectFill"
+          />
           <view v-else class="image-placeholder">
             <text class="placeholder-text">NO IMAGE</text>
           </view>
@@ -81,13 +86,32 @@
                 v-if="product.canPublish"
                 class="publish-button"
                 :class="{ busy: publishingProductId === product.id }"
-                :disabled="Boolean(publishingProductId) || isBatchPublishing"
+                :disabled="Boolean(publishingProductId) || Boolean(lifecycleProductId) || isBatchPublishing"
                 hover-class="press-feedback"
                 @tap="publish(product.id)"
               >
                 {{ publishingProductId === product.id ? '上架中...' : '上架' }}
               </button>
-              <text v-else class="published-mark">已处理</text>
+              <button
+                v-if="product.status === 'published'"
+                class="unpublish-button"
+                :class="{ busy: lifecycleProductId === product.id }"
+                :disabled="Boolean(publishingProductId) || Boolean(lifecycleProductId) || isBatchPublishing"
+                hover-class="press-feedback"
+                @tap="unpublishProduct(product.id)"
+              >
+                下架
+              </button>
+              <button
+                class="delete-button"
+                :class="{ busy: lifecycleProductId === product.id }"
+                :disabled="Boolean(publishingProductId) || Boolean(lifecycleProductId) || isBatchPublishing"
+                hover-class="press-feedback"
+                @tap="deleteProduct(product.id, product.productCode)"
+              >
+                删除
+              </button>
+              <text v-if="!product.canPublish && product.status !== 'published'" class="published-mark">已处理</text>
             </view>
           </view>
         </view>
@@ -238,6 +262,7 @@ const {
   message,
   navigatingRoute,
   publishingProductId,
+  lifecycleProductId,
   isBatchPublishing,
   editingProductId,
   descriptionDraft,
@@ -248,6 +273,7 @@ const {
   restockQuantityText,
   inventoryReason,
   descriptionFallbackText,
+  isRenderableOwnerProductImageUrl,
   viewModel,
   skuInventoryView,
   skuDrafts,
@@ -263,6 +289,8 @@ const {
   clearSkuStock,
   saveDescription,
   publish,
+  unpublishProduct,
+  deleteProduct,
   publishReadyProducts,
 } = useOwnerProductsPageState()
 </script>
@@ -627,7 +655,9 @@ const {
 
 .description-button,
 .sku-button,
-.publish-button {
+.publish-button,
+.unpublish-button,
+.delete-button {
   flex: 0 0 auto;
   min-width: 104rpx;
   min-height: 60rpx;
@@ -652,6 +682,18 @@ const {
   min-width: 132rpx;
   background: #f1efe9;
   color: #3f3a32;
+}
+
+.unpublish-button {
+  min-width: 104rpx;
+  background: #f5f0e8;
+  color: #6f4e23;
+}
+
+.delete-button {
+  min-width: 104rpx;
+  background: #f8eeee;
+  color: #9f2b2b;
 }
 
 .published-mark {

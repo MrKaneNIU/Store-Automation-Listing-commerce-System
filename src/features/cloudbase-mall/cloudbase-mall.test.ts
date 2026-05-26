@@ -7,9 +7,11 @@ import {
 } from './owner-screenshot-import'
 import {
   clearCloudBaseOwnerProductSkuStock,
+  deleteCloudBaseOwnerProduct,
   getCloudBaseOwnerProductsView,
   getCloudBaseOwnerProductSkuInventoryView,
   restockCloudBaseOwnerProductSkus,
+  unpublishCloudBaseOwnerProduct,
   updateCloudBaseOwnerProductDescription,
   updateCloudBaseOwnerProductSku,
 } from './owner-products'
@@ -61,6 +63,8 @@ const createClient = (overrides: Partial<CloudBaseMallApiClient>): CloudBaseMall
     restockSkus: missing,
     clearSkuStock: missing,
     publishProduct: missing,
+    unpublishProduct: missing,
+    deleteProduct: missing,
     listSkus: missing,
     listPendingImageTasks: missing,
     supplementProductImages: missing,
@@ -280,6 +284,22 @@ describe('CloudBase mall facades', () => {
     expect(client.clearSkuStock).toHaveBeenCalledWith(product.id, { reason: '盘点清零' })
   })
 
+  it('runs owner product unpublish and delete operations through mallApi', async () => {
+    const client = createClient({
+      unpublishProduct: vi.fn(async () => ({ product: { ...product, status: 'ready_to_publish' as const } })),
+      deleteProduct: vi.fn(async () => ({ product, deletedSkuCount: 1 })),
+    })
+
+    await expect(unpublishCloudBaseOwnerProduct(product.id, client)).resolves.toMatchObject({
+      message: expect.stringContaining(product.productCode),
+    })
+    await expect(deleteCloudBaseOwnerProduct(product.id, client)).resolves.toMatchObject({
+      message: expect.stringContaining(product.productCode),
+    })
+    expect(client.unpublishProduct).toHaveBeenCalledWith(product.id)
+    expect(client.deleteProduct).toHaveBeenCalledWith(product.id)
+  })
+
   it('shows CloudBase product detail descriptions with the empty fallback', async () => {
     const client = createClient({
       listPublishedProducts: vi.fn(async () => ({ products: [product, { ...product, id: 'product-2', description: '' }] })),
@@ -325,6 +345,47 @@ describe('CloudBase mall facades', () => {
     })
     expect(listPublishedProductSummaries).toHaveBeenCalledTimes(1)
     expect(listSkus).not.toHaveBeenCalled()
+  })
+
+  it('resolves CloudBase product image file IDs before returning customer and owner ViewModels', async () => {
+    const cloudImageProduct = {
+      ...product,
+      mainImageUrl: 'cloud://asset-main',
+      imageUrls: ['cloud://asset-main'],
+    }
+    const client = createClient({
+      listPublishedProductSummaries: vi.fn(async () => ({ products: [{ ...cloudImageProduct, minPrice: 129 }] })),
+      listPublishedProducts: vi.fn(async () => ({ products: [cloudImageProduct] })),
+      listProducts: vi.fn(async () => ({ products: [cloudImageProduct] })),
+      listSkus: vi.fn(async () => ({ skus: [sku] })),
+    })
+
+    await expect(getCloudBaseCustomerProductListView(client)).resolves.toMatchObject({
+      products: [{ mainImageUrl: expect.stringContaining('/static/logo.png?asset=cloud%3A%2F%2Fasset-main') }],
+    })
+    await expect(getCloudBaseCustomerProductDetailView(product.id, '', client)).resolves.toMatchObject({
+      product: { mainImageUrl: expect.stringContaining('/static/logo.png?asset=cloud%3A%2F%2Fasset-main') },
+    })
+    await expect(getCloudBaseOwnerProductsView('all', client)).resolves.toMatchObject({
+      products: [{ mainImageUrl: expect.stringContaining('/static/logo.png?asset=cloud%3A%2F%2Fasset-main') }],
+    })
+  })
+
+  it('drops signed CloudBase temporary product image URLs from page-facing ViewModels', async () => {
+    const signedTempUrl = 'https://636c-cloud1-d7gifjyzl7721b383-1429982088.tcb.qcloud.la/uploads/product.jpg?sign=abc&t=1779673154'
+    const signedImageProduct = {
+      ...product,
+      mainImageUrl: signedTempUrl,
+      imageUrls: [signedTempUrl],
+    }
+    const client = createClient({
+      listProducts: vi.fn(async () => ({ products: [signedImageProduct] })),
+      listSkus: vi.fn(async () => ({ skus: [sku] })),
+    })
+
+    await expect(getCloudBaseOwnerProductsView('all', client)).resolves.toMatchObject({
+      products: [{ mainImageUrl: '', imageUrls: [] }],
+    })
   })
 
   it('keeps customer product browsing open when the published summary call fails', async () => {

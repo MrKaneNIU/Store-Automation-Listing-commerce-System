@@ -150,6 +150,29 @@ export const publishReadyOwnerProducts = (): OwnerProductCommandResult => {
   return { message: `已上架 ${readyProducts.length} 个商品` }
 }
 
+export const unpublishOwnerProduct = (productId: string): OwnerProductCommandResult => {
+  const product = mallAccess.getProduct(productId)
+  if (!product) {
+    return { message: '商品不存在' }
+  }
+  if (product.status !== 'published') {
+    return { message: `${product.productCode} 当前不是已上架商品` }
+  }
+
+  const nextProduct = mallWorkflow.unpublishProduct(product)
+  return { message: `${nextProduct.productCode} 已下架` }
+}
+
+export const deleteOwnerProduct = (productId: string): OwnerProductCommandResult => {
+  const product = mallAccess.getProduct(productId)
+  if (!product) {
+    return { message: '商品不存在' }
+  }
+
+  const result = mallWorkflow.deleteProduct(product)
+  return { message: `${result.product.productCode} 已删除，移除 ${result.deletedSkuCount} 个规格` }
+}
+
 export const updateOwnerProductDescription = (
   productId: string,
   description: string,

@@ -44,6 +44,16 @@ export const createMemoryMallRepository = (database: MockDb = mockDb): MallRepos
     database.products = database.products.map((item) => (item.id === product.id ? product : item))
     return product
   },
+  deleteProduct(productId) {
+    const product = database.products.find((item) => item.id === productId) ?? null
+    database.products = database.products.filter((item) => item.id !== productId)
+    return product
+  },
+  deleteSkus(productId) {
+    const skus = database.skus.filter((sku) => sku.productId === productId)
+    database.skus = database.skus.filter((sku) => sku.productId !== productId)
+    return skus
+  },
   listProducts() {
     return [...database.products]
   },

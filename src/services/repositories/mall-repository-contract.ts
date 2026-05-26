@@ -189,6 +189,24 @@ export const runMallRepositoryContract = (
       expect(await repository.listSkus('missing-product')).toEqual([])
     })
 
+    it('deletes a product and its SKUs without touching other products', async () => {
+      await factory.reset?.()
+      const repository = factory.createRepository()
+      const otherProduct = { ...product, id: 'product-2', productCode: 'B2088' }
+      const otherSku = { ...sku, id: 'sku-2', productId: 'product-2', productCode: 'B2088' }
+
+      await repository.saveBatch(batch)
+      await repository.saveProducts([product, otherProduct], [sku, otherSku])
+      const deletedSkus = await repository.deleteSkus(product.id)
+      const deletedProduct = await repository.deleteProduct(product.id)
+
+      expect(deletedProduct).toEqual(product)
+      expect(deletedSkus).toEqual([sku])
+      expect(await repository.listProducts()).toEqual([otherProduct])
+      expect(await repository.listSkus()).toEqual([otherSku])
+      expect(await repository.deleteProduct('missing-product')).toBeNull()
+    })
+
     it('saves, lists, and updates orders by id', async () => {
       await factory.reset?.()
       const repository = factory.createRepository()

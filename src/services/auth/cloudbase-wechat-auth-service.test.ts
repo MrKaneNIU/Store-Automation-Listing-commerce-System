@@ -30,6 +30,8 @@ const createClient = (overrides: Partial<CloudBaseMallApiClient>): CloudBaseMall
     restockSkus: missing,
     clearSkuStock: missing,
     publishProduct: missing,
+    unpublishProduct: missing,
+    deleteProduct: missing,
     listSkus: missing,
     listPendingImageTasks: missing,
     supplementProductImages: missing,

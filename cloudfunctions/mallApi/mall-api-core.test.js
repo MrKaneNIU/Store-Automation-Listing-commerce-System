@@ -460,6 +460,43 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     expect(summaries.data.products).toEqual([])
   })
 
+  it('unpublishes and deletes owner products through mallApi lifecycle actions', async () => {
+    const handler = createHandler()
+    const { product } = await createProductFixture(handler)
+
+    const unpublished = await handler({
+      action: 'unpublishProduct',
+      identity: ownerIdentity,
+      params: { productId: product.id },
+    })
+    const summariesAfterUnpublish = await handler({
+      action: 'listPublishedProductSummaries',
+      identity: customerIdentity,
+    })
+    const deleted = await handler({
+      action: 'deleteProduct',
+      identity: ownerIdentity,
+      params: { productId: product.id },
+    })
+    const productsAfterDelete = await handler({ action: 'listProducts', identity: ownerIdentity })
+    const skusAfterDelete = await handler({ action: 'listSkus', identity: ownerIdentity, params: { productId: product.id } })
+
+    expect(unpublished).toMatchObject({
+      success: true,
+      data: { product: { id: product.id, status: 'ready_to_publish' } },
+    })
+    expect(summariesAfterUnpublish.data.products).toEqual([])
+    expect(deleted).toMatchObject({
+      success: true,
+      data: { product: { id: product.id }, deletedSkuCount: 1 },
+    })
+    expect(productsAfterDelete.data.products).toEqual([])
+    expect(skusAfterDelete).toMatchObject({
+      success: false,
+      error: { code: 'NOT_FOUND' },
+    })
+  })
+
   it('creates OCR jobs and rejects retry unless the job has failed', async () => {
     const handler = createHandler()
     const created = await handler({

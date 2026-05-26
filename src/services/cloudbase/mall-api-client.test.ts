@@ -175,6 +175,36 @@ describe('CloudBase mall API client', () => {
     ])
   })
 
+  it('maps owner product unpublish and delete operations through mallApi', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        return { product: { id: 'product-1' }, deletedSkuCount: 1 } as never
+      },
+    })
+
+    await client.unpublishProduct('product-1')
+    await client.deleteProduct('product-1')
+
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'unpublishProduct',
+          params: { productId: 'product-1' },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'deleteProduct',
+          params: { productId: 'product-1' },
+        },
+      },
+    ])
+  })
+
   it('maps OCR job list and retry actions through mallApi', async () => {
     const calls: Array<{ name: string; data: unknown }> = []
     const client = createCloudBaseMallApiClient({

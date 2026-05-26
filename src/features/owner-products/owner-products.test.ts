@@ -4,11 +4,13 @@ import { mallRepository } from '../../services/repositories/mall-repository'
 import { resetMockDb } from '../../services/repositories/mock-db'
 import {
   clearOwnerProductSkuStock,
+  deleteOwnerProduct,
   getOwnerProductsView,
   getOwnerProductSkuInventoryView,
   publishOwnerProduct,
   publishReadyOwnerProducts,
   restockOwnerProductSkus,
+  unpublishOwnerProduct,
   updateOwnerProductSku,
   updateOwnerProductDescription,
 } from './owner-products'
@@ -201,5 +203,20 @@ describe('owner products facade', () => {
     expect(publishResult.message).toContain('1')
     expect(products.find((product) => product.id === validReadyProduct.id)?.status).toBe('published')
     expect(products.find((product) => product.id === blockedReadyProduct.id)?.status).toBe('ready_to_publish')
+  })
+
+  it('supports owner unpublish and delete product lifecycle operations', async () => {
+    const result = await prepareProducts()
+    const ready = await mallWorkflow.supplementProductImages(result.products[0])
+    publishOwnerProduct(ready.id)
+
+    const unpublished = unpublishOwnerProduct(ready.id)
+    expect(unpublished.message).toContain(ready.productCode)
+    expect(getOwnerProductsView('ready_to_publish').products.map((item) => item.id)).toContain(ready.id)
+
+    const deleted = deleteOwnerProduct(ready.id)
+    expect(deleted.message).toContain(ready.productCode)
+    expect(getOwnerProductsView('all').products.map((item) => item.id)).not.toContain(ready.id)
+    expect(mallRepository.listSkus(ready.id)).toEqual([])
   })
 })

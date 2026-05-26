@@ -19,6 +19,8 @@ const SUPPORTED_ACTIONS = [
   'restockSkus',
   'clearSkuStock',
   'publishProduct',
+  'unpublishProduct',
+  'deleteProduct',
   'listSkus',
   'listPendingImageTasks',
   'supplementProductImages',
@@ -740,10 +742,20 @@ const createRepository = (store) => ({
       return { products: savedProducts, skus: savedSkus }
     }),
   updateProduct: async (product) => toProduct(await store.replace('products', toProductDocument(product))),
+  deleteProduct: async (productId) => {
+    const product = (await store.list('products', { _id: productId }))[0]
+    await store.deleteByField('products', '_id', productId)
+    return product ? toProduct(product) : null
+  },
   listProducts: async () => (await store.list('products')).map(toProduct).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
   listSkus: async (productId) => {
     const documents = productId ? await store.list('skus', { product_id: productId }) : await store.list('skus')
     return documents.map(toSku).sort((a, b) => a.id.localeCompare(b.id))
+  },
+  deleteSkus: async (productId) => {
+    const skus = (await store.list('skus', { product_id: productId })).map(toSku).sort((a, b) => a.id.localeCompare(b.id))
+    await store.deleteByField('skus', 'product_id', productId)
+    return skus
   },
   updateSku: async (sku) => {
     if (sku.stock < 0) throw validationError('SKU stock must not be negative')
@@ -1192,6 +1204,21 @@ const apiHandlers = {
       throw conflictError(publishMessages[0])
     }
     return { product: await context.repository.updateProduct({ ...product, status: 'published', updatedAt: context.now() }) }
+  },
+  async unpublishProduct(event, context) {
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
+    const product = await findProduct(context.repository, readString(event.params || {}, 'productId'))
+    if (product.status !== 'published') {
+      throw conflictError('Product is not published')
+    }
+    return { product: await context.repository.updateProduct({ ...product, status: 'ready_to_publish', updatedAt: context.now() }) }
+  },
+  async deleteProduct(event, context) {
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
+    const product = await findProduct(context.repository, readString(event.params || {}, 'productId'))
+    const deletedSkus = await context.repository.deleteSkus(product.id)
+    const deletedProduct = await context.repository.deleteProduct(product.id)
+    return { product: deletedProduct || product, deletedSkuCount: deletedSkus.length }
   },
   async listSkus(event, context) {
     const productId = readString(event.params || {}, 'productId')

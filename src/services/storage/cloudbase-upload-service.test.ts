@@ -46,6 +46,8 @@ describe('cloudbase upload service', () => {
     expect(images[0].assetId).toBe('cloud://asset-1')
 
     const uploaded = await cloudbaseUploadService.uploadProductImages('product-1', ['/tmp/a.png'])
+    expect(uploaded.mainImageUrl).toBe('cloud://asset-1')
+    expect(uploaded.imageUrls).toEqual(['cloud://asset-1'])
     expect(uploaded.assets[0].cloudPath).toContain('uploads/product_main_image/staff/product/product-1')
 
     const deleted = await cloudbaseUploadService.deleteAssets(['cloud://asset-1'])

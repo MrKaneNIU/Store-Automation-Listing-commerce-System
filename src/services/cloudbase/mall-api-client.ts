@@ -129,6 +129,8 @@ export type CloudBaseMallApiClient = {
   restockSkus: (productId: string, input: RestockSkusInput) => Promise<{ skus: Sku[] }>
   clearSkuStock: (productId: string, input: ClearSkuStockInput) => Promise<{ skus: Sku[] }>
   publishProduct: (productId: string) => Promise<{ product: Product }>
+  unpublishProduct: (productId: string) => Promise<{ product: Product }>
+  deleteProduct: (productId: string) => Promise<{ product: Product; deletedSkuCount: number }>
   listSkus: (productId: string) => Promise<{ skus: Sku[] }>
   listPendingImageTasks: () => Promise<{ products: Product[] }>
   supplementProductImages: (productId: string, input: SupplementProductImagesInput) => Promise<{ product: Product }>
@@ -227,6 +229,12 @@ export const createCloudBaseMallApiClient = (
   },
   publishProduct(productId) {
     return callMallApi(functionClient, { action: 'publishProduct', params: { productId } })
+  },
+  unpublishProduct(productId) {
+    return callMallApi(functionClient, { action: 'unpublishProduct', params: { productId } })
+  },
+  deleteProduct(productId) {
+    return callMallApi(functionClient, { action: 'deleteProduct', params: { productId } })
   },
   listSkus(productId) {
     return callMallApi(functionClient, { action: 'listSkus', params: { productId } })

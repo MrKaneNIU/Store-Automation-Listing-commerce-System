@@ -197,6 +197,8 @@ type CloudBaseMallRepository = {
   listDrafts: (batchId?: string) => Promise<ProductDraft[]>
   saveProducts: (products: Product[], skus: Sku[]) => Promise<{ products: Product[]; skus: Sku[] }>
   updateProduct: (product: Product) => Promise<Product>
+  deleteProduct: (productId: string) => Promise<Product | null>
+  deleteSkus: (productId: string) => Promise<Sku[]>
   listProducts: () => Promise<Product[]>
   listSkus: (productId?: string) => Promise<Sku[]>
   updateSku: (sku: Sku) => Promise<Sku>
@@ -456,12 +458,22 @@ export const createCloudBaseMallRepository = (
   async updateProduct(product) {
     return toProduct(await store.replace('products', toProductDocument(product)))
   },
+  async deleteProduct(productId) {
+    const product = (await store.list<ProductDocument>('products')).find((document) => document._id === productId)
+    await store.deleteWhere('products', (document) => document._id === productId)
+    return product ? toProduct(product) : null
+  },
   async listProducts() {
     return (await store.list<ProductDocument>('products')).map(toProduct)
   },
   async listSkus(productId) {
     const skus = (await store.list<SkuDocument>('skus')).map(toSku)
     return productId ? skus.filter((sku) => sku.productId === productId) : skus
+  },
+  async deleteSkus(productId) {
+    const skus = (await store.list<SkuDocument>('skus')).filter((document) => document.product_id === productId).map(toSku)
+    await store.deleteWhere('skus', (document) => document.product_id === productId)
+    return skus
   },
   async updateSku(sku) {
     assertSkuCanPersist(sku)
