@@ -130,10 +130,13 @@ const pageTopPadding = ref(DEFAULT_PAGE_TOP_PADDING)
 const navigatingRoute = ref<AppRoute | ''>('')
 const processingOrderId = ref('')
 const processingOrderAction = ref<'confirm' | 'cancel' | ''>('')
+const isLoadingOrders = ref(false)
+const loadError = ref('')
 const viewModel = ref<OwnerOrdersViewModel>({
   orders: [],
   emptyMessage: '暂无订单',
 })
+let pendingRefresh: Promise<void> | null = null
 
 const pendingOrderCount = computed(() => viewModel.value.orders.filter((order) => order.canConfirm).length)
 
@@ -170,8 +173,31 @@ const goAdminTab = (route: AppRoute) => {
   })
 }
 
-const refreshView = async () => {
-  viewModel.value = await getCloudBaseOwnerOrdersView()
+const getErrorMessage = (error: unknown) => (error instanceof Error && error.message.trim()
+  ? error.message.trim()
+  : '订单列表加载失败')
+
+const refreshView = () => {
+  if (pendingRefresh) {
+    return pendingRefresh
+  }
+
+  isLoadingOrders.value = true
+  loadError.value = ''
+  pendingRefresh = getCloudBaseOwnerOrdersView()
+    .then((nextView) => {
+      viewModel.value = nextView
+    })
+    .catch((error) => {
+      loadError.value = getErrorMessage(error)
+      message.value = loadError.value
+    })
+    .finally(() => {
+      isLoadingOrders.value = false
+      pendingRefresh = null
+    })
+
+  return pendingRefresh
 }
 
 onShow(() => {

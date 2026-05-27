@@ -50,6 +50,13 @@ self-review.
 - New domain behavior has unit tests.
 - New workflow behavior has integration-style tests.
 - New page-facing ViewModel or Facade behavior has focused feature tests.
+- P0 page changes record the first-screen remote action budget and snapshot key
+  in `docs/testing/2026-05-27-page-performance-baseline.md` or a successor
+  testing note.
+- P0 page changes include tests for at least one relevant latency gate: O(1)
+  remote action count, client action mapping, CloudFunction aggregate read
+  bounds, local filtering, request dedupe, failure state, or write-after-refresh
+  behavior.
 - Repository behavior changes have contract tests.
 - Bugfixes include regression tests.
 - Assertions remain specific.
@@ -62,6 +69,27 @@ self-review.
 - Build-affecting changes pass `pnpm.cmd run build:mp-weixin` and
   `pnpm.cmd run e2e:smoke`.
 - Backend changes pass `pnpm.cmd run verify:backend`.
+
+## Performance Gate Checklist
+
+- Page code does not compose repository, CloudBase collection, mockDb, upload,
+  OCR, or storage implementation details directly.
+- First-screen P0 data reads go through a named snapshot action or page-facing
+  facade.
+- List/search/tab/filter interactions are local when the loaded snapshot is
+  already sufficient.
+- Consecutive `onShow` or equivalent lifecycle reads do not create duplicate
+  concurrent requests.
+- Write operations invalidate or refresh only the affected snapshot scope.
+- Command results are not cached as canonical business truth when server state
+  must remain authoritative.
+- Signed temporary image URLs are not persisted as canonical product image
+  values.
+- Failure states do not present stale cached data as fresh.
+- `pnpm.cmd run verify` and, for mini-program runtime impact,
+  `pnpm.cmd run verify:full` are recorded with exact results.
+- WeChat DevTools or real-device manual acceptance is recorded separately from
+  build smoke and automated test results.
 
 ## Contract Checklist
 

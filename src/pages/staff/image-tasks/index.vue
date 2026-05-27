@@ -96,6 +96,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { ensureAdminWorkbenchSession } from '../../../features/admin-workbench-auth/admin-workbench-guard'
 import type { StaffImageTasksViewModel } from '../../../features/staff-image-tasks/staff-image-tasks'
 import {
+  filterCloudBaseStaffImageTasksView,
   getCloudBaseStaffImageTasksView,
   supplementCloudBaseStaffProductImages,
 } from '../../../features/cloudbase-mall/staff-image-tasks'
@@ -106,15 +107,25 @@ const message = ref('')
 const isLoading = ref(false)
 const supplementingProductId = ref('')
 let pendingRefresh: Promise<void> | null = null
-const viewModel = ref<StaffImageTasksViewModel>({
+
+const createEmptyStaffImageTasksView = (): StaffImageTasksViewModel => ({
   batchOptions: [],
   selectedBatchLabel: '全部批次',
   products: [],
   emptyMessage: '暂无待补图商品',
 })
+const sourceViewModel = ref<StaffImageTasksViewModel>(createEmptyStaffImageTasksView())
+const viewModel = ref<StaffImageTasksViewModel>(createEmptyStaffImageTasksView())
 
 type RefreshOptions = {
   showLoading: boolean
+}
+
+const applyLocalFilters = () => {
+  viewModel.value = filterCloudBaseStaffImageTasksView(sourceViewModel.value, {
+    keyword: keyword.value,
+    selectedBatchId: selectedBatchId.value,
+  })
 }
 
 const refreshView = (options: RefreshOptions = { showLoading: true }) => {
@@ -127,11 +138,12 @@ const refreshView = (options: RefreshOptions = { showLoading: true }) => {
   }
 
   pendingRefresh = getCloudBaseStaffImageTasksView({
-    keyword: keyword.value,
-    selectedBatchId: selectedBatchId.value,
+    keyword: '',
+    selectedBatchId: '',
   })
     .then((view) => {
-      viewModel.value = view
+      sourceViewModel.value = view
+      applyLocalFilters()
     })
     .finally(() => {
       if (options.showLoading) {
@@ -153,7 +165,7 @@ onShow(() => {
 })
 
 watch([keyword, selectedBatchId], () => {
-  void refreshView({ showLoading: false })
+  applyLocalFilters()
 })
 
 const selectBatch = (event: Event) => {

@@ -132,12 +132,16 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { onHide, onShow } from '@dcloudio/uni-app'
 import { navigateTo, redirectTo, relaunchTo } from '../../../app/navigation'
 import type { AppRoute } from '../../../app/routes'
 import { routes } from '../../../app/routes'
 import { ensureAdminWorkbenchSession } from '../../../features/admin-workbench-auth/admin-workbench-guard'
+import {
+  createEmptyOwnerDashboardView,
+  getCloudBaseOwnerDashboardView,
+} from '../../../features/cloudbase-mall/owner-dashboard'
 
 const DEFAULT_PAGE_TOP_PADDING = 'calc(env(safe-area-inset-top) + 12rpx)'
 const TOP_CONTENT_GAP_RPX = 12
@@ -145,6 +149,10 @@ const TOP_CONTENT_GAP_RPX = 12
 const pageTopPadding = ref(DEFAULT_PAGE_TOP_PADDING)
 const navigatingRoute = ref<AppRoute | ''>('')
 const isShopNavigating = ref(false)
+const isLoadingDashboard = ref(false)
+const loadError = ref('')
+const viewModel = ref(createEmptyOwnerDashboardView())
+let pendingRefresh: Promise<void> | null = null
 
 const syncPageTopPadding = () => {
   try {
@@ -169,6 +177,7 @@ onShow(() => {
 
   navigatingRoute.value = ''
   isShopNavigating.value = false
+  void refreshView()
 })
 
 onHide(() => {
@@ -176,11 +185,35 @@ onHide(() => {
   isShopNavigating.value = false
 })
 
-const maxUploadCount = 18
-const selectedScreenshotCount = 5
-const remainingUploadCount = Math.max(0, maxUploadCount - selectedScreenshotCount)
-const pendingDraftCount = 6
-const pendingImageTaskCount = 4
+const getErrorMessage = (error: unknown) => (error instanceof Error && error.message.trim()
+  ? error.message.trim()
+  : '工作台数据加载失败')
+
+const refreshView = () => {
+  if (pendingRefresh) {
+    return pendingRefresh
+  }
+
+  isLoadingDashboard.value = true
+  loadError.value = ''
+  pendingRefresh = getCloudBaseOwnerDashboardView()
+    .then((nextView) => {
+      viewModel.value = nextView
+    })
+    .catch((error) => {
+      loadError.value = getErrorMessage(error)
+    })
+    .finally(() => {
+      isLoadingDashboard.value = false
+      pendingRefresh = null
+    })
+
+  return pendingRefresh
+}
+
+const remainingUploadCount = computed(() => viewModel.value.remainingUploadCount)
+const pendingDraftCount = computed(() => viewModel.value.pendingDraftCount)
+const pendingImageTaskCount = computed(() => viewModel.value.pendingImageTaskCount)
 
 const stayDashboard = () => {
   uni.pageScrollTo({ scrollTop: 0, duration: 180 })

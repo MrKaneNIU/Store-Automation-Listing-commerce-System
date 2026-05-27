@@ -17,6 +17,7 @@ import {
 } from './owner-products'
 import {
   getCloudBaseCustomerProductDetailView,
+  selectCloudBaseCustomerProductSkuInView,
   selectCloudBaseCustomerProductSku,
   submitCloudBaseCustomerProductDetailOrder,
 } from './customer-product-detail'
@@ -32,7 +33,12 @@ import {
   confirmCloudBaseOwnerOrder,
   getCloudBaseOwnerOrdersView,
 } from './owner-orders'
-import { getCloudBaseStaffImageTasksView, supplementCloudBaseStaffProductImages } from './staff-image-tasks'
+import { getCloudBaseOwnerDashboardView } from './owner-dashboard'
+import {
+  filterCloudBaseStaffImageTasksView,
+  getCloudBaseStaffImageTasksView,
+  supplementCloudBaseStaffProductImages,
+} from './staff-image-tasks'
 
 type CreateOcrBatchArgument = Parameters<CloudBaseMallApiClient['createOcrBatch']>[0]
 
@@ -52,12 +58,15 @@ const createClient = (overrides: Partial<CloudBaseMallApiClient>): CloudBaseMall
     listOcrBatches: missing,
     getCurrentOcrBatch: missing,
     getLatestDrafts: missing,
+    getLatestDraftReviewSnapshot: missing,
     updateDraft: missing,
     deleteDraft: missing,
     confirmBatch: missing,
     listProducts: missing,
     listPublishedProducts: missing,
     listPublishedProductSummaries: missing,
+    getPublishedProductDetail: missing,
+    listOwnerProductCards: missing,
     updateProductDescription: missing,
     updateSku: missing,
     restockSkus: missing,
@@ -67,9 +76,12 @@ const createClient = (overrides: Partial<CloudBaseMallApiClient>): CloudBaseMall
     deleteProduct: missing,
     listSkus: missing,
     listPendingImageTasks: missing,
+    getStaffImageTaskSnapshot: missing,
     supplementProductImages: missing,
     createCustomerOrder: missing,
     getCustomerOrder: missing,
+    getOwnerOrderSnapshot: missing,
+    getOwnerDashboardSnapshot: missing,
     listMerchantOrders: missing,
     confirmMerchantOrder: missing,
     cancelMerchantOrder: missing,
@@ -228,14 +240,66 @@ describe('CloudBase mall facades', () => {
 
   it('loads owner products and sku counts from mallApi', async () => {
     const client = createClient({
-      listProducts: vi.fn(async () => ({ products: [product] })),
-      listSkus: vi.fn(async () => ({ skus: [sku] })),
+      listOwnerProductCards: vi.fn(async () => ({
+        products: [{
+          ...product,
+          statusLabel: '已上架',
+          skuCount: 1,
+          canPublish: false,
+          publishBlockReasons: [],
+        }],
+        readyProductCount: 0,
+        serverTime: '2026-05-27T00:00:00.000Z',
+      })),
+      listProducts: vi.fn(async () => {
+        throw new Error('listProducts should not be called')
+      }),
+      listSkus: vi.fn(async () => {
+        throw new Error('listSkus should not be called')
+      }),
     })
 
     await expect(getCloudBaseOwnerProductsView('all', client)).resolves.toMatchObject({
       products: [{ id: 'product-1', skuCount: 1 }],
     })
-    expect(client.listSkus).toHaveBeenCalledWith('product-1')
+    expect(client.listOwnerProductCards).toHaveBeenCalledTimes(1)
+    expect(client.listProducts).not.toHaveBeenCalled()
+    expect(client.listSkus).not.toHaveBeenCalled()
+  })
+
+  it('filters owner product cards locally after the aggregated mallApi read', async () => {
+    const pendingProduct = {
+      ...product,
+      id: 'product-2',
+      productCode: 'A1024',
+      status: 'pending_images' as const,
+      statusLabel: '待补图',
+      skuCount: 0,
+      canPublish: false,
+      publishBlockReasons: ['商品主图不能为空'],
+    }
+    const client = createClient({
+      listOwnerProductCards: vi.fn(async () => ({
+        products: [
+          {
+            ...product,
+            statusLabel: '已上架',
+            skuCount: 1,
+            canPublish: false,
+            publishBlockReasons: [],
+          },
+          pendingProduct,
+        ],
+        readyProductCount: 0,
+        serverTime: '2026-05-27T00:00:00.000Z',
+      })),
+    })
+
+    await expect(getCloudBaseOwnerProductsView('published', client)).resolves.toMatchObject({
+      products: [{ id: 'product-1', status: 'published' }],
+      readyProductCount: 0,
+    })
+    expect(client.listOwnerProductCards).toHaveBeenCalledTimes(1)
   })
 
   it('updates product descriptions through mallApi', async () => {
@@ -302,8 +366,11 @@ describe('CloudBase mall facades', () => {
 
   it('shows CloudBase product detail descriptions with the empty fallback', async () => {
     const client = createClient({
-      listPublishedProducts: vi.fn(async () => ({ products: [product, { ...product, id: 'product-2', description: '' }] })),
-      listSkus: vi.fn(async () => ({ skus: [sku] })),
+      getPublishedProductDetail: vi.fn(async (productId: string) => ({
+        product: productId === 'product-2' ? { ...product, id: 'product-2', description: '' } : product,
+        skus: [sku],
+        serverTime: '2026-05-27T00:00:00.000Z',
+      })),
     })
 
     await expect(getCloudBaseCustomerProductDetailView(product.id, '', client)).resolves.toMatchObject({
@@ -316,7 +383,7 @@ describe('CloudBase mall facades', () => {
 
   it('loads and mutates draft review state through mallApi', async () => {
     const client = createClient({
-      getLatestDrafts: vi.fn(async () => ({ batch, drafts: [draft] })),
+      getLatestDraftReviewSnapshot: vi.fn(async () => ({ batch, drafts: [draft], serverTime: '2026-05-27T00:00:00.000Z' })),
       updateDraft: vi.fn(async () => ({ draft })),
       deleteDraft: vi.fn(async () => ({ draft: { ...draft, status: 'deleted' as const } })),
       confirmBatch: vi.fn(async () => ({ issues: [], products: [product], skus: [sku] })),
@@ -332,6 +399,8 @@ describe('CloudBase mall facades', () => {
     await expect(confirmLatestCloudBaseOwnerDraftReviewBatch('batch-1', client)).resolves.toMatchObject({
       message: expect.stringContaining('1'),
     })
+    expect(client.getLatestDraftReviewSnapshot).toHaveBeenCalledTimes(1)
+    expect(client.getLatestDrafts).not.toHaveBeenCalled()
   })
 
   it('loads customer product list from a single published summary mallApi call', async () => {
@@ -347,6 +416,71 @@ describe('CloudBase mall facades', () => {
     expect(listSkus).not.toHaveBeenCalled()
   })
 
+  it('does not resolve customer product list detail image arrays', async () => {
+    const cloudImageProduct = {
+      ...product,
+      mainImageUrl: 'cloud://asset-main',
+      imageUrls: ['cloud://asset-main', 'cloud://asset-detail'],
+    }
+    const client = createClient({
+      listPublishedProductSummaries: vi.fn(async () => ({ products: [{ ...cloudImageProduct, minPrice: 129 }] })),
+    })
+
+    await expect(getCloudBaseCustomerProductListView(client)).resolves.toMatchObject({
+      products: [{
+        mainImageUrl: expect.stringContaining('/static/logo.png?asset=cloud%3A%2F%2Fasset-main'),
+        imageUrls: [],
+      }],
+    })
+  })
+
+  it('batch resolves repeated owner product main images without resolving detail arrays', async () => {
+    const cloudImageProduct = {
+      ...product,
+      mainImageUrl: 'cloud://asset-main',
+      imageUrls: ['cloud://asset-detail'],
+    }
+    const listOwnerProductCards = vi.fn(async () => ({
+      products: [
+        {
+          ...cloudImageProduct,
+          id: 'product-1',
+          statusLabel: 'published',
+          skuCount: 1,
+          canPublish: false,
+          publishBlockReasons: [],
+        },
+        {
+          ...cloudImageProduct,
+          id: 'product-2',
+          statusLabel: 'published',
+          skuCount: 1,
+          canPublish: false,
+          publishBlockReasons: [],
+        },
+      ],
+      readyProductCount: 0,
+      serverTime: '2026-05-27T00:00:00.000Z',
+    }))
+    const client = createClient({ listOwnerProductCards })
+
+    await expect(getCloudBaseOwnerProductsView('all', client)).resolves.toMatchObject({
+      products: [
+        {
+          id: 'product-1',
+          mainImageUrl: expect.stringContaining('/static/logo.png?asset=cloud%3A%2F%2Fasset-main'),
+          imageUrls: ['cloud://asset-detail'],
+        },
+        {
+          id: 'product-2',
+          mainImageUrl: expect.stringContaining('/static/logo.png?asset=cloud%3A%2F%2Fasset-main'),
+          imageUrls: ['cloud://asset-detail'],
+        },
+      ],
+    })
+    expect(listOwnerProductCards).toHaveBeenCalledTimes(1)
+  })
+
   it('resolves CloudBase product image file IDs before returning customer and owner ViewModels', async () => {
     const cloudImageProduct = {
       ...product,
@@ -355,9 +489,18 @@ describe('CloudBase mall facades', () => {
     }
     const client = createClient({
       listPublishedProductSummaries: vi.fn(async () => ({ products: [{ ...cloudImageProduct, minPrice: 129 }] })),
-      listPublishedProducts: vi.fn(async () => ({ products: [cloudImageProduct] })),
-      listProducts: vi.fn(async () => ({ products: [cloudImageProduct] })),
-      listSkus: vi.fn(async () => ({ skus: [sku] })),
+      getPublishedProductDetail: vi.fn(async () => ({ product: cloudImageProduct, skus: [sku], serverTime: '2026-05-27T00:00:00.000Z' })),
+      listOwnerProductCards: vi.fn(async () => ({
+        products: [{
+          ...cloudImageProduct,
+          statusLabel: '已上架',
+          skuCount: 1,
+          canPublish: false,
+          publishBlockReasons: [],
+        }],
+        readyProductCount: 0,
+        serverTime: '2026-05-27T00:00:00.000Z',
+      })),
     })
 
     await expect(getCloudBaseCustomerProductListView(client)).resolves.toMatchObject({
@@ -379,8 +522,17 @@ describe('CloudBase mall facades', () => {
       imageUrls: [signedTempUrl],
     }
     const client = createClient({
-      listProducts: vi.fn(async () => ({ products: [signedImageProduct] })),
-      listSkus: vi.fn(async () => ({ skus: [sku] })),
+      listOwnerProductCards: vi.fn(async () => ({
+        products: [{
+          ...signedImageProduct,
+          statusLabel: '已上架',
+          skuCount: 1,
+          canPublish: false,
+          publishBlockReasons: [],
+        }],
+        readyProductCount: 0,
+        serverTime: '2026-05-27T00:00:00.000Z',
+      })),
     })
 
     await expect(getCloudBaseOwnerProductsView('all', client)).resolves.toMatchObject({
@@ -401,8 +553,10 @@ describe('CloudBase mall facades', () => {
   })
 
   it('loads and handles owner orders through mallApi', async () => {
+    const listMerchantOrders = vi.fn(async () => ({ orders: [order] }))
     const client = createClient({
-      listMerchantOrders: vi.fn(async () => ({ orders: [order] })),
+      getOwnerOrderSnapshot: vi.fn(async () => ({ orders: [order], serverTime: '2026-05-27T00:00:00.000Z' })),
+      listMerchantOrders,
       confirmMerchantOrder: vi.fn(async () => ({ order: { ...order, status: 'confirmed' as const } })),
       cancelMerchantOrder: vi.fn(async () => ({ order: { ...order, status: 'canceled' as const } })),
     })
@@ -410,14 +564,39 @@ describe('CloudBase mall facades', () => {
     await expect(getCloudBaseOwnerOrdersView(client)).resolves.toMatchObject({
       orders: [{ id: 'order-1', canConfirm: true }],
     })
+    expect(listMerchantOrders).not.toHaveBeenCalled()
     await expect(confirmCloudBaseOwnerOrder('order-1', client)).resolves.toMatchObject({ message: expect.stringContaining('order-1') })
     await expect(cancelCloudBaseOwnerOrder('order-1', client)).resolves.toMatchObject({ message: expect.stringContaining('order-1') })
+  })
+
+  it('loads owner dashboard counts through one mallApi snapshot', async () => {
+    const client = createClient({
+      getOwnerDashboardSnapshot: vi.fn(async () => ({
+        pendingDraftCount: 2,
+        pendingImageTaskCount: 3,
+        pendingOrderCount: 1,
+        serverTime: '2026-05-27T00:00:00.000Z',
+      })),
+    })
+
+    await expect(getCloudBaseOwnerDashboardView(client)).resolves.toEqual({
+      remainingUploadCount: 13,
+      pendingDraftCount: 2,
+      pendingImageTaskCount: 3,
+      pendingOrderCount: 1,
+    })
+    expect(client.getOwnerDashboardSnapshot).toHaveBeenCalledTimes(1)
   })
 
   it('loads staff image tasks and supplements images through mallApi', async () => {
     const pendingImageProduct = { ...product, status: 'pending_images' as const, mainImageUrl: '', imageUrls: [] }
     const readyProduct = { ...pendingImageProduct, status: 'ready_to_publish' as const, mainImageUrl: '/static/logo.png' }
     const client = createClient({
+      getStaffImageTaskSnapshot: vi.fn(async () => ({
+        batches: [batch],
+        products: [pendingImageProduct],
+        serverTime: '2026-05-27T00:00:00.000Z',
+      })),
       listOcrBatches: vi.fn(async () => ({ batches: [batch] })),
       listPendingImageTasks: vi.fn(async () => ({ products: [pendingImageProduct] })),
       supplementProductImages: vi.fn(async () => ({ product: readyProduct })),
@@ -426,9 +605,37 @@ describe('CloudBase mall facades', () => {
     await expect(getCloudBaseStaffImageTasksView({ keyword: 'A1023', selectedBatchId: 'batch-1' }, client)).resolves.toMatchObject({
       products: [{ id: 'product-1' }],
     })
+    expect(client.getStaffImageTaskSnapshot).toHaveBeenCalledTimes(1)
+    expect(client.listOcrBatches).not.toHaveBeenCalled()
+    expect(client.listPendingImageTasks).not.toHaveBeenCalled()
     await expect(supplementCloudBaseStaffProductImages('product-1', client)).resolves.toMatchObject({
       message: expect.stringContaining('A1023'),
     })
+  })
+
+  it('filters staff image tasks locally after the snapshot read', async () => {
+    const anotherBatch = { ...batch, id: 'batch-2' }
+    const pendingImageProduct = { ...product, status: 'pending_images' as const, mainImageUrl: '', imageUrls: [] }
+    const anotherProduct = {
+      ...pendingImageProduct,
+      id: 'product-2',
+      productCode: 'B2088',
+      createdFromBatchId: 'batch-2',
+    }
+    const getStaffImageTaskSnapshot = vi.fn(async () => ({
+      batches: [batch, anotherBatch],
+      products: [pendingImageProduct, anotherProduct],
+      serverTime: '2026-05-27T00:00:00.000Z',
+    }))
+    const client = createClient({ getStaffImageTaskSnapshot })
+    const view = await getCloudBaseStaffImageTasksView({ keyword: '', selectedBatchId: '' }, client)
+
+    const filteredByKeyword = filterCloudBaseStaffImageTasksView(view, { keyword: 'B2088', selectedBatchId: '' })
+    const filteredByBatch = filterCloudBaseStaffImageTasksView(view, { keyword: '', selectedBatchId: 'batch-1' })
+
+    expect(filteredByKeyword.products.map((item) => item.id)).toEqual(['product-2'])
+    expect(filteredByBatch.products.map((item) => item.id)).toEqual(['product-1'])
+    expect(getStaffImageTaskSnapshot).toHaveBeenCalledTimes(1)
   })
 
   it('submits customer orders through mallApi after mock WeChat authorization', async () => {
@@ -456,8 +663,7 @@ describe('CloudBase mall facades', () => {
       confirmLogin: async () => true,
       confirmPhoneAuthorization: async () => true,
       client: createClient({
-        listPublishedProducts: vi.fn(async () => ({ products: [product] })),
-        listSkus: vi.fn(async () => ({ skus: [sku] })),
+        getPublishedProductDetail: vi.fn(async () => ({ product, skus: [sku], serverTime: '2026-05-27T00:00:00.000Z' })),
         createCustomerOrder,
       }),
     })
@@ -473,8 +679,7 @@ describe('CloudBase mall facades', () => {
   it('keeps out-of-stock SKU selection visible while blocking checkout through mallApi', async () => {
     const soldOutSku = { ...sku, stock: 0 }
     const client = createClient({
-      listPublishedProducts: vi.fn(async () => ({ products: [product] })),
-      listSkus: vi.fn(async () => ({ skus: [soldOutSku] })),
+      getPublishedProductDetail: vi.fn(async () => ({ product, skus: [soldOutSku], serverTime: '2026-05-27T00:00:00.000Z' })),
     })
 
     await expect(selectCloudBaseCustomerProductSku(product.id, soldOutSku.id, client)).resolves.toEqual({
@@ -486,12 +691,78 @@ describe('CloudBase mall facades', () => {
       canSubmitOrder: false,
     })
   })
+
+  it('loads customer product detail from one aggregated mallApi action', async () => {
+    const getPublishedProductDetail = vi.fn(async () => ({
+      product,
+      skus: [sku, { ...sku, id: 'sku-2', spec: 'White/L', stock: 0 }],
+      serverTime: '2026-05-27T00:00:00.000Z',
+    }))
+    const listPublishedProducts = vi.fn(async () => ({ products: [product] }))
+    const listSkus = vi.fn(async () => ({ skus: [sku] }))
+    const client = createClient({ getPublishedProductDetail, listPublishedProducts, listSkus })
+
+    await expect(getCloudBaseCustomerProductDetailView(product.id, sku.id, client)).resolves.toMatchObject({
+      product: { id: product.id },
+      skus: [
+        { id: sku.id, isSelected: true, isDisabled: false },
+        { id: 'sku-2', isSelected: false, isDisabled: true },
+      ],
+      canSubmitOrder: true,
+    })
+    expect(getPublishedProductDetail).toHaveBeenCalledWith(product.id)
+    expect(listPublishedProducts).not.toHaveBeenCalled()
+    expect(listSkus).not.toHaveBeenCalled()
+  })
+
+  it('selects customer product SKUs locally from the loaded detail ViewModel', async () => {
+    const getPublishedProductDetail = vi.fn(async () => ({
+      product,
+      skus: [sku, { ...sku, id: 'sku-2', spec: 'White/L', stock: 0 }],
+      serverTime: '2026-05-27T00:00:00.000Z',
+    }))
+    const client = createClient({ getPublishedProductDetail })
+    const view = await getCloudBaseCustomerProductDetailView(product.id, '', client)
+
+    const selectedSaleable = selectCloudBaseCustomerProductSkuInView(view, sku.id)
+    const selectedSoldOut = selectCloudBaseCustomerProductSkuInView(view, 'sku-2')
+
+    expect(selectedSaleable).toMatchObject({
+      selectedSkuId: sku.id,
+      message: '',
+      view: {
+        skus: [
+          { id: sku.id, isSelected: true },
+          { id: 'sku-2', isSelected: false },
+        ],
+        canSubmitOrder: true,
+      },
+    })
+    expect(selectedSoldOut.selectedSkuId).toBe('sku-2')
+    expect(selectedSoldOut.message).not.toBe('')
+    expect(selectedSoldOut.view).toMatchObject({
+      skus: [
+        { id: sku.id, isSelected: false },
+        { id: 'sku-2', isSelected: true, isDisabled: true },
+      ],
+      canSubmitOrder: false,
+    })
+    expect(getPublishedProductDetail).toHaveBeenCalledTimes(1)
+  })
   it('surfaces CloudBase owner publish block reasons from the shared validation', async () => {
     const readyProduct = { ...product, status: 'ready_to_publish' as const }
-    const soldOutSku = { ...sku, stock: 0 }
     const client = createClient({
-      listProducts: vi.fn(async () => ({ products: [readyProduct] })),
-      listSkus: vi.fn(async () => ({ skus: [soldOutSku] })),
+      listOwnerProductCards: vi.fn(async () => ({
+        products: [{
+          ...readyProduct,
+          statusLabel: '可上架',
+          skuCount: 1,
+          canPublish: false,
+          publishBlockReasons: ['全部规格暂无库存，请先补库存'],
+        }],
+        readyProductCount: 0,
+        serverTime: '2026-05-27T00:00:00.000Z',
+      })),
     })
 
     await expect(getCloudBaseOwnerProductsView('ready_to_publish', client)).resolves.toMatchObject({

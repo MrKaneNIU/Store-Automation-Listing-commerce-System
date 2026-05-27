@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
 
 const ownerProductFeatureMocks = vi.hoisted(() => ({
   clearCloudBaseOwnerProductSkuStock: vi.fn(),
@@ -130,5 +131,62 @@ describe('useOwnerProductsPageState', () => {
 
     expect(state.message.value).toBe('删除商品失败：action deleteProduct is not supported')
     expect(state.lifecycleProductId.value).toBe('')
+  })
+
+  it('filters product status tabs locally after one remote refresh', async () => {
+    ownerProductFeatureMocks.getCloudBaseOwnerProductsView.mockResolvedValueOnce({
+      statusOptions: [
+        { label: '全部', value: 'all' },
+        { label: '待补图', value: 'pending_images' },
+        { label: '已上架', value: 'published' },
+      ],
+      products: [
+        {
+          id: 'product-1',
+          productCode: 'A1023',
+          productName: 'Cotton Shirt',
+          description: '',
+          status: 'published',
+          statusLabel: '已上架',
+          mainImageUrl: '/static/logo.png',
+          imageUrls: [],
+          createdFromBatchId: 'batch-1',
+          createdAt: '2026-05-09T00:00:00.000Z',
+          updatedAt: '2026-05-09T00:00:00.000Z',
+          skuCount: 1,
+          canPublish: false,
+          publishBlockReasons: [],
+        },
+        {
+          id: 'product-2',
+          productCode: 'A1024',
+          productName: 'Linen Shirt',
+          description: '',
+          status: 'pending_images',
+          statusLabel: '待补图',
+          mainImageUrl: '',
+          imageUrls: [],
+          createdFromBatchId: 'batch-1',
+          createdAt: '2026-05-09T00:00:00.000Z',
+          updatedAt: '2026-05-09T00:00:00.000Z',
+          skuCount: 1,
+          canPublish: false,
+          publishBlockReasons: ['商品主图不能为空'],
+        },
+      ],
+      canBatchPublish: false,
+      readyProductCount: 0,
+      emptyMessage: '当前筛选下暂无商品',
+    })
+    const state = useOwnerProductsPageState({ registerLifecycle: false })
+
+    await state.refreshView()
+    state.selectedStatus.value = 'published'
+    await nextTick()
+
+    expect(ownerProductFeatureMocks.getCloudBaseOwnerProductsView).toHaveBeenCalledTimes(1)
+    expect(state.viewModel.value.products).toEqual([
+      expect.objectContaining({ id: 'product-1', status: 'published' }),
+    ])
   })
 })

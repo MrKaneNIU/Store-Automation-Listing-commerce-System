@@ -48,6 +48,7 @@ declare const uni: UniRuntime | undefined
 const cloudBaseEnvId = 'cloud1-d7gifjyzl7721b383'
 const maxFileSizeBytes = 8 * 1024 * 1024
 const supportedExtensions = ['.png', '.jpg', '.jpeg', '.webp']
+const tempFileUrlMaxAgeSeconds = 45 * 60
 
 let initialized = false
 
@@ -86,7 +87,7 @@ const withFailureCode = (error: unknown, failureCode: UploadFailureCode): Error 
   error instanceof Error ? Object.assign(error, { failureCode }) : Object.assign(new Error(String(error)), { failureCode })
 
 const resolveTempUrl = async (fileID: string): Promise<string> => {
-  const result = await ensureRuntime().getTempFileURL({ fileList: [{ fileID, maxAge: 3600 }] })
+  const result = await ensureRuntime().getTempFileURL({ fileList: [{ fileID, maxAge: tempFileUrlMaxAgeSeconds }] })
   const resolved = result.fileList[0]?.tempFileURL ?? result.fileList[0]?.download_url
   if (!resolved) {
     throw new Error('Failed to resolve temporary file URL after upload')
@@ -217,17 +218,25 @@ const uploadFiles = async (filePaths: string[], context: UploadContext): Promise
 }
 
 const refreshAssetUrls = async (assetIds: string[]): Promise<UploadedAsset[]> => {
-  return Promise.all(
-    assetIds.map(async (assetId) => ({
+  const uniqueAssetIds = Array.from(new Set(assetIds))
+  const result = uniqueAssetIds.length > 0
+    ? await ensureRuntime().getTempFileURL({
+        fileList: uniqueAssetIds.map((fileID) => ({ fileID, maxAge: tempFileUrlMaxAgeSeconds })),
+      })
+    : { fileList: [] }
+  const urlByAssetId = new Map(
+    result.fileList.map((item) => [item.fileID, item.tempFileURL ?? item.download_url ?? '']),
+  )
+
+  return assetIds.map((assetId) => ({
       assetId,
       cloudPath: assetId,
-      url: await resolveTempUrl(assetId),
+      url: urlByAssetId.get(assetId) ?? '',
       mimeType: 'image/png',
       size: 0,
       checksum: assetId,
       status: 'uploaded' as UploadAssetStatus,
-    })),
-  )
+    }))
 }
 
 export const cloudbaseUploadService: UploadService = {

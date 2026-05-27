@@ -5,6 +5,16 @@ import { resolve } from 'node:path'
 const homepageSettingsPageSource = () => readFileSync(resolve(__dirname, 'index.vue'), 'utf8')
 
 describe('owner homepage settings page contract', () => {
+  it('wraps low-frequency settings reads with loading and failure state', () => {
+    const source = homepageSettingsPageSource()
+
+    expect(source).toContain('isLoadingSettings')
+    expect(source).toContain('loadError')
+    expect(source).toContain('refreshSettings')
+    expect(source).toContain('try {')
+    expect(source).toContain('catch (error)')
+  })
+
   it('uses user-facing display copy instead of implementation wording', () => {
     const source = homepageSettingsPageSource()
 

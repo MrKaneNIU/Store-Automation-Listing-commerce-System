@@ -100,6 +100,43 @@ export type PublishedProductSummary = Product & {
   minPrice: number | '-'
 }
 
+export type PublishedProductDetail = {
+  product: Product | null
+  skus: Sku[]
+  serverTime: string
+}
+
+export type LatestDraftReviewSnapshot = {
+  batch: OcrBatch | null
+  drafts: ProductDraft[]
+  serverTime: string
+}
+
+export type OwnerProductCard = Product & {
+  statusLabel: string
+  skuCount: number
+  canPublish: boolean
+  publishBlockReasons: string[]
+}
+
+export type StaffImageTaskSnapshot = {
+  batches: OcrBatch[]
+  products: Product[]
+  serverTime: string
+}
+
+export type OwnerOrderSnapshot = {
+  orders: Order[]
+  serverTime: string
+}
+
+export type OwnerDashboardSnapshot = {
+  pendingDraftCount: number
+  pendingImageTaskCount: number
+  pendingOrderCount: number
+  serverTime: string
+}
+
 type CreateCustomerOrderInput = {
   productId: string
   skuId: string
@@ -118,12 +155,15 @@ export type CloudBaseMallApiClient = {
   listOcrBatches: () => Promise<{ batches: OcrBatch[] }>
   getCurrentOcrBatch: () => Promise<{ batch: OcrBatch | null }>
   getLatestDrafts: () => Promise<{ batch: OcrBatch | null; drafts: ProductDraft[] }>
+  getLatestDraftReviewSnapshot: () => Promise<LatestDraftReviewSnapshot>
   updateDraft: (draftId: string, patch: DraftPatchInput) => Promise<{ draft: ProductDraft }>
   deleteDraft: (draftId: string) => Promise<{ draft: ProductDraft }>
   confirmBatch: (batchId: string) => Promise<{ issues: Array<{ draftId: string; message: string }>; products: Product[]; skus: Sku[] }>
   listProducts: () => Promise<{ products: Product[] }>
+  listOwnerProductCards: () => Promise<{ products: OwnerProductCard[]; readyProductCount: number; serverTime: string }>
   listPublishedProducts: () => Promise<{ products: Product[] }>
   listPublishedProductSummaries: () => Promise<{ products: PublishedProductSummary[] }>
+  getPublishedProductDetail: (productId: string) => Promise<PublishedProductDetail>
   updateProductDescription: (productId: string, input: UpdateProductDescriptionInput) => Promise<{ product: Product }>
   updateSku: (productId: string, skuId: string, input: UpdateSkuInput) => Promise<{ sku: Sku }>
   restockSkus: (productId: string, input: RestockSkusInput) => Promise<{ skus: Sku[] }>
@@ -133,9 +173,12 @@ export type CloudBaseMallApiClient = {
   deleteProduct: (productId: string) => Promise<{ product: Product; deletedSkuCount: number }>
   listSkus: (productId: string) => Promise<{ skus: Sku[] }>
   listPendingImageTasks: () => Promise<{ products: Product[] }>
+  getStaffImageTaskSnapshot: () => Promise<StaffImageTaskSnapshot>
   supplementProductImages: (productId: string, input: SupplementProductImagesInput) => Promise<{ product: Product }>
   createCustomerOrder: (input: CreateCustomerOrderInput) => Promise<{ order: Order }>
   getCustomerOrder: (orderId: string) => Promise<{ order: Order }>
+  getOwnerOrderSnapshot: () => Promise<OwnerOrderSnapshot>
+  getOwnerDashboardSnapshot: () => Promise<OwnerDashboardSnapshot>
   listMerchantOrders: () => Promise<{ orders: Order[] }>
   confirmMerchantOrder: (orderId: string) => Promise<{ order: Order }>
   cancelMerchantOrder: (orderId: string) => Promise<{ order: Order }>
@@ -197,6 +240,9 @@ export const createCloudBaseMallApiClient = (
   getLatestDrafts() {
     return callMallApi(functionClient, { action: 'getLatestDrafts' })
   },
+  getLatestDraftReviewSnapshot() {
+    return callMallApi(functionClient, { action: 'getLatestDraftReviewSnapshot' })
+  },
   updateDraft(draftId, patch) {
     return callMallApi(functionClient, { action: 'updateDraft', params: { draftId }, payload: patch })
   },
@@ -209,11 +255,17 @@ export const createCloudBaseMallApiClient = (
   listProducts() {
     return callMallApi(functionClient, { action: 'listProducts' })
   },
+  listOwnerProductCards() {
+    return callMallApi(functionClient, { action: 'listOwnerProductCards' })
+  },
   listPublishedProducts() {
     return callMallApi(functionClient, { action: 'listPublishedProducts' })
   },
   listPublishedProductSummaries() {
     return callMallApi(functionClient, { action: 'listPublishedProductSummaries' })
+  },
+  getPublishedProductDetail(productId) {
+    return callMallApi(functionClient, { action: 'getPublishedProductDetail', params: { productId } })
   },
   updateProductDescription(productId, input) {
     return callMallApi(functionClient, { action: 'updateProductDescription', params: { productId }, payload: input })
@@ -242,6 +294,9 @@ export const createCloudBaseMallApiClient = (
   listPendingImageTasks() {
     return callMallApi(functionClient, { action: 'listPendingImageTasks' })
   },
+  getStaffImageTaskSnapshot() {
+    return callMallApi(functionClient, { action: 'getStaffImageTaskSnapshot' })
+  },
   supplementProductImages(productId, input) {
     return callMallApi(functionClient, { action: 'supplementProductImages', params: { productId }, payload: input })
   },
@@ -250,6 +305,12 @@ export const createCloudBaseMallApiClient = (
   },
   getCustomerOrder(orderId) {
     return callMallApi(functionClient, { action: 'getCustomerOrder', params: { orderId } })
+  },
+  getOwnerOrderSnapshot() {
+    return callMallApi(functionClient, { action: 'getOwnerOrderSnapshot' })
+  },
+  getOwnerDashboardSnapshot() {
+    return callMallApi(functionClient, { action: 'getOwnerDashboardSnapshot' })
   },
   listMerchantOrders() {
     return callMallApi(functionClient, { action: 'listMerchantOrders' })

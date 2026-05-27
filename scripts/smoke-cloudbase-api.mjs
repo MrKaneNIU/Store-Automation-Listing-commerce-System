@@ -1,15 +1,14 @@
 import { createRequire } from 'node:module'
 
 process.env.MALL_API_LOCAL_MEMORY = '1'
-process.env.MALL_API_ALLOW_TEST_IDENTITY = '1'
 
 const require = createRequire(import.meta.url)
 const { main } = require('../cloudfunctions/mallApi/index.js')
 
-const ownerIdentity = {
-  openid: 'smoke-owner-openid',
-  appid: 'wxa63c53796488d4d4',
-  roles: ['owner'],
+const adminSession = {
+  account: 'smoke-admin',
+  role: 'creator',
+  permissions: ['workbenchAccess', 'productManagement'],
 }
 
 const health = await main({ action: 'health' })
@@ -32,14 +31,14 @@ if (unsupported?.success !== false || unsupported.error?.code !== 'NOT_FOUND') {
   throw new Error('mallApi did not reject an unknown action with NOT_FOUND')
 }
 
-const invalidCreate = await main({ action: 'createOcrBatch', payload: {} })
+const invalidCreate = await main({ action: 'createOcrBatch', adminSession, payload: {} })
 if (invalidCreate?.success !== false || invalidCreate.error?.code !== 'VALIDATION_ERROR') {
   throw new Error('mallApi did not validate malformed createOcrBatch payloads')
 }
 
 const created = await main({
   action: 'createOcrBatch',
-  identity: ownerIdentity,
+  adminSession,
   payload: {
     imageUrls: ['cloud://page-1.png'],
     drafts: [
@@ -64,7 +63,7 @@ if (!latest?.success || latest.data?.batch?.id !== created.data.batch.id || late
   throw new Error('mallApi getLatestDrafts did not read back persisted CloudBase data')
 }
 
-const confirmed = await main({ action: 'confirmBatch', identity: ownerIdentity, params: { batchId: created.data.batch.id } })
+const confirmed = await main({ action: 'confirmBatch', adminSession, params: { batchId: created.data.batch.id } })
 if (!confirmed?.success || confirmed.data?.products?.length !== 1 || confirmed.data?.skus?.length !== 1) {
   throw new Error('mallApi confirmBatch did not create product/SKU data')
 }

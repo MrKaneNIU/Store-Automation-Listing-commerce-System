@@ -8,12 +8,15 @@ const SUPPORTED_ACTIONS = [
   'listOcrBatches',
   'getCurrentOcrBatch',
   'getLatestDrafts',
+  'getLatestDraftReviewSnapshot',
   'updateDraft',
   'deleteDraft',
   'confirmBatch',
   'listProducts',
+  'listOwnerProductCards',
   'listPublishedProducts',
   'listPublishedProductSummaries',
+  'getPublishedProductDetail',
   'updateProductDescription',
   'updateSku',
   'restockSkus',
@@ -23,9 +26,12 @@ const SUPPORTED_ACTIONS = [
   'deleteProduct',
   'listSkus',
   'listPendingImageTasks',
+  'getStaffImageTaskSnapshot',
   'supplementProductImages',
   'createCustomerOrder',
   'getCustomerOrder',
+  'getOwnerOrderSnapshot',
+  'getOwnerDashboardSnapshot',
   'listMerchantOrders',
   'confirmMerchantOrder',
   'cancelMerchantOrder',
@@ -678,6 +684,26 @@ const toPublishedProductSummary = (product, skus) => {
   }
 }
 
+const ownerProductStatusLabels = {
+  pending_images: '待补图',
+  ready_to_publish: '可上架',
+  published: '已上架',
+}
+
+const toOwnerProductCard = (product, skus) => {
+  const productSkus = skus.filter((sku) => sku.productId === product.id)
+  const publishBlockReasons = validateProductForPublish(product, skus)
+  const canPublish = product.status === 'ready_to_publish' && publishBlockReasons.length === 0
+
+  return {
+    ...product,
+    statusLabel: ownerProductStatusLabels[product.status],
+    skuCount: productSkus.length,
+    canPublish,
+    publishBlockReasons: canPublish ? [] : publishBlockReasons,
+  }
+}
+
 const validateProductForPublish = (product, skus) => {
   const productSkus = skus.filter((sku) => sku.productId === product.id)
   const saleableSkus = productSkus.filter((sku) => sku.stock > 0)
@@ -1117,6 +1143,30 @@ const apiHandlers = {
     const batch = await findLatestBatch(context.repository)
     return { batch: batch || null, drafts: batch ? await context.repository.listDrafts(batch.id) : [] }
   },
+  async getLatestDraftReviewSnapshot(event, context) {
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
+    const batch = await findLatestBatch(context.repository)
+    return {
+      batch: batch || null,
+      drafts: batch ? await context.repository.listDrafts(batch.id) : [],
+      serverTime: context.now(),
+    }
+  },
+  async getOwnerDashboardSnapshot(event, context) {
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'workbenchAccess')
+    const batches = await context.repository.listBatches()
+    const batch = batches[batches.length - 1] || null
+    const drafts = batch ? await context.repository.listDrafts(batch.id) : []
+    const products = await context.repository.listProducts()
+    const orders = await context.repository.listOrders()
+
+    return {
+      pendingDraftCount: drafts.filter((draft) => draft.status === 'pending' || draft.status === 'needs_completion').length,
+      pendingImageTaskCount: products.filter((product) => product.status === 'pending_images').length,
+      pendingOrderCount: orders.filter((order) => order.status === 'pending_merchant_confirm').length,
+      serverTime: context.now(),
+    }
+  },
   async updateDraft(event, context) {
     await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
     const patch = parseDraftPatchInput(event.payload)
@@ -1169,6 +1219,18 @@ const apiHandlers = {
   async listProducts(_event, context) {
     return { products: await context.repository.listProducts() }
   },
+  async listOwnerProductCards(event, context) {
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
+    const products = await context.repository.listProducts()
+    const skus = await context.repository.listSkus()
+    const cards = products.map((product) => toOwnerProductCard(product, skus))
+
+    return {
+      products: cards,
+      readyProductCount: cards.filter((product) => product.canPublish).length,
+      serverTime: context.now(),
+    }
+  },
   async listPublishedProducts(_event, context) {
     const products = await context.repository.listProducts()
     const skus = await context.repository.listSkus()
@@ -1182,6 +1244,26 @@ const apiHandlers = {
     const products = allProducts.filter((product) => product.status === 'published' && validateProductForPublish(product, skus).length === 0)
 
     return { products: products.map((product) => toPublishedProductSummary(product, skus)) }
+  },
+  async getPublishedProductDetail(event, context) {
+    const productId = readString(event.params || {}, 'productId')
+    const products = await context.repository.listProducts()
+    const product = products.find((item) => item.id === productId) || null
+    const skus = await context.repository.listSkus(productId)
+
+    if (!product || product.status !== 'published' || validateProductForPublish(product, skus).length > 0) {
+      return {
+        product: null,
+        skus: [],
+        serverTime: context.now(),
+      }
+    }
+
+    return {
+      product,
+      skus,
+      serverTime: context.now(),
+    }
   },
   async updateProductDescription(event, context) {
     await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
@@ -1276,6 +1358,14 @@ const apiHandlers = {
     await requireAdminOrResolvedAnyRole(_event, context, ['owner', 'staff'], 'productManagement')
     return { products: (await context.repository.listProducts()).filter((product) => product.status === 'pending_images') }
   },
+  async getStaffImageTaskSnapshot(event, context) {
+    await requireAdminOrResolvedAnyRole(event, context, ['owner', 'staff'], 'productManagement')
+    return {
+      batches: await context.repository.listBatches(),
+      products: (await context.repository.listProducts()).filter((product) => product.status === 'pending_images'),
+      serverTime: context.now(),
+    }
+  },
   async supplementProductImages(event, context) {
     await requireAdminOrResolvedAnyRole(event, context, ['owner', 'staff'], 'productManagement')
     const input = parseSupplementImagesInput(event.payload)
@@ -1347,6 +1437,13 @@ const apiHandlers = {
   },
   async getCustomerOrder(event, context) {
     return { order: await findOrder(context.repository, readString(event.params || {}, 'orderId')) }
+  },
+  async getOwnerOrderSnapshot(event, context) {
+    await requireResolvedAnyRole(event, context, ['owner'])
+    return {
+      orders: await context.repository.listOrders(),
+      serverTime: context.now(),
+    }
   },
   async listMerchantOrders(_event, context) {
     await requireResolvedAnyRole(_event, context, ['owner'])

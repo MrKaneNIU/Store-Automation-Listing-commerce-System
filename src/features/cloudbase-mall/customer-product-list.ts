@@ -1,6 +1,6 @@
 import { getRuntimeCloudBaseMallApiClient } from '../../services/cloudbase/runtime-mall-api-client'
 import type { CloudBaseMallApiClient } from '../../services/cloudbase/mall-api-client'
-import { resolveProductImageFields } from '../../services/storage/product-image-url'
+import { resolveProductImageUrls } from '../../services/storage/product-image-url'
 import { uploadService } from '../../services/storage/runtime-upload-service'
 import type { CustomerProductListViewModel } from '../customer-product-list/customer-product-list'
 
@@ -11,9 +11,12 @@ export const getCloudBaseCustomerProductListView = async (
 ): Promise<CustomerProductListViewModel> => {
   try {
     const { products } = await client.listPublishedProductSummaries()
-    const renderableProducts = await Promise.all(
-      products.map((product) => resolveProductImageFields(product, uploadService)),
-    )
+    const mainImageUrls = await resolveProductImageUrls(products.map((product) => product.mainImageUrl), uploadService)
+    const renderableProducts = products.map((product, index) => ({
+      ...product,
+      mainImageUrl: mainImageUrls[index] ?? '',
+      imageUrls: [],
+    }))
 
     return {
       products: renderableProducts,

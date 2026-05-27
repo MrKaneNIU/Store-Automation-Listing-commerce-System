@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  createProductImageUrlCache,
   isCloudFileId,
   isRenderableProductImageUrl,
   isSignedCloudBaseTempUrl,
   resolveProductImageFields,
+  resolveProductImageUrls,
   resolveProductImageUrl,
 } from './product-image-url'
 
@@ -37,6 +39,46 @@ describe('product image url strategy', () => {
     expect(uploadService.refreshAssetUrls).toHaveBeenCalledWith(['cloud://asset-1'])
   })
 
+  it('dedupes cloud file IDs and reuses cached temporary URLs until the short TTL expires', async () => {
+    const cache = createProductImageUrlCache()
+    let now = 1_000
+    const uploadService = {
+      refreshAssetUrls: vi.fn(async (assetIds: string[]) => assetIds.map((assetId) => ({
+        assetId,
+        url: `https://renderable.example.com/${encodeURIComponent(assetId)}.jpg`,
+        mimeType: 'image/jpeg',
+        size: 1024,
+        checksum: assetId,
+        status: 'uploaded' as const,
+      }))),
+    }
+
+    await expect(resolveProductImageUrls([
+      'cloud://asset-1',
+      'cloud://asset-1',
+      '/static/logo.png',
+      signedTempUrl,
+    ], uploadService, { cache, now: () => now })).resolves.toEqual([
+      'https://renderable.example.com/cloud%3A%2F%2Fasset-1.jpg',
+      'https://renderable.example.com/cloud%3A%2F%2Fasset-1.jpg',
+      '/static/logo.png',
+      '',
+    ])
+    expect(uploadService.refreshAssetUrls).toHaveBeenCalledTimes(1)
+    expect(uploadService.refreshAssetUrls).toHaveBeenLastCalledWith(['cloud://asset-1'])
+
+    await expect(resolveProductImageUrls(['cloud://asset-1'], uploadService, { cache, now: () => now })).resolves.toEqual([
+      'https://renderable.example.com/cloud%3A%2F%2Fasset-1.jpg',
+    ])
+    expect(uploadService.refreshAssetUrls).toHaveBeenCalledTimes(1)
+
+    now += 45 * 60 * 1000 + 1
+    await expect(resolveProductImageUrls(['cloud://asset-1'], uploadService, { cache, now: () => now })).resolves.toEqual([
+      'https://renderable.example.com/cloud%3A%2F%2Fasset-1.jpg',
+    ])
+    expect(uploadService.refreshAssetUrls).toHaveBeenCalledTimes(2)
+  })
+
   it('drops expired signed temporary URLs instead of treating them as durable product images', async () => {
     const uploadService = {
       refreshAssetUrls: vi.fn(),
@@ -61,14 +103,17 @@ describe('product image url strategy', () => {
     await expect(resolveProductImageFields({
       id: 'product-1',
       mainImageUrl: 'cloud://asset-main',
-      imageUrls: ['cloud://asset-main', signedTempUrl, '/static/logo.png'],
+      imageUrls: ['cloud://asset-main', 'cloud://asset-detail', signedTempUrl, '/static/logo.png'],
     }, uploadService)).resolves.toEqual({
       id: 'product-1',
       mainImageUrl: 'https://renderable.example.com/cloud%3A%2F%2Fasset-main.jpg',
       imageUrls: [
         'https://renderable.example.com/cloud%3A%2F%2Fasset-main.jpg',
+        'https://renderable.example.com/cloud%3A%2F%2Fasset-detail.jpg',
         '/static/logo.png',
       ],
     })
+    expect(uploadService.refreshAssetUrls).toHaveBeenCalledTimes(1)
+    expect(uploadService.refreshAssetUrls).toHaveBeenCalledWith(['cloud://asset-main', 'cloud://asset-detail'])
   })
 })

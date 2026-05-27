@@ -105,6 +105,8 @@ import {
 const navigatingRoute = ref<AppRoute | ''>('')
 const message = ref('')
 const isChoosingImage = ref(false)
+const isLoadingSettings = ref(false)
+const loadError = ref('')
 const draft = reactive<HomepageSettingsInput>({
   backgroundTone: 'runway',
   customBackgroundImage: '',
@@ -122,6 +124,23 @@ const syncDraft = () => {
   draft.promotionalContent = settings.promotionalContent
 }
 
+const getErrorMessage = (error: unknown) => (error instanceof Error && error.message.trim()
+  ? error.message.trim()
+  : '首页设置加载失败')
+
+const refreshSettings = () => {
+  isLoadingSettings.value = true
+  loadError.value = ''
+  try {
+    syncDraft()
+  } catch (error) {
+    loadError.value = getErrorMessage(error)
+    message.value = loadError.value
+  } finally {
+    isLoadingSettings.value = false
+  }
+}
+
 const preview = computed(() => previewHomepageSettings(draft))
 
 onShow(() => {
@@ -131,7 +150,7 @@ onShow(() => {
 
   navigatingRoute.value = ''
   message.value = ''
-  syncDraft()
+  refreshSettings()
 })
 
 const selectTone = (tone: HomepageBackgroundTone) => {

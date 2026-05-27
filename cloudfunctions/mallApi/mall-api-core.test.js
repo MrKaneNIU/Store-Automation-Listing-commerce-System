@@ -27,6 +27,31 @@ const createHandler = (options = {}) =>
 
 const createStore = () => createMemoryDocumentStore()
 
+const createTracedStore = () => {
+  const store = createStore()
+  const listCalls = []
+  return {
+    store: {
+      ...store,
+      async list(name, query) {
+        listCalls.push({ name, query })
+        return store.list(name, query)
+      },
+    },
+    listCalls,
+  }
+}
+
+const createTracedHandler = (tracedStore) =>
+  createMallApiHandler(tracedStore.store, {
+    createId: (() => {
+      let index = 0
+      return (prefix) => `${prefix}-${++index}`
+    })(),
+    now: () => '2026-05-11T00:00:00.000Z',
+    allowTestIdentityRoles: true,
+  })
+
 const createProductionRoleHandler = (store = createStore()) =>
   createMallApiHandler(store, {
     createId: (() => {
@@ -494,6 +519,375 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     expect(skusAfterDelete).toMatchObject({
       success: false,
       error: { code: 'NOT_FOUND' },
+    })
+  })
+
+  it('lists owner product cards with one products read and one sku read', async () => {
+    const traced = createTracedStore()
+    const handler = createTracedHandler(traced)
+    const created = await handler({
+      action: 'createOcrBatch',
+      identity: ownerIdentity,
+      payload: {
+        imageUrls: ['cloud://page-1.png'],
+        drafts: [
+          {
+            productCode: 'A1023',
+            productName: 'Cotton Shirt',
+            salePrice: 129,
+            spec: 'Black/M',
+            stock: 2,
+            confidence: 0.96,
+            sourceImageUrl: 'cloud://page-1.png',
+          },
+          {
+            productCode: 'A1024',
+            productName: 'Linen Shirt',
+            salePrice: 159,
+            spec: 'White/L',
+            stock: 0,
+            confidence: 0.96,
+            sourceImageUrl: 'cloud://page-1.png',
+          },
+        ],
+      },
+    })
+    const confirmed = await handler({
+      action: 'confirmBatch',
+      identity: ownerIdentity,
+      params: { batchId: created.data.batch.id },
+    })
+    await handler({
+      action: 'supplementProductImages',
+      identity: staffIdentity,
+      params: { productId: confirmed.data.products[0].id },
+      payload: {
+        mainImageUrl: 'cloud://main.jpg',
+        imageUrls: ['cloud://main.jpg', 'cloud://detail.jpg'],
+      },
+    })
+    traced.listCalls.length = 0
+
+    const result = await handler({
+      action: 'listOwnerProductCards',
+      identity: ownerIdentity,
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        readyProductCount: 1,
+        serverTime: '2026-05-11T00:00:00.000Z',
+        products: [
+          {
+            productCode: 'A1023',
+            statusLabel: '可上架',
+            skuCount: 1,
+            canPublish: true,
+            publishBlockReasons: [],
+          },
+          {
+            productCode: 'A1024',
+            statusLabel: '待补图',
+            skuCount: 1,
+            canPublish: false,
+          },
+        ],
+      },
+    })
+    expect(traced.listCalls.filter((call) => call.name === 'products')).toHaveLength(1)
+    expect(traced.listCalls.filter((call) => call.name === 'skus')).toHaveLength(1)
+  })
+
+  it('requires product-management permission for owner product cards', async () => {
+    const handler = createHandler()
+
+    await expect(handler({
+      action: 'listOwnerProductCards',
+      adminSession: staffOrderSession,
+    })).resolves.toMatchObject({
+      success: false,
+      error: {
+        code: 'FORBIDDEN',
+      },
+    })
+  })
+
+  it('returns one published product detail snapshot with one products read and one sku read', async () => {
+    const traced = createTracedStore()
+    const handler = createTracedHandler(traced)
+    const { product, sku } = await createProductFixture(handler)
+    traced.listCalls.length = 0
+
+    const result = await handler({
+      action: 'getPublishedProductDetail',
+      params: { productId: product.id },
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        product: { id: product.id, status: 'published' },
+        skus: [{ id: sku.id, productId: product.id }],
+        serverTime: '2026-05-11T00:00:00.000Z',
+      },
+    })
+    expect(traced.listCalls.filter((call) => call.name === 'products')).toHaveLength(1)
+    expect(traced.listCalls.filter((call) => call.name === 'skus')).toHaveLength(1)
+  })
+
+  it('returns an empty published product detail snapshot for unpublished products', async () => {
+    const handler = createHandler()
+    const created = await handler({
+      action: 'createOcrBatch',
+      identity: ownerIdentity,
+      payload: {
+        imageUrls: ['cloud://page-1.png'],
+        drafts: [
+          {
+            productCode: 'A1023',
+            productName: 'Cotton Shirt',
+            salePrice: 129,
+            spec: 'Black/M',
+            stock: 2,
+            confidence: 0.96,
+            sourceImageUrl: 'cloud://page-1.png',
+          },
+        ],
+      },
+    })
+    const confirmed = await handler({
+      action: 'confirmBatch',
+      identity: ownerIdentity,
+      params: { batchId: created.data.batch.id },
+    })
+
+    await expect(handler({
+      action: 'getPublishedProductDetail',
+      params: { productId: confirmed.data.products[0].id },
+    })).resolves.toMatchObject({
+      success: true,
+      data: {
+        product: null,
+        skus: [],
+      },
+    })
+  })
+
+  it('returns one staff image task snapshot with one batches read and one products read', async () => {
+    const traced = createTracedStore()
+    const handler = createTracedHandler(traced)
+    const created = await handler({
+      action: 'createOcrBatch',
+      identity: ownerIdentity,
+      payload: {
+        imageUrls: ['cloud://page-1.png'],
+        drafts: [
+          {
+            productCode: 'A1023',
+            productName: 'Cotton Shirt',
+            salePrice: 129,
+            spec: 'Black/M',
+            stock: 2,
+            confidence: 0.96,
+            sourceImageUrl: 'cloud://page-1.png',
+          },
+        ],
+      },
+    })
+    await handler({
+      action: 'confirmBatch',
+      identity: ownerIdentity,
+      params: { batchId: created.data.batch.id },
+    })
+    traced.listCalls.length = 0
+
+    const result = await handler({
+      action: 'getStaffImageTaskSnapshot',
+      identity: staffIdentity,
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        batches: [{ id: created.data.batch.id }],
+        products: [{ productCode: 'A1023', status: 'pending_images' }],
+        serverTime: '2026-05-11T00:00:00.000Z',
+      },
+    })
+    expect(traced.listCalls.filter((call) => call.name === 'ocr_batches')).toHaveLength(1)
+    expect(traced.listCalls.filter((call) => call.name === 'products')).toHaveLength(1)
+  })
+
+  it('returns one latest draft review snapshot with one batches read and one drafts read', async () => {
+    const traced = createTracedStore()
+    const handler = createTracedHandler(traced)
+    const created = await handler({
+      action: 'createOcrBatch',
+      identity: ownerIdentity,
+      payload: {
+        imageUrls: ['cloud://page-1.png'],
+        drafts: [
+          {
+            productCode: 'A1023',
+            productName: 'Cotton Shirt',
+            salePrice: 129,
+            spec: 'Black/M',
+            stock: 2,
+            confidence: 0.72,
+            sourceImageUrl: 'cloud://page-1.png',
+          },
+        ],
+      },
+    })
+    traced.listCalls.length = 0
+
+    const result = await handler({
+      action: 'getLatestDraftReviewSnapshot',
+      identity: ownerIdentity,
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        batch: { id: created.data.batch.id },
+        drafts: [{ productCode: 'A1023', confidence: 0.72 }],
+        serverTime: '2026-05-11T00:00:00.000Z',
+      },
+    })
+    expect(traced.listCalls.filter((call) => call.name === 'ocr_batches')).toHaveLength(1)
+    expect(traced.listCalls.filter((call) => call.name === 'product_drafts')).toHaveLength(1)
+  })
+
+  it('returns one owner order snapshot with one orders read', async () => {
+    const traced = createTracedStore()
+    const handler = createTracedHandler(traced)
+    const { product, sku } = await createProductFixture(handler)
+    const created = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: {
+          customerId: 'client-customer',
+          openid: 'client-openid',
+          phoneNumber: '13800000000',
+          authSource: 'mock_wechat',
+        },
+      },
+    })
+    traced.listCalls.length = 0
+
+    const result = await handler({
+      action: 'getOwnerOrderSnapshot',
+      identity: ownerIdentity,
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        orders: [{ id: created.data.order.id, status: 'pending_merchant_confirm' }],
+        serverTime: '2026-05-11T00:00:00.000Z',
+      },
+    })
+    expect(traced.listCalls.filter((call) => call.name === 'orders')).toHaveLength(1)
+  })
+
+  it('returns one owner dashboard snapshot with bounded aggregate reads', async () => {
+    const traced = createTracedStore()
+    const handler = createTracedHandler(traced)
+    const { product, sku } = await createProductFixture(handler)
+    const draftBatch = await handler({
+      action: 'createOcrBatch',
+      identity: ownerIdentity,
+      payload: {
+        imageUrls: ['cloud://page-2.png'],
+        drafts: [
+          {
+            productCode: 'B2088',
+            productName: 'Wool Coat',
+            salePrice: 299,
+            spec: 'Ivory/S',
+            stock: 1,
+            confidence: 0.88,
+            sourceImageUrl: 'cloud://page-2.png',
+          },
+        ],
+      },
+    })
+    await handler({
+      action: 'confirmBatch',
+      identity: ownerIdentity,
+      params: { batchId: draftBatch.data.batch.id },
+    })
+    await handler({
+      action: 'createOcrBatch',
+      identity: ownerIdentity,
+      payload: {
+        imageUrls: ['cloud://page-3.png'],
+        drafts: [
+          {
+            productCode: 'C3099',
+            productName: 'Silk Scarf',
+            salePrice: 99,
+            spec: 'Blue',
+            stock: 3,
+            confidence: 0.9,
+            sourceImageUrl: 'cloud://page-3.png',
+          },
+        ],
+      },
+    })
+    await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: {
+          customerId: 'client-customer',
+          openid: 'client-openid',
+          phoneNumber: '13800000000',
+          authSource: 'mock_wechat',
+        },
+      },
+    })
+    traced.listCalls.length = 0
+
+    const result = await handler({
+      action: 'getOwnerDashboardSnapshot',
+      adminSession: adminProductSession,
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        pendingDraftCount: 1,
+        pendingImageTaskCount: 1,
+        pendingOrderCount: 1,
+        serverTime: '2026-05-11T00:00:00.000Z',
+      },
+    })
+    expect(traced.listCalls.filter((call) => call.name === 'ocr_batches')).toHaveLength(1)
+    expect(traced.listCalls.filter((call) => call.name === 'product_drafts')).toHaveLength(1)
+    expect(traced.listCalls.filter((call) => call.name === 'products')).toHaveLength(1)
+    expect(traced.listCalls.filter((call) => call.name === 'orders')).toHaveLength(1)
+  })
+
+  it('requires product-management permission for staff image task snapshots', async () => {
+    const handler = createHandler()
+
+    await expect(handler({
+      action: 'getStaffImageTaskSnapshot',
+      adminSession: staffOrderSession,
+    })).resolves.toMatchObject({
+      success: false,
+      error: {
+        code: 'FORBIDDEN',
+      },
     })
   })
 

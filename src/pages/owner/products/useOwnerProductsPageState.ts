@@ -96,6 +96,7 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
   const restockQuantityText = ref('1')
   const inventoryReason = ref('盘点修正')
   const descriptionFallbackText = '暂无商品简介'
+  const allProductsView = ref<OwnerProductsViewModel>(createEmptyProductsView())
   const viewModel = ref<OwnerProductsViewModel>(createEmptyProductsView())
   const skuInventoryView = ref<OwnerProductSkuInventoryViewModel>(createEmptySkuInventoryView())
   const skuDrafts = ref<SkuDraft[]>([])
@@ -131,8 +132,19 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
     })
   }
 
+  const filterProductsView = (
+    sourceView: OwnerProductsViewModel,
+    status: OwnerProductStatusFilter,
+  ): OwnerProductsViewModel => ({
+    ...sourceView,
+    products: status === 'all'
+      ? sourceView.products
+      : sourceView.products.filter((product) => product.status === status),
+  })
+
   const refreshView = async () => {
-    viewModel.value = await getCloudBaseOwnerProductsView(selectedStatus.value)
+    allProductsView.value = await getCloudBaseOwnerProductsView('all')
+    viewModel.value = filterProductsView(allProductsView.value, selectedStatus.value)
   }
 
   const resetDescriptionEditor = () => {
@@ -392,10 +404,11 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
       void refreshView()
     })
 
-    watch(selectedStatus, () => {
-      void refreshView()
-    })
   }
+
+  watch(selectedStatus, () => {
+    viewModel.value = filterProductsView(allProductsView.value, selectedStatus.value)
+  })
 
   return {
     routes,

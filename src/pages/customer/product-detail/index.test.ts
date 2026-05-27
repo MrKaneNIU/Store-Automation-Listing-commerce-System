@@ -23,6 +23,14 @@ describe('customer product detail real checkout authorization wiring', () => {
     expect(source).toContain("return selectedSku.value.isDisabled ? '暂无库存' : `库存 ${selectedSku.value.stock}`")
   })
 
+  it('switches SKU state locally without refetching the product detail snapshot', () => {
+    expect(source).toContain('selectCloudBaseCustomerProductSkuInView')
+    expect(source).not.toContain('selectCloudBaseCustomerProductSku,')
+    expect(source).not.toContain('selectCloudBaseCustomerProductSku(')
+    expect(source).toContain('const selectSku = (skuId: string) => {')
+    expect(source).toContain('viewModel.value = result.view')
+  })
+
   it('renders the product description from the product detail ViewModel', () => {
     expect(source).toContain('{{ viewModel.descriptionText }}')
     expect(source).toContain('class="detail-copy"')

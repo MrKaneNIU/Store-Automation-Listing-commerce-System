@@ -186,7 +186,7 @@ import {
 } from '../../../features/customer-product-detail/customer-product-detail'
 import {
   getCloudBaseCustomerProductDetailView,
-  selectCloudBaseCustomerProductSku,
+  selectCloudBaseCustomerProductSkuInView,
   submitCloudBaseCustomerProductDetailOrder,
 } from '../../../features/cloudbase-mall/customer-product-detail'
 import { createCloudBaseWechatAuthService } from '../../../services/auth/cloudbase-wechat-auth-service'
@@ -278,11 +278,11 @@ const refreshView = async (options: RefreshOptions = { showLoading: true }) => {
   }
 }
 
-const selectSku = async (skuId: string) => {
-  const result = await selectCloudBaseCustomerProductSku(productId.value, skuId)
+const selectSku = (skuId: string) => {
+  const result = selectCloudBaseCustomerProductSkuInView(viewModel.value, skuId)
   selectedSkuId.value = result.selectedSkuId
   message.value = result.message
-  await refreshView({ showLoading: false })
+  viewModel.value = result.view
 }
 
 const confirmModal = (content: string) =>

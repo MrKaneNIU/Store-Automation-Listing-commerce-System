@@ -32,6 +32,39 @@ UI code must not:
 - Mutate returned domain objects in place. Use page-facing commands when a
   business change is needed.
 
+## Future Customer-Side Module Template
+
+The following future customer-side modules are planned but not implemented in
+this contract yet:
+
+- Shopping bag:
+  `docs/prd/2026-05-27-shopping-bag-module-prd.md`
+- Favorites:
+  `docs/prd/2026-05-27-favorites-module-prd.md`
+- Customer mine:
+  `docs/prd/2026-05-27-customer-mine-module-prd.md`
+
+Before implementing any of these modules, add the concrete page-facing contract
+for that module here. Each contract must state:
+
+- Feature module and UI entry points.
+- Snapshot action name.
+- ViewModel fields the page may read.
+- Command parameters the page may pass.
+- Snapshot keys invalidated after each write.
+- Whether customer identity is required.
+- Whether phone authorization is required.
+- Which tests protect the contract.
+
+Future customer-side pages must not:
+
+- Treat shopping-bag rows as orders.
+- Treat favorite rows as shopping-bag rows.
+- Use the customer mine page as a merchant workbench entry.
+- Reserve stock before the existing order-creation flow.
+- Persist signed temporary image URLs as canonical product data.
+- Read or write customer-private data without customer scoping.
+
 ## Customer Product List
 
 Feature module:
@@ -49,7 +82,8 @@ UI may read:
 - `products[].productCode`
 - `products[].productName`
 - `products[].mainImageUrl`
-- `products[].imageUrls`
+- `products[].imageUrls`: empty for the list snapshot; detail images are
+  resolved only by product-detail or image preview/edit surfaces.
 - `products[].status`: display only; customer page should receive published
   products only.
 - `products[].createdFromBatchId`
@@ -69,10 +103,12 @@ UI must not:
   from the page.
 - Show unpublished products by bypassing this ViewModel.
 - Calculate minimum SKU price in the page.
+- Resolve detail image arrays in the list page.
 
 Test protection:
 
 - `src/features/customer-product-list/customer-product-list.test.ts`
+- `src/features/cloudbase-mall/cloudbase-mall.test.ts`
 
 ## Customer Product Detail
 
@@ -85,6 +121,10 @@ UI entry points:
 - `getCustomerProductDetailView(productId, selectedSkuId?)`
 - `selectCustomerProductSku(productId, skuId)`
 - `submitCustomerProductDetailOrder(params)`
+- CloudBase runtime detail facade must load product detail data through the
+  aggregated `getPublishedProductDetail(productId)` action.
+- CloudBase runtime SKU selection should use the already loaded detail
+  ViewModel for local selection state updates.
 
 UI may read:
 
@@ -123,6 +163,8 @@ UI must not:
 
 - Decide whether a SKU is disabled by stock in the page.
 - Decide whether product status allows ordering in the page.
+- Trigger a fresh remote read for pure SKU selection after the detail ViewModel
+  is loaded.
 - Create orders directly through workflow or repository APIs.
 - Call mock WeChat auth service directly from the page.
 - Reserve or restore stock in the page.
@@ -130,6 +172,8 @@ UI must not:
 Test protection:
 
 - `src/features/customer-product-detail/customer-product-detail.test.ts`
+- `src/features/cloudbase-mall/cloudbase-mall.test.ts`
+- `src/pages/customer/product-detail/index.test.ts`
 
 ## Owner Screenshot Import
 
@@ -185,6 +229,8 @@ Feature module:
 UI entry points:
 
 - `getOwnerDraftReviewView()`
+- CloudBase runtime draft review facade must load first-screen data through the
+  aggregated `getLatestDraftReviewSnapshot` action.
 - `updateOwnerDraftReviewDraft(draftId, field, value)`
 - `deleteOwnerDraftReviewDraft(draftId)`
 - `confirmLatestOwnerDraftReviewBatch()`
@@ -215,6 +261,7 @@ UI must not:
 
 - Group drafts by product code in the page.
 - Derive low-confidence, needs-completion, or price-conflict flags in the page.
+- Call `getLatestDrafts()` directly from page code.
 - Replace drafts directly through repository APIs.
 - Confirm batches through workflow APIs directly from the page.
 - Create products or SKUs directly from the page.
@@ -233,6 +280,8 @@ UI entry points:
 
 - `ownerProductStatusOptions`
 - `getOwnerProductsView(selectedStatus)`
+- CloudBase runtime facade must load owner product list data through the
+  aggregated `listOwnerProductCards` action, then apply status filtering locally.
 - `publishOwnerProduct(productId)`
 - `publishReadyOwnerProducts()`
 
@@ -259,12 +308,15 @@ UI must not:
 
 - Decide publish eligibility in the page.
 - Count SKUs in the page.
+- Trigger a fresh remote read for pure status tab filtering.
 - Publish products directly through workflow or repository APIs.
 - Batch-publish by scanning product statuses in the page.
 
 Test protection:
 
 - `src/features/owner-products/owner-products.test.ts`
+- `src/features/cloudbase-mall/cloudbase-mall.test.ts`
+- `src/pages/owner/products/useOwnerProductsPageState.test.ts`
 
 ## Owner Orders
 
@@ -312,6 +364,10 @@ Feature module:
 UI entry points:
 
 - `getStaffImageTasksView({ keyword, selectedBatchId })`
+- CloudBase runtime staff image task facade must load first-screen data through
+  the aggregated `getStaffImageTaskSnapshot` action.
+- CloudBase runtime keyword and batch filtering should use the already loaded
+  staff image task ViewModel.
 - `supplementStaffProductImages(productId)`
 
 UI may read:
@@ -335,12 +391,16 @@ UI must not:
 
 - List pending-image products directly from access or repository APIs.
 - Derive batch filter options in the page.
+- Trigger a fresh remote read for pure keyword or batch filtering after the
+  staff image task ViewModel is loaded.
 - Upload product images or update product status directly from the page.
 - Decide image supplementation state transitions in the page.
 
 Test protection:
 
 - `src/features/staff-image-tasks/staff-image-tasks.test.ts`
+- `src/features/cloudbase-mall/cloudbase-mall.test.ts`
+- `src/pages/staff/image-tasks/index.test.ts`
 
 ## Contract Change Process
 

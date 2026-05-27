@@ -22,7 +22,12 @@ describe('cloudbase upload service', () => {
     }
 
     const uploadFile = vi.fn(async () => ({ fileID: 'cloud://asset-1' }))
-    const getTempFileURL = vi.fn(async () => ({ fileList: [{ fileID: 'cloud://asset-1', tempFileURL: 'https://temp-url' }] }))
+    const getTempFileURL = vi.fn(async (request: { fileList: Array<{ fileID: string; maxAge?: number }> }) => ({
+      fileList: request.fileList.map((item) => ({
+        fileID: item.fileID,
+        tempFileURL: item.fileID === 'cloud://asset-1' ? 'https://temp-url' : `https://temp-url/${encodeURIComponent(item.fileID)}`,
+      })),
+    }))
     const deleteFile = vi.fn(async () => ({ fileList: [{ fileID: 'cloud://asset-1', status: 'success' }] }))
 
     globalAny.wx = {
@@ -53,7 +58,14 @@ describe('cloudbase upload service', () => {
     const deleted = await cloudbaseUploadService.deleteAssets(['cloud://asset-1'])
     expect(deleted.deletedAssetIds).toEqual(['cloud://asset-1'])
 
-    const refreshed = await cloudbaseUploadService.refreshAssetUrls(['cloud://asset-1'])
+    const refreshed = await cloudbaseUploadService.refreshAssetUrls(['cloud://asset-1', 'cloud://asset-1', 'cloud://asset-2'])
     expect(refreshed[0].assetId).toBe('cloud://asset-1')
+    expect(refreshed.map((asset) => asset.assetId)).toEqual(['cloud://asset-1', 'cloud://asset-1', 'cloud://asset-2'])
+    expect(getTempFileURL).toHaveBeenLastCalledWith({
+      fileList: [
+        { fileID: 'cloud://asset-1', maxAge: 2700 },
+        { fileID: 'cloud://asset-2', maxAge: 2700 },
+      ],
+    })
   })
 })

@@ -19,22 +19,39 @@ export const getCloudBaseStaffImageTasksView = async (
   params: { keyword: string; selectedBatchId: string },
   client: CloudBaseMallApiClient = getRuntimeCloudBaseMallApiClient(),
 ): Promise<StaffImageTasksViewModel> => {
-  const [{ batches }, { products }] = await Promise.all([client.listOcrBatches(), client.listPendingImageTasks()])
+  const { batches, products } = await client.getStaffImageTaskSnapshot()
   const batchOptions = [allBatchesOption, ...batches.map((batch) => ({ label: batch.id, value: batch.id }))]
   const keyword = params.keyword.trim()
-  const filteredProducts = products
+  const filteredProducts = products.map(toTaskProduct)
     .filter((product) => {
       const matchesKeyword = !keyword || product.productCode.includes(keyword)
       const matchesBatch = !params.selectedBatchId || product.createdFromBatchId === params.selectedBatchId
       return matchesKeyword && matchesBatch
     })
-    .map(toTaskProduct)
 
   return {
     batchOptions,
     selectedBatchLabel: batchOptions.find((item) => item.value === params.selectedBatchId)?.label ?? allBatchesOption.label,
     products: filteredProducts,
     emptyMessage: '暂无待补图商品',
+  }
+}
+
+export const filterCloudBaseStaffImageTasksView = (
+  view: StaffImageTasksViewModel,
+  params: { keyword: string; selectedBatchId: string },
+): StaffImageTasksViewModel => {
+  const keyword = params.keyword.trim()
+  const filteredProducts = view.products.filter((product) => {
+    const matchesKeyword = !keyword || product.productCode.includes(keyword)
+    const matchesBatch = !params.selectedBatchId || product.createdFromBatchId === params.selectedBatchId
+    return matchesKeyword && matchesBatch
+  })
+
+  return {
+    ...view,
+    selectedBatchLabel: view.batchOptions.find((item) => item.value === params.selectedBatchId)?.label ?? allBatchesOption.label,
+    products: filteredProducts,
   }
 }
 

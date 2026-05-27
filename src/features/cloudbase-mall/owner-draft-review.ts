@@ -36,7 +36,7 @@ const toDraftView = (draft: ProductDraft): OwnerDraftReviewDraftView => ({
 export const getCloudBaseOwnerDraftReviewView = async (
   client: CloudBaseMallApiClient = getRuntimeCloudBaseMallApiClient(),
 ): Promise<OwnerDraftReviewViewModel> => {
-  const { batch, drafts } = await client.getLatestDrafts()
+  const { batch, drafts } = await client.getLatestDraftReviewSnapshot()
   const priceConflictCodes = findPriceConflictCodes(drafts)
   const activeDrafts = drafts.filter((draft) => draft.status !== 'deleted')
   const groups = groupDraftsByProductCode(drafts).map((group) => ({

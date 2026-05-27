@@ -25,7 +25,7 @@ const toListItem = (order: Order): OwnerOrderListItem => ({
 export const getCloudBaseOwnerOrdersView = async (
   client: CloudBaseMallApiClient = getRuntimeCloudBaseMallApiClient(),
 ): Promise<OwnerOrdersViewModel> => {
-  const { orders } = await client.listMerchantOrders()
+  const { orders } = await client.getOwnerOrderSnapshot()
 
   return {
     orders: orders.map(toListItem),

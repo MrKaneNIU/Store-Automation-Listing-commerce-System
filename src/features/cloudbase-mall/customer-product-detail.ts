@@ -1,4 +1,4 @@
-import type { Product, Sku } from '../../domain/catalog/types'
+import type { Sku } from '../../domain/catalog/types'
 import type { Order } from '../../domain/order/types'
 import { mockWechatAuthService } from '../../services/auth/mock-wechat-auth-service'
 import type { WechatAuthService } from '../../services/auth/wechat-auth-service'
@@ -28,19 +28,14 @@ const toSkuView = (sku: Sku, selectedSkuId: string): CustomerProductDetailSkuVie
   isDisabled: sku.stock <= 0,
 })
 
-const findPublishedProduct = async (productId: string, client: CloudBaseMallApiClient): Promise<Product | null> => {
-  const { products } = await client.listPublishedProducts()
-  return products.find((product) => product.id === productId) ?? null
-}
-
 export const getCloudBaseCustomerProductDetailView = async (
   productId: string,
   selectedSkuId = '',
   client: CloudBaseMallApiClient = getRuntimeCloudBaseMallApiClient(),
 ): Promise<CustomerProductDetailViewModel> => {
-  const product = await findPublishedProduct(productId, client)
+  const { product, skus: detailSkus } = await client.getPublishedProductDetail(productId)
   const renderableProduct = product ? await resolveProductImageFields(product, uploadService) : null
-  const skus = product ? (await client.listSkus(product.id)).skus.map((sku) => toSkuView(sku, selectedSkuId)) : []
+  const skus = product ? detailSkus.map((sku) => toSkuView(sku, selectedSkuId)) : []
   const selectedSku = skus.find((sku) => sku.id === selectedSkuId)
 
   return {
@@ -53,25 +48,44 @@ export const getCloudBaseCustomerProductDetailView = async (
   }
 }
 
+export const selectCloudBaseCustomerProductSkuInView = (
+  view: CustomerProductDetailViewModel,
+  skuId: string,
+): SelectCustomerProductSkuResult & { view: CustomerProductDetailViewModel } => {
+  const sku = view.skus.find((item) => item.id === skuId)
+
+  if (!view.product || !view.isPublished) {
+    return { selectedSkuId: '', message: productUnavailableMessage, view }
+  }
+  if (!sku) {
+    return { selectedSkuId: '', message: outOfStockMessage, view }
+  }
+
+  const skus = view.skus.map((item) => ({
+    ...item,
+    isSelected: item.id === sku.id,
+  }))
+  const nextView = {
+    ...view,
+    skus,
+    canSubmitOrder: !sku.isDisabled,
+  }
+
+  return {
+    selectedSkuId: sku.id,
+    message: sku.isDisabled ? outOfStockMessage : '',
+    view: nextView,
+  }
+}
+
 export const selectCloudBaseCustomerProductSku = async (
   productId: string,
   skuId: string,
   client: CloudBaseMallApiClient = getRuntimeCloudBaseMallApiClient(),
 ): Promise<SelectCustomerProductSkuResult> => {
   const view = await getCloudBaseCustomerProductDetailView(productId, skuId, client)
-  const sku = view.skus.find((item) => item.id === skuId)
-
-  if (!view.product || !view.isPublished) {
-    return { selectedSkuId: '', message: productUnavailableMessage }
-  }
-  if (!sku) {
-    return { selectedSkuId: '', message: outOfStockMessage }
-  }
-  if (sku.isDisabled) {
-    return { selectedSkuId: sku.id, message: outOfStockMessage }
-  }
-
-  return { selectedSkuId: sku.id, message: '' }
+  const result = selectCloudBaseCustomerProductSkuInView(view, skuId)
+  return { selectedSkuId: result.selectedSkuId, message: result.message }
 }
 
 export const submitCloudBaseCustomerProductDetailOrder = async (params: {

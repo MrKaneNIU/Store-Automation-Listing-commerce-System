@@ -102,6 +102,132 @@ describe('CloudBase mall API client', () => {
     ])
   })
 
+  it('maps published product detail to a single mallApi action', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        return { product: null, skus: [], serverTime: '2026-05-27T00:00:00.000Z' } as never
+      },
+    })
+
+    await client.getPublishedProductDetail('product-1')
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'getPublishedProductDetail',
+          params: { productId: 'product-1' },
+        },
+      },
+    ])
+  })
+
+  it('maps owner product cards to a single mallApi action', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        return { products: [], readyProductCount: 0, serverTime: '2026-05-27T00:00:00.000Z' } as never
+      },
+    })
+
+    await client.listOwnerProductCards()
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'listOwnerProductCards',
+        },
+      },
+    ])
+  })
+
+  it('maps staff image task snapshots to a single mallApi action', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        return { batches: [], products: [], serverTime: '2026-05-27T00:00:00.000Z' } as never
+      },
+    })
+
+    await client.getStaffImageTaskSnapshot()
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'getStaffImageTaskSnapshot',
+        },
+      },
+    ])
+  })
+
+  it('maps latest draft review snapshots to a single mallApi action', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        return { batch: null, drafts: [], serverTime: '2026-05-27T00:00:00.000Z' } as never
+      },
+    })
+
+    await client.getLatestDraftReviewSnapshot()
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'getLatestDraftReviewSnapshot',
+        },
+      },
+    ])
+  })
+
+  it('maps owner order snapshots to a single mallApi action', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        return { orders: [], serverTime: '2026-05-27T00:00:00.000Z' } as never
+      },
+    })
+
+    await client.getOwnerOrderSnapshot()
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'getOwnerOrderSnapshot',
+        },
+      },
+    ])
+  })
+
+  it('maps owner dashboard snapshots to a single mallApi action', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        return {
+          pendingDraftCount: 0,
+          pendingImageTaskCount: 0,
+          pendingOrderCount: 0,
+          serverTime: '2026-05-27T00:00:00.000Z',
+        } as never
+      },
+    })
+
+    await client.getOwnerDashboardSnapshot()
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'getOwnerDashboardSnapshot',
+        },
+      },
+    ])
+  })
+
   it('maps product description updates through mallApi', async () => {
     const calls: Array<{ name: string; data: unknown }> = []
     const client = createCloudBaseMallApiClient({
