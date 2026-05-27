@@ -71,6 +71,14 @@ const createEmptyProductsView = (): OwnerProductsViewModel => ({
   emptyMessage: '当前筛选下暂无商品',
 })
 
+const createLoadFailedProductsView = (): OwnerProductsViewModel => ({
+  statusOptions: [],
+  products: [],
+  canBatchPublish: false,
+  readyProductCount: 0,
+  emptyMessage: '商品管理加载失败，请重新登录或稍后重试',
+})
+
 const createEmptySkuInventoryView = (): OwnerProductSkuInventoryViewModel => ({
   product: null,
   skus: [],
@@ -143,8 +151,15 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
   })
 
   const refreshView = async () => {
-    allProductsView.value = await getCloudBaseOwnerProductsView('all')
-    viewModel.value = filterProductsView(allProductsView.value, selectedStatus.value)
+    try {
+      allProductsView.value = await getCloudBaseOwnerProductsView('all')
+      viewModel.value = filterProductsView(allProductsView.value, selectedStatus.value)
+      message.value = ''
+    } catch (error) {
+      allProductsView.value = createLoadFailedProductsView()
+      viewModel.value = allProductsView.value
+      message.value = formatActionFailureMessage('商品管理加载', error)
+    }
   }
 
   const resetDescriptionEditor = () => {

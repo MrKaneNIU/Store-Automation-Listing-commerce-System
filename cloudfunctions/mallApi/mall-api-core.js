@@ -1439,18 +1439,18 @@ const apiHandlers = {
     return { order: await findOrder(context.repository, readString(event.params || {}, 'orderId')) }
   },
   async getOwnerOrderSnapshot(event, context) {
-    await requireResolvedAnyRole(event, context, ['owner'])
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'orderConfirmation')
     return {
       orders: await context.repository.listOrders(),
       serverTime: context.now(),
     }
   },
   async listMerchantOrders(_event, context) {
-    await requireResolvedAnyRole(_event, context, ['owner'])
+    await requireAdminOrResolvedAnyRole(_event, context, ['owner'], 'orderConfirmation')
     return { orders: await context.repository.listOrders() }
   },
   async confirmMerchantOrder(event, context) {
-    await requireResolvedAnyRole(event, context, ['owner'])
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'orderConfirmation')
     const order = await findOrder(context.repository, readString(event.params || {}, 'orderId'))
     if (order.status !== 'pending_merchant_confirm') {
       throw conflictError('Only pending merchant-confirmation orders can be confirmed')
@@ -1471,7 +1471,7 @@ const apiHandlers = {
     return { order: confirmed }
   },
   async cancelMerchantOrder(event, context) {
-    await requireResolvedAnyRole(event, context, ['owner'])
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'orderConfirmation')
     const order = await findOrder(context.repository, readString(event.params || {}, 'orderId'))
     if (order.status !== 'pending_merchant_confirm') {
       throw conflictError('Only pending merchant-confirmation orders can be canceled')

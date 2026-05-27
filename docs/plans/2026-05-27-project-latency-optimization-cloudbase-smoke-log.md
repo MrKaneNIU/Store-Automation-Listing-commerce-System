@@ -151,15 +151,55 @@ Observed summary:
 
 ## Deployed Smoke Status
 
-Status: not executed.
+Status: passed on 2026-05-27 after the online product-management and
+order-confirmation repairs.
 
-Blocking conditions:
+Operator-confirmed target environment:
 
-1. `tcb` is not available in the current shell.
-2. The target envId has not been explicitly confirmed by an operator for this
-   smoke pass.
-3. No CloudBase login state was verified.
-4. No deployed function invocation was performed.
+```text
+envId: cloud1-d7gifjyzl7721b383
+```
+
+CloudBase CLI evidence:
+
+```text
+tcb path: C:\Users\65188\AppData\Local\Temp\codex-cloudbase-cli-clean\node_modules\@cloudbase\cli\bin\tcb
+tcb path exists: true
+CloudBase CLI version: 3.5.0
+tcb login: already logged in
+tcb env use cloud1-d7gifjyzl7721b383: succeeded
+mallApi status: Active / Available
+mallApi runtime: Nodejs18.15
+```
+
+Security note: `tcb fn detail mallApi --json` returns CloudBase environment
+variables. The command was used only to confirm function status and runtime.
+No secret values are reproduced in this log.
+
+Remote read-only smoke results:
+
+| Action | Result | Notes |
+| --- | --- | --- |
+| `mallApi.health` | Passed | `success: true`, `supportedActions: 39`, envId `cloud1-d7gifjyzl7721b383` |
+| `mallApi.listContracts` | Passed | `success: true`; includes product-management and order-confirmation actions |
+| `mallApi.listOwnerProductCards` | Passed | `success: true`; returned deployed product `122334` / `衬衫` |
+| `mallApi.getOwnerOrderSnapshot` | Passed | `success: true`; returned an empty deployed order list |
+| `mallApi.listMerchantOrders` | Passed | `success: true`; returned an empty deployed order list |
+
+Actions intentionally not invoked:
+
+```text
+confirmMerchantOrder
+cancelMerchantOrder
+createCustomerOrder
+publishProduct
+unpublishProduct
+deleteProduct
+stock or SKU write actions
+```
+
+Those actions were skipped because this smoke pass was read-only and must not
+mutate deployed business data.
 
 ## Exit Criteria
 
@@ -177,9 +217,8 @@ recorded:
 ## Current Conclusion
 
 Local CloudFunction entry smoke is green after updating the smoke harness.
-The deployed CloudBase environment smoke is still open because the CloudBase
-CLI is not callable in this shell and no remote environment operation was
-performed.
+The deployed CloudBase `mallApi` environment smoke is now closed for the
+read-only management paths exercised above.
 
 ## CLI Readiness Follow-Up
 
@@ -209,19 +248,17 @@ Results:
 - The three temporary `npx` probe processes started at this timestamp were
   stopped after timeout. No CloudBase environment command was executed.
 
-Updated blocking conditions:
+Updated status after follow-up:
 
-1. A callable CloudBase CLI path is still missing.
-2. Target envId still requires explicit operator confirmation before any remote
-   operation.
-3. CloudBase login state has not been verified.
-4. No deployed `mallHealth` or `mallApi` invocation has been performed.
+1. A callable CloudBase CLI path is available via the temporary clean install.
+2. Target envId `cloud1-d7gifjyzl7721b383` was used for all remote smoke
+   commands.
+3. CloudBase login state was verified.
+4. Deployed `mallApi` read-only invocations were performed and passed.
 
-Minimum next unblock options:
+Remaining caveat:
 
-1. Install or expose a stable local `tcb` command in PATH, then run
-   `tcb --version` and `tcb fn invoke --help`.
-2. Alternatively provide a known working CloudBase CLI path and confirmed
-   envId.
-3. After that, run login/environment selection and remote invokes only against
-   the confirmed envId.
+- This follow-up closed the `mallApi` deployed smoke needed by the repaired
+  product-management and order-confirmation paths. `mallHealth` was not
+  re-invoked in this final follow-up because the repair scope and online
+  defects were both in `mallApi`.

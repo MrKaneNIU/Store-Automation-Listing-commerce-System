@@ -30,15 +30,18 @@ data models, CloudFunction actions, or API contracts.
 | Full mini-program smoke gate | Passed | Module 6 records `pnpm.cmd run verify:full` passing with mp-weixin build and route smoke. |
 | Local `mallHealth` CloudFunction entry smoke | Passed | `docs/plans/2026-05-27-project-latency-optimization-cloudbase-smoke-log.md` |
 | Local `mallApi` CloudFunction entry smoke | Passed after smoke harness correction | The smoke harness now uses the supported admin-session path. No CloudFunction business code was changed. |
+| Deployed `mallApi` CloudBase smoke | Passed | Stable temporary `tcb` path, login state, envId, function status, and read-only `mallApi` actions were verified on `cloud1-d7gifjyzl7721b383`. |
+| WeChat DevTools manual acceptance | Passed by operator report | Product-management and order-confirmation defects were fixed and accepted on 2026-05-27. |
 | Future customer module PRDs | Prepared | Shopping bag, favorites, and customer mine PRDs exist as planning templates only. |
 
 ## Open Gaps
 
 | Gap | Current Status | Blocking Condition | Required Next Action |
 | --- | --- | --- | --- |
-| WeChat DevTools or real-device manual acceptance | Not executed | Requires a human operator to run the matrix and record device/DevTools evidence. | Fill `docs/plans/2026-05-27-project-latency-optimization-manual-acceptance-log.md`. |
-| CloudBase deployed environment smoke | Not executed | No callable stable `tcb` command in the current shell; envId not explicitly confirmed for this pass; login state not verified. | Expose a stable `tcb`, confirm envId, authenticate, then invoke deployed `mallHealth` and `mallApi`. |
-| Git checkpoint | Not performed | User has not requested staging or commit in this follow-up sequence. | Review diff, then stage/commit only when explicitly requested. |
+| WeChat DevTools manual acceptance | Closed by operator report | Detailed DevTools version, base library version, timings, and repository-hosted screenshot paths were not captured. | Re-run and fill detailed matrix only if release evidence requires those fields. |
+| Real-device manual acceptance | Not separately executed or recorded | Current acceptance was DevTools-based by user report. | Optional before production release if real-device evidence is required. |
+| CloudBase deployed environment smoke | Closed for deployed `mallApi` read-only management paths | `mallHealth` was not re-invoked in the final follow-up because the repaired defects were both in `mallApi`. | Optional: run `mallHealth` remote smoke if a release checklist requires it. |
+| Git checkpoint | Closed by this sync pass | Documentation and git sync requested after DevTools acceptance and deployed smoke. | Local checkpoint commit created for the closure. |
 
 ## Git Checkpoint Readiness
 
@@ -112,8 +115,40 @@ Checkpoint recommendation:
    - run a focused diff review,
    - stage and commit the finished module work only after explicit approval.
 
+## Post-Acceptance Repair Closure
+
+Timestamp: 2026-05-27.
+
+Two manual-acceptance defects were fixed after the latency modules landed:
+
+1. Owner product management initially failed online because the deployed
+   `mallApi` did not support `listOwnerProductCards`. The deployed `mallApi`
+   code was updated, and remote smoke now returns the product-management
+   snapshot successfully.
+2. Owner order confirmation initially failed with
+   `UNAUTHORIZED: Verified WeChat identity is required` because the order
+   management actions only accepted resolved WeChat `owner` identity. The
+   repaired actions now accept `adminSession` with `orderConfirmation`
+   permission while preserving the existing WeChat owner path.
+
+Verification recorded for the closure:
+
+- Regression RED reproduced for order-confirmation admin sessions before the
+  CloudFunction auth fix.
+- `cloudfunctions/mallApi/mall-api-core.test.js` passed with 42 tests.
+- `pnpm.cmd run verify:full` passed with 57 test files and 322 tests.
+- `mallApi` code-only CloudBase deploy succeeded for
+  `cloud1-d7gifjyzl7721b383`.
+- Remote read-only `mallApi` smoke passed for `health`, `listContracts`,
+  `listOwnerProductCards`, `getOwnerOrderSnapshot`, and
+  `listMerchantOrders`.
+- User reported WeChat DevTools acceptance passed after the repairs.
+- Local git checkpoint created for the repaired code, tests, and status docs.
+
 ## Current Final Status
 
-Modules 0-7 are complete within their stated local scope. The project is not
-fully closed because manual acceptance and deployed CloudBase smoke are still
-open, and no git checkpoint has been created in this follow-up sequence.
+Modules 0-7 are complete within their stated local scope. The follow-up
+product-management and order-confirmation online defects are fixed, deployed,
+smoke-verified, and DevTools-accepted by user report. The only remaining
+non-blocking evidence gap is optional real-device acceptance or a separate
+remote `mallHealth` smoke rerun if a release checklist requires it.

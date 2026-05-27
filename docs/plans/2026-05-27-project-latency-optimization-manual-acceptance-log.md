@@ -14,11 +14,11 @@ count as manual acceptance.
 | Item | Status |
 | --- | --- |
 | Acceptance matrix prepared | Prepared |
-| WeChat DevTools manual run | Pending |
-| Real-device manual run | Pending |
-| Screenshots or recordings captured | Pending |
-| P0/P1 defects filed or cleared | Pending |
-| Final manual acceptance result | Pending |
+| WeChat DevTools manual run | Passed by operator report |
+| Real-device manual run | Not separately executed or recorded |
+| Screenshots or recordings captured | Screenshot evidence was shared in chat for repaired defects; no repository artifact path recorded |
+| P0/P1 defects filed or cleared | Cleared after product-management and order-confirmation repairs |
+| Final manual acceptance result | Passed by operator report |
 
 ## Preparation
 
@@ -36,13 +36,13 @@ Before starting the manual run, record:
 | Field | Value |
 | --- | --- |
 | Acceptance date/time | Pending |
-| Operator | Pending |
-| Device or DevTools profile | Pending |
-| WeChat DevTools version | Pending |
-| Base library version | Pending |
-| Network condition | Pending |
+| Operator | User manual acceptance report |
+| Device or DevTools profile | WeChat DevTools acceptance reported by user |
+| WeChat DevTools version | Not recorded |
+| Base library version | Not recorded |
+| Network condition | Not recorded |
 | Build artifact source | `dist\build\mp-weixin` |
-| Screenshots/recordings path | Pending |
+| Screenshots/recordings path | Chat screenshots only; no repository artifact path recorded |
 
 ## P0 Page Acceptance Matrix
 
@@ -80,7 +80,8 @@ refresh only the affected snapshot scope after completion.
 
 | Defect ID | Severity | Page/Flow | Expected | Actual | Evidence | Status | Next Action |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending |
+| PM-2026-05-27-01 | P1 | Owner product management | Product management shows deployed products and failure states are understandable | Deployed `mallApi` initially did not support `listOwnerProductCards`; page showed a loading failure | User screenshot plus remote smoke before repair | Fixed and accepted | Closed after `mallApi` deploy and DevTools acceptance |
+| OO-2026-05-27-01 | P1 | Owner order confirmation | Admin session with `orderConfirmation` permission can load merchant orders without requiring WeChat owner identity | `UNAUTHORIZED: Verified WeChat identity is required` | User screenshot plus remote invoke reproduction | Fixed and accepted | Closed after `mallApi` auth alignment, deploy, remote smoke, and DevTools acceptance |
 
 ## Exit Criteria
 
@@ -94,5 +95,7 @@ Manual acceptance can be marked complete only when:
 
 ## Current Conclusion
 
-Manual acceptance is not yet executed. The matrix is ready for a human operator
-to run in WeChat DevTools or on a real device.
+WeChat DevTools manual acceptance is passed by user report on 2026-05-27 after
+the product-management and order-confirmation online repairs. Real-device
+acceptance, detailed page timings, DevTools version, base library version, and
+repository-hosted screenshot paths were not separately recorded in this pass.

@@ -189,4 +189,17 @@ describe('useOwnerProductsPageState', () => {
       expect.objectContaining({ id: 'product-1', status: 'published' }),
     ])
   })
+
+  it('shows a visible failure state when the first owner product refresh is rejected', async () => {
+    ownerProductFeatureMocks.getCloudBaseOwnerProductsView.mockRejectedValueOnce(
+      new Error('Verified WeChat identity is required'),
+    )
+    const state = useOwnerProductsPageState({ registerLifecycle: false })
+
+    await expect(state.refreshView()).resolves.toBeUndefined()
+
+    expect(state.viewModel.value.products).toEqual([])
+    expect(state.viewModel.value.emptyMessage).toBe('商品管理加载失败，请重新登录或稍后重试')
+    expect(state.message.value).toBe('商品管理加载失败：Verified WeChat identity is required')
+  })
 })

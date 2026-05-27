@@ -795,6 +795,105 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     expect(traced.listCalls.filter((call) => call.name === 'orders')).toHaveLength(1)
   })
 
+  it('allows order-confirmation admin sessions to review and handle merchant orders without WeChat identity', async () => {
+    const handler = createHandler()
+    const { product, sku } = await createProductFixture(handler)
+    const firstOrder = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: {
+          customerId: 'client-customer',
+          openid: 'client-openid',
+          phoneNumber: '13800000000',
+          authSource: 'mock_wechat',
+        },
+      },
+    })
+    const secondOrder = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: {
+          customerId: 'client-customer-2',
+          openid: 'client-openid-2',
+          phoneNumber: '13900000000',
+          authSource: 'mock_wechat',
+        },
+      },
+    })
+
+    const snapshot = await handler({
+      action: 'getOwnerOrderSnapshot',
+      adminSession: staffOrderSession,
+    })
+    const listed = await handler({
+      action: 'listMerchantOrders',
+      adminSession: staffOrderSession,
+    })
+    const confirmed = await handler({
+      action: 'confirmMerchantOrder',
+      adminSession: staffOrderSession,
+      params: { orderId: firstOrder.data.order.id },
+    })
+    const canceled = await handler({
+      action: 'cancelMerchantOrder',
+      adminSession: staffOrderSession,
+      params: { orderId: secondOrder.data.order.id },
+    })
+
+    expect(snapshot).toMatchObject({
+      success: true,
+      data: {
+        orders: [
+          { id: firstOrder.data.order.id, status: 'pending_merchant_confirm' },
+          { id: secondOrder.data.order.id, status: 'pending_merchant_confirm' },
+        ],
+      },
+    })
+    expect(listed).toMatchObject({
+      success: true,
+      data: {
+        orders: [
+          { id: firstOrder.data.order.id },
+          { id: secondOrder.data.order.id },
+        ],
+      },
+    })
+    expect(confirmed).toMatchObject({
+      success: true,
+      data: {
+        order: { id: firstOrder.data.order.id, status: 'confirmed' },
+      },
+    })
+    expect(canceled).toMatchObject({
+      success: true,
+      data: {
+        order: { id: secondOrder.data.order.id, status: 'canceled' },
+      },
+    })
+  })
+
+  it('requires order-confirmation permission for admin merchant order review', async () => {
+    const handler = createHandler()
+
+    await expect(handler({
+      action: 'getOwnerOrderSnapshot',
+      adminSession: staffProductSession,
+    })).resolves.toMatchObject({
+      success: false,
+      error: {
+        code: 'FORBIDDEN',
+      },
+    })
+  })
+
   it('returns one owner dashboard snapshot with bounded aggregate reads', async () => {
     const traced = createTracedStore()
     const handler = createTracedHandler(traced)

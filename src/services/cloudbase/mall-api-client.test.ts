@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import { createCloudBaseMallApiClient } from './mall-api-client'
+import { createAdminWorkbenchSession, logoutAdminWorkbench } from '../auth/admin-workbench-session'
 
 describe('CloudBase mall API client', () => {
+  beforeEach(() => {
+    logoutAdminWorkbench()
+  })
+
   it('keeps mallApi cloud function calls behind a service adapter', async () => {
     const calls: Array<{ name: string; data: unknown }> = []
     const client = createCloudBaseMallApiClient({
@@ -138,6 +143,37 @@ describe('CloudBase mall API client', () => {
         name: 'mallApi',
         data: {
           action: 'listOwnerProductCards',
+        },
+      },
+    ])
+  })
+
+  it('passes the active admin session with owner product snapshot requests', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    createAdminWorkbenchSession({
+      account: 'admin',
+      role: 'creator',
+      permissions: ['workbenchAccess', 'productManagement'],
+    })
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        return { products: [], readyProductCount: 0, serverTime: '2026-05-27T00:00:00.000Z' } as never
+      },
+    })
+
+    await client.listOwnerProductCards()
+
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'listOwnerProductCards',
+          adminSession: {
+            account: 'admin',
+            role: 'creator',
+            permissions: ['workbenchAccess', 'productManagement'],
+          },
         },
       },
     ])
