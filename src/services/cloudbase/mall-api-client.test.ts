@@ -264,6 +264,68 @@ describe('CloudBase mall API client', () => {
     ])
   })
 
+  it('maps customer shopping-bag actions through mallApi', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        return { item: { id: 'bag-item-1' }, snapshot: { items: [] }, removedItemIds: [] } as never
+      },
+    })
+
+    await client.getCustomerShoppingBagSnapshot()
+    await client.addCustomerShoppingBagItem({ productId: 'product-1', skuId: 'sku-1', quantity: 1 })
+    await client.updateCustomerShoppingBagItemQuantity('bag-item-1', { quantity: 2 })
+    await client.selectCustomerShoppingBagItem('bag-item-1', { isSelected: false })
+    await client.removeCustomerShoppingBagItem('bag-item-1')
+    await client.clearUnavailableCustomerShoppingBagItems()
+
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'getCustomerShoppingBagSnapshot',
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'addCustomerShoppingBagItem',
+          payload: { productId: 'product-1', skuId: 'sku-1', quantity: 1 },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'updateCustomerShoppingBagItemQuantity',
+          params: { itemId: 'bag-item-1' },
+          payload: { quantity: 2 },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'selectCustomerShoppingBagItem',
+          params: { itemId: 'bag-item-1' },
+          payload: { isSelected: false },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'removeCustomerShoppingBagItem',
+          params: { itemId: 'bag-item-1' },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'clearUnavailableCustomerShoppingBagItems',
+        },
+      },
+    ])
+  })
+
   it('maps product description updates through mallApi', async () => {
     const calls: Array<{ name: string; data: unknown }> = []
     const client = createCloudBaseMallApiClient({

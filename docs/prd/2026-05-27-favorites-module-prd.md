@@ -61,6 +61,66 @@ customer-favorites:{customerId}:v1
 - Target P0 performance budget: one first-screen favorites snapshot action,
   O(1) from the page perspective.
 
+## Execution Governance
+
+- This PRD must be executed module by module. Do not combine unrelated modules,
+  shopping-bag behavior, customer mine aggregation, checkout, payment,
+  logistics, coupons, refunds, or recommendation work into a favorites
+  implementation without explicit approval.
+- Before any implementation edit, produce a Repository Impact Map and Execution
+  Plan for the current module only.
+- Frontend UI work must load and apply `ui-ux-pro-max` before editing UI code.
+  It must also load the smallest necessary set of project-required frontend
+  skills, such as `design-taste-frontend`; use specialized skills like
+  `high-end-visual-design`, `redesign-existing-projects`, `image-to-code`, or
+  image-generation skills only when the task actually needs them.
+- Use only necessary skills and tools for the active module. Do not invoke broad
+  research, multi-agent, design, browser, or automation tooling unless it is
+  required by the current acceptance criteria.
+- Preserve the existing bottom navigation entries already reserved on the
+  customer side. Do not redesign navigation or add new global entry points
+  unless a later approved task opens that scope.
+- Do not touch unrelated business code. Product publish eligibility, stock,
+  inventory ledger, order creation, shopping-bag rows, customer auth semantics,
+  merchant order handling, payment, logistics, coupons, and refunds remain out
+  of scope.
+- Keep code modular and reviewable. New favorites work should be split across
+  focused domain, feature/facade, service/client, CloudBase action, page-state,
+  and page files as appropriate. Do not pile unrelated logic into `.vue` pages,
+  global helpers, or oversized files.
+- Pages may call page-facing facades and commands only. Pages must not directly
+  write repositories, CloudBase collections, order rows, stock rows, or hidden
+  global state.
+- Each module must finish with necessary verification for the files touched:
+  targeted tests for changed contracts, relevant lint/type/build checks when
+  code changes, `pnpm.cmd run verify` for meaningful implementation changes,
+  and `pnpm.cmd run verify:full` when mini-program build behavior can be
+  affected. PRD-only edits require a diff review and targeted document check.
+- Each module report must list changed files, business code intentionally not
+  changed, checks run and results, remaining harness/product gaps, and whether
+  manual acceptance is still open. Build smoke is not manual acceptance.
+
+## Module Sequence
+
+1. Module A - Contract and impact map:
+   Define the concrete page-facing contract, snapshot shape, favorite toggle
+   commands, invalidation rules, and protected out-of-scope business contracts
+   before writing implementation code.
+2. Module B - Customer-scoped storage and CloudBase actions:
+   Add customer-private favorite snapshot, idempotent favorite creation,
+   removal behavior, unavailable product handling, and customer scoping.
+3. Module C - Page-facing facade and ViewModel:
+   Build focused ViewModel and command helpers for favorite labels, empty
+   states, unavailable states, loading, failure, and write-after-refresh.
+4. Module D - UI integration:
+   Wire the existing reserved favorites entry, favorites page, and product
+   list/detail favorite toggles without changing product visibility, stock, or
+   checkout behavior.
+5. Module E - Verification and acceptance:
+   Run the required targeted tests and project checks, then record manual
+   acceptance evidence for first entry, return entry, slow network, empty
+   state, failure, write-after-refresh, and image-failure behavior.
+
 ## Testing Decisions
 
 - CloudFunction core tests must verify customer scoping, empty state, duplicate

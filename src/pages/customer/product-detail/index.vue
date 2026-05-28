@@ -114,6 +114,15 @@
       </view>
 
       <view class="detail-cta">
+        <button
+          class="secondary-bag-button"
+          :class="{ disabledButton: isAddingToBag || !viewModel.canSubmitOrder }"
+          :disabled="isAddingToBag || !viewModel.canSubmitOrder"
+          hover-class="press-feedback"
+          @tap="addToShoppingBag"
+        >
+          <text>{{ isAddingToBag ? '加入中' : '加入购物袋' }}</text>
+        </button>
         <button class="primary-button" :class="{ disabledButton: !viewModel.canSubmitOrder }" @tap="submitOrder">
           <text>微信手机号下单</text>
           <text class="button-mark">↗</text>
@@ -189,6 +198,7 @@ import {
   selectCloudBaseCustomerProductSkuInView,
   submitCloudBaseCustomerProductDetailOrder,
 } from '../../../features/cloudbase-mall/customer-product-detail'
+import { addCloudBaseCustomerShoppingBagItem } from '../../../features/cloudbase-mall/customer-shopping-bag'
 import { createCloudBaseWechatAuthService } from '../../../services/auth/cloudbase-wechat-auth-service'
 
 type AuthPrompt = {
@@ -214,6 +224,7 @@ const authPrompt = ref<AuthPrompt | null>(null)
 const phoneCodeRequest = ref<PhoneCodeRequest | null>(null)
 const isDetailLoading = ref(true)
 const isBackNavigating = ref(false)
+const isAddingToBag = ref(false)
 const customerAuthService = createCloudBaseWechatAuthService()
 const viewModel = ref<CustomerProductDetailViewModel>({
   product: null,
@@ -334,6 +345,31 @@ const submitOrder = async () => {
   await refreshView({ showLoading: false })
 }
 
+const addToShoppingBag = async () => {
+  if (isAddingToBag.value) {
+    return
+  }
+
+  if (!viewModel.value.canSubmitOrder || !selectedSku.value) {
+    message.value = '请选择有库存的规格'
+    return
+  }
+
+  isAddingToBag.value = true
+
+  try {
+    const result = await addCloudBaseCustomerShoppingBagItem({
+      productId: productId.value,
+      skuId: selectedSku.value.id,
+      quantity: 1,
+    })
+
+    message.value = result.message
+  } finally {
+    isAddingToBag.value = false
+  }
+}
+
 const goBack = () => {
   if (isBackNavigating.value) {
     return
@@ -389,10 +425,11 @@ const showVisualOnlyToast = (title: string) => {
 .icon-button,
 .favorite-button,
 .select-box button,
-.spec-pill,
-.primary-button,
-.modal-close,
-.secondary-action {
+  .spec-pill,
+  .primary-button,
+  .secondary-bag-button,
+  .modal-close,
+  .secondary-action {
   margin: 0;
   border: 0;
   transition: opacity 160ms ease, transform 160ms ease, background-color 160ms ease;
@@ -403,6 +440,7 @@ const showVisualOnlyToast = (title: string) => {
 .select-box button::after,
 .spec-pill::after,
 .primary-button::after,
+.secondary-bag-button::after,
 .modal-close::after,
 .secondary-action::after {
   border: 0;
@@ -815,9 +853,16 @@ const showVisualOnlyToast = (title: string) => {
   left: 0;
   z-index: 8;
   box-sizing: border-box;
+  display: flex;
+  gap: 18rpx;
   padding: 22rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 -12rpx 32rpx rgba(0, 0, 0, 0.06);
+}
+
+.detail-cta .primary-button {
+  flex: 1 1 0;
+  width: auto;
 }
 
 .primary-button {
@@ -835,6 +880,19 @@ const showVisualOnlyToast = (title: string) => {
   font-weight: 500;
   line-height: 1;
   box-shadow: 0 18rpx 36rpx rgba(5, 5, 5, 0.16);
+}
+
+.secondary-bag-button {
+  flex: 0 0 250rpx;
+  min-width: 0;
+  min-height: 100rpx;
+  padding: 0 24rpx;
+  border-radius: 999rpx;
+  background: #f4f4f4;
+  color: #050505;
+  font-size: 30rpx;
+  font-weight: 500;
+  line-height: 100rpx;
 }
 
 .disabledButton {

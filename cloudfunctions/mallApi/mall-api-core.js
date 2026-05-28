@@ -32,6 +32,12 @@ const SUPPORTED_ACTIONS = [
   'getCustomerOrder',
   'getOwnerOrderSnapshot',
   'getOwnerDashboardSnapshot',
+  'getCustomerShoppingBagSnapshot',
+  'addCustomerShoppingBagItem',
+  'updateCustomerShoppingBagItemQuantity',
+  'selectCustomerShoppingBagItem',
+  'removeCustomerShoppingBagItem',
+  'clearUnavailableCustomerShoppingBagItems',
   'listMerchantOrders',
   'confirmMerchantOrder',
   'cancelMerchantOrder',
@@ -53,6 +59,7 @@ const COLLECTIONS = [
   'merchant_users',
   'staff_users',
   'role_assignments',
+  'shopping_bag_items',
   'inventory_ledger',
   'operation_audit_logs',
   'uploaded_assets',
@@ -289,6 +296,30 @@ const parseBindStaffInput = (value) => {
   return {
     openid: readString(value, 'openid'),
     reason: readOptionalString(value, 'reason') || 'owner staff binding',
+  }
+}
+
+const parseShoppingBagItemInput = (value) => {
+  if (!isRecord(value)) throw validationError('Request body must be a JSON object')
+  return {
+    productId: readString(value, 'productId'),
+    skuId: readString(value, 'skuId'),
+    quantity: readPositiveInteger(value, 'quantity'),
+  }
+}
+
+const parseShoppingBagQuantityInput = (value) => {
+  if (!isRecord(value)) throw validationError('Request body must be a JSON object')
+  return {
+    quantity: readPositiveInteger(value, 'quantity'),
+  }
+}
+
+const parseShoppingBagSelectionInput = (value) => {
+  if (!isRecord(value)) throw validationError('Request body must be a JSON object')
+  if (typeof value.isSelected !== 'boolean') throw validationError('isSelected must be a boolean')
+  return {
+    isSelected: value.isSelected,
   }
 }
 
@@ -665,6 +696,28 @@ const toRoleAssignment = (document) => ({
   updatedAt: document.updated_at,
 })
 
+const toShoppingBagItemDocument = (item) => ({
+  _id: item.id,
+  customer_id: item.customerId,
+  product_id: item.productId,
+  sku_id: item.skuId,
+  quantity: item.quantity,
+  is_selected: item.isSelected,
+  created_at: item.createdAt,
+  updated_at: item.updatedAt,
+})
+
+const toShoppingBagItem = (document) => ({
+  id: document._id,
+  customerId: document.customer_id,
+  productId: document.product_id,
+  skuId: document.sku_id,
+  quantity: document.quantity,
+  isSelected: document.is_selected !== false,
+  createdAt: document.created_at,
+  updatedAt: document.updated_at,
+})
+
 const toAuditLogDocument = (auditLog) => ({
   _id: auditLog.id,
   action: auditLog.action,
@@ -701,6 +754,66 @@ const toOwnerProductCard = (product, skus) => {
     skuCount: productSkus.length,
     canPublish,
     publishBlockReasons: canPublish ? [] : publishBlockReasons,
+  }
+}
+
+const shoppingBagAvailabilityLabels = {
+  available: 'Available',
+  unpublished: 'Unavailable',
+  skuUnavailable: 'SKU unavailable',
+  outOfStock: 'Out of stock',
+}
+
+const getShoppingBagAvailability = (product, sku) => {
+  if (!product || product.status !== 'published') return 'unpublished'
+  if (!sku || sku.productId !== product.id) return 'skuUnavailable'
+  if (sku.stock <= 0) return 'outOfStock'
+  return 'available'
+}
+
+const createShoppingBagSnapshot = async (customerId, context) => {
+  const [items, products, skus] = await Promise.all([
+    context.repository.listShoppingBagItems(customerId),
+    context.repository.listProducts(),
+    context.repository.listSkus(),
+  ])
+  const productById = new Map(products.map((product) => [product.id, product]))
+  const skuById = new Map(skus.map((sku) => [sku.id, sku]))
+  const snapshotItems = items.map((item) => {
+    const product = productById.get(item.productId)
+    const sku = skuById.get(item.skuId)
+    const availability = getShoppingBagAvailability(product, sku)
+    const unitPrice = sku ? sku.salePrice : 0
+
+    return {
+      id: item.id,
+      productId: item.productId,
+      skuId: item.skuId,
+      productName: product ? product.productName : 'Unavailable product',
+      skuSpec: sku ? sku.spec : 'Unavailable SKU',
+      quantity: item.quantity,
+      unitPrice,
+      lineTotal: unitPrice * item.quantity,
+      mainImageUrl: product ? product.mainImageUrl : '',
+      availability,
+      availabilityLabel: shoppingBagAvailabilityLabels[availability],
+      isAvailableForCheckout: availability === 'available',
+      isSelected: item.isSelected,
+    }
+  })
+
+  return {
+    customerId,
+    items: snapshotItems,
+    totalQuantity: snapshotItems.reduce((sum, item) => sum + item.quantity, 0),
+    selectedQuantity: snapshotItems
+      .filter((item) => item.isSelected)
+      .reduce((sum, item) => sum + item.quantity, 0),
+    selectedSubtotal: snapshotItems
+      .filter((item) => item.isSelected && item.isAvailableForCheckout)
+      .reduce((sum, item) => sum + item.lineTotal, 0),
+    unavailableCount: snapshotItems.filter((item) => !item.isAvailableForCheckout).length,
+    serverTime: context.now(),
   }
 }
 
@@ -822,6 +935,17 @@ const createRepository = (store) => ({
   updateRoleAssignment: async (assignment) => toRoleAssignment(await store.replace('role_assignments', toRoleAssignmentDocument(assignment))),
   listRoleAssignmentsByOpenid: async (openid) =>
     (await store.list('role_assignments', { openid })).map(toRoleAssignment),
+  listShoppingBagItems: async (customerId) =>
+    (await store.list('shopping_bag_items', { customer_id: customerId }))
+      .map(toShoppingBagItem)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+  saveShoppingBagItem: async (item) => toShoppingBagItem(await store.insert('shopping_bag_items', toShoppingBagItemDocument(item))),
+  updateShoppingBagItem: async (item) => toShoppingBagItem(await store.replace('shopping_bag_items', toShoppingBagItemDocument(item))),
+  deleteShoppingBagItem: async (itemId) => {
+    const item = (await store.list('shopping_bag_items', { _id: itemId }))[0]
+    await store.deleteByField('shopping_bag_items', '_id', itemId)
+    return item ? toShoppingBagItem(item) : null
+  },
   saveAuditLog: async (auditLog) => store.insert('operation_audit_logs', toAuditLogDocument(auditLog)),
 })
 
@@ -947,6 +1071,17 @@ const resolveWechatCustomerForOrder = async (event, context) => {
   return upsertCustomerFromIdentity(context.repository, identity, context)
 }
 
+const resolveShoppingBagCustomer = async (event, context) => {
+  const identity = await requireResolvedIdentity(event, context)
+  return upsertCustomerFromIdentity(context.repository, identity, context)
+}
+
+const findShoppingBagItemForCustomer = async (context, customerId, itemId) => {
+  const item = (await context.repository.listShoppingBagItems(customerId)).find((current) => current.id === itemId)
+  if (!item) throw notFoundError('Shopping-bag item not found')
+  return item
+}
+
 const resolveIdentityRoles = async (identity, context) => {
   if (context.allowTestIdentityRoles && identity.roles.length > 0) return identity
 
@@ -1037,6 +1172,100 @@ const apiHandlers = {
       createdAt: context.now(),
     })
     return { roleAssignment }
+  },
+  async getCustomerShoppingBagSnapshot(event, context) {
+    const customer = await resolveShoppingBagCustomer(event, context)
+    return createShoppingBagSnapshot(customer.id, context)
+  },
+  async addCustomerShoppingBagItem(event, context) {
+    const customer = await resolveShoppingBagCustomer(event, context)
+    const input = parseShoppingBagItemInput(event.payload)
+    const product = await findProduct(context.repository, input.productId)
+    const sku = await findSku(context.repository, product.id, input.skuId)
+    if (product.status !== 'published') throw conflictError('Only published products can be added to the shopping bag')
+    const timestamp = context.now()
+    const existing = (await context.repository.listShoppingBagItems(customer.id))
+      .find((item) => item.productId === product.id && item.skuId === sku.id)
+    const item = existing
+      ? await context.repository.updateShoppingBagItem({
+          ...existing,
+          quantity: existing.quantity + input.quantity,
+          isSelected: true,
+          updatedAt: timestamp,
+        })
+      : await context.repository.saveShoppingBagItem({
+          id: context.createId('bag-item'),
+          customerId: customer.id,
+          productId: product.id,
+          skuId: sku.id,
+          quantity: input.quantity,
+          isSelected: true,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        })
+
+    return {
+      item,
+      snapshot: await createShoppingBagSnapshot(customer.id, context),
+      invalidatedSnapshotKeys: [`customer-shopping-bag:${customer.id}:v1`],
+    }
+  },
+  async updateCustomerShoppingBagItemQuantity(event, context) {
+    const customer = await resolveShoppingBagCustomer(event, context)
+    const item = await findShoppingBagItemForCustomer(context, customer.id, readString(event.params || {}, 'itemId'))
+    const input = parseShoppingBagQuantityInput(event.payload)
+    const updated = await context.repository.updateShoppingBagItem({
+      ...item,
+      quantity: input.quantity,
+      updatedAt: context.now(),
+    })
+
+    return {
+      item: updated,
+      snapshot: await createShoppingBagSnapshot(customer.id, context),
+      invalidatedSnapshotKeys: [`customer-shopping-bag:${customer.id}:v1`],
+    }
+  },
+  async selectCustomerShoppingBagItem(event, context) {
+    const customer = await resolveShoppingBagCustomer(event, context)
+    const item = await findShoppingBagItemForCustomer(context, customer.id, readString(event.params || {}, 'itemId'))
+    const input = parseShoppingBagSelectionInput(event.payload)
+    const updated = await context.repository.updateShoppingBagItem({
+      ...item,
+      isSelected: input.isSelected,
+      updatedAt: context.now(),
+    })
+
+    return {
+      item: updated,
+      snapshot: await createShoppingBagSnapshot(customer.id, context),
+      invalidatedSnapshotKeys: [`customer-shopping-bag:${customer.id}:v1`],
+    }
+  },
+  async removeCustomerShoppingBagItem(event, context) {
+    const customer = await resolveShoppingBagCustomer(event, context)
+    const item = await findShoppingBagItemForCustomer(context, customer.id, readString(event.params || {}, 'itemId'))
+    const removed = await context.repository.deleteShoppingBagItem(item.id)
+
+    return {
+      item: removed,
+      snapshot: await createShoppingBagSnapshot(customer.id, context),
+      invalidatedSnapshotKeys: [`customer-shopping-bag:${customer.id}:v1`],
+    }
+  },
+  async clearUnavailableCustomerShoppingBagItems(event, context) {
+    const customer = await resolveShoppingBagCustomer(event, context)
+    const snapshot = await createShoppingBagSnapshot(customer.id, context)
+    const unavailableItems = snapshot.items.filter((item) => !item.isAvailableForCheckout)
+    for (const item of unavailableItems) {
+      await context.repository.deleteShoppingBagItem(item.id)
+    }
+
+    return {
+      removedItemIds: unavailableItems.map((item) => item.id),
+      snapshot: await createShoppingBagSnapshot(customer.id, context),
+      invalidatedSnapshotKeys: [`customer-shopping-bag:${customer.id}:v1`],
+    }
   },
   async createOcrBatch(event, context) {
     await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')

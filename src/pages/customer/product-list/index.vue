@@ -123,7 +123,13 @@
         <text class="tab-icon">◇</text>
         <text>商品</text>
       </button>
-      <button class="tab" hover-class="tab-pressed" @tap="showVisualOnlyToast('购物袋为视觉入口，真实购物袋能力需单独 PRD')">
+      <button
+        class="tab"
+        :class="{ busy: isShoppingBagNavigating }"
+        :disabled="isShoppingBagNavigating"
+        hover-class="tab-pressed"
+        @tap="goShoppingBag"
+      >
         <text class="tab-icon">▢</text>
         <text>购物袋</text>
       </button>
@@ -151,6 +157,7 @@ const products = ref<CustomerProductListItem[]>([])
 const emptyMessage = ref('暂无已上架商品')
 const isLoading = ref(false)
 const isHomeNavigating = ref(false)
+const isShoppingBagNavigating = ref(false)
 const navigatingProductId = ref('')
 const DEFAULT_HEADER_TOP_PADDING = 'calc(env(safe-area-inset-top) + 28rpx)'
 const HEADER_TOP_OFFSET_RPX = -8
@@ -159,6 +166,7 @@ const headerTopPadding = ref(DEFAULT_HEADER_TOP_PADDING)
 let cachedProducts: CustomerProductListItem[] | null = null
 let pendingRefresh: Promise<void> | null = null
 let homeNavigationFallbackTimer: ReturnType<typeof setTimeout> | null = null
+let shoppingBagNavigationFallbackTimer: ReturnType<typeof setTimeout> | null = null
 
 const clearHomeNavigationLock = () => {
   isHomeNavigating.value = false
@@ -166,6 +174,15 @@ const clearHomeNavigationLock = () => {
   if (homeNavigationFallbackTimer) {
     clearTimeout(homeNavigationFallbackTimer)
     homeNavigationFallbackTimer = null
+  }
+}
+
+const clearShoppingBagNavigationLock = () => {
+  isShoppingBagNavigating.value = false
+
+  if (shoppingBagNavigationFallbackTimer) {
+    clearTimeout(shoppingBagNavigationFallbackTimer)
+    shoppingBagNavigationFallbackTimer = null
   }
 }
 
@@ -230,6 +247,7 @@ const reloadView = () => {
 onShow(() => {
   navigatingProductId.value = ''
   clearHomeNavigationLock()
+  clearShoppingBagNavigationLock()
 
   if (cachedProducts) {
     products.value = cachedProducts
@@ -276,6 +294,25 @@ const goHome = () => {
       })
     },
     onComplete: clearHomeNavigationLock,
+  })
+}
+
+const goShoppingBag = () => {
+  if (isShoppingBagNavigating.value) {
+    return
+  }
+
+  isShoppingBagNavigating.value = true
+  shoppingBagNavigationFallbackTimer = setTimeout(clearShoppingBagNavigationLock, 900)
+  redirectTo(routes.customerShoppingBag, {
+    onFail: () => {
+      uni.showToast({
+        title: '页面切换失败，请稍后重试',
+        icon: 'none',
+        duration: 1600,
+      })
+    },
+    onComplete: clearShoppingBagNavigationLock,
   })
 }
 

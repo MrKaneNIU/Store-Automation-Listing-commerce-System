@@ -65,6 +65,175 @@ Future customer-side pages must not:
 - Persist signed temporary image URLs as canonical product data.
 - Read or write customer-private data without customer scoping.
 
+## Customer Shopping Bag
+
+Governing PRD:
+
+- `docs/prd/2026-05-27-shopping-bag-module-prd.md`
+
+Planned feature module:
+
+- `src/features/customer-shopping-bag/customer-shopping-bag.ts`
+
+Planned UI entry points:
+
+- Product detail add-to-bag command from `src/pages/customer/product-detail/index.vue`.
+- Dedicated shopping-bag page, if later approved and registered in
+  `src/pages.json`.
+- Existing reserved customer navigation entries must be preserved. Module D may
+  wire an existing reserved entry, but it must not redesign global navigation.
+
+Snapshot action:
+
+- `getCustomerShoppingBagSnapshot`
+
+Snapshot key:
+
+- `customer-shopping-bag:{customerId}:v1`
+
+Customer identity:
+
+- Required for all server-persisted bag reads and writes.
+- The server must derive customer identity from verified CloudBase identity or
+  customer session.
+- Pages and clients must not pass openid or customerId as trusted ownership
+  fields for server writes.
+
+Phone authorization:
+
+- Not required to add, update, remove, or view shopping-bag items.
+- Still required only when the existing order-creation flow requires it during
+  checkout.
+
+UI may read from the shopping-bag ViewModel:
+
+- `items`
+- `items[].id`: shopping-bag item id, not an order id.
+- `items[].productId`
+- `items[].skuId`
+- `items[].productName`
+- `items[].skuSpec`
+- `items[].quantity`
+- `items[].unitPrice`
+- `items[].lineTotal`
+- `items[].mainImageUrl`: renderable display URL or empty string.
+- `items[].availability`: `'available' | 'unpublished' | 'skuUnavailable' |
+  'outOfStock'`
+- `items[].availabilityLabel`
+- `items[].isAvailableForCheckout`
+- `items[].isSelected`
+- `totalQuantity`
+- `selectedQuantity`
+- `selectedSubtotal`
+- `unavailableCount`
+- `canCheckoutSelectedItems`
+- `emptyMessage`
+- `loadingState`: `'idle' | 'loading' | 'refreshing' | 'failed'`
+- `failureMessage`
+- `lastUpdatedAt`
+- command `status`, `message`, and refreshed `view` fields.
+
+UI may pass to shopping-bag commands:
+
+- `productId`: current published product id.
+- `skuId`: selected SKU id.
+- `quantity`: positive integer intended quantity.
+- `itemId`: shopping-bag item id for update/remove/select commands.
+- `selectedItemIds`: shopping-bag item ids to submit into checkout.
+- `retry`: user intent to retry the current snapshot only.
+- `confirmLogin`: UI confirmation callback when identity is missing.
+- Checkout confirmation callbacks already required by the existing order flow.
+
+Page-facing commands:
+
+- `loadCustomerShoppingBagSnapshot()`
+- `addCustomerShoppingBagItem({ productId, skuId, quantity })`
+- `updateCustomerShoppingBagItemQuantity({ itemId, quantity })`
+- `removeCustomerShoppingBagItem(itemId)`
+- `selectCustomerShoppingBagItem({ itemId, isSelected })`
+- `clearUnavailableCustomerShoppingBagItems()`
+- `submitSelectedCustomerShoppingBagItemsToCheckout(params)`
+
+Write-after-refresh rules:
+
+- Successful add, quantity update, remove, select, clear-unavailable, and
+  checkout-submission preparation must invalidate only
+  `customer-shopping-bag:{customerId}:v1`.
+- Failed writes must not dirty or replace the last usable shopping-bag
+  snapshot.
+- Product publish/unpublish and SKU stock changes may make availability stale,
+  but shopping-bag item existence must not reserve stock or become inventory
+  truth.
+- Checkout must call the existing order-creation path so stock and product
+  status are revalidated server-side at order creation time.
+
+UI must not:
+
+- Treat a shopping-bag item as an `Order`, `OrderItem`, merchant order, or
+  inventory reservation.
+- Create, reserve, restore, or decrement stock.
+- Convert bag rows into merchant orders before the existing checkout flow
+  confirms an order.
+- Skip server-side customer scoping for reads or writes.
+- Revalidate publish status, SKU existence, or stock in the page.
+- Call repositories, CloudBase collections, `mockDb`, or order workflows
+  directly from a shopping-bag page.
+- Persist signed temporary image URLs as canonical product image values.
+- Require phone authorization for add/edit/remove bag actions.
+
+Target snapshot shape:
+
+```ts
+type CustomerShoppingBagSnapshot = {
+  customerId: string
+  items: Array<{
+    id: string
+    productId: string
+    skuId: string
+    productName: string
+    skuSpec: string
+    quantity: number
+    unitPrice: number
+    lineTotal: number
+    mainImageUrl: string
+    availability: 'available' | 'unpublished' | 'skuUnavailable' | 'outOfStock'
+    availabilityLabel: string
+    isAvailableForCheckout: boolean
+    isSelected: boolean
+  }>
+  totalQuantity: number
+  selectedQuantity: number
+  selectedSubtotal: number
+  unavailableCount: number
+  serverTime: string
+}
+```
+
+Performance and loading contract:
+
+- First-screen remote business budget is O(1): one
+  `getCustomerShoppingBagSnapshot` action from the page perspective.
+- The page must show loading, cached content, empty state, or failure state
+  within the latency PRD budgets.
+- Pure selection and quantity display changes should be local until a command
+  write is submitted.
+- Retry must reload the shopping-bag snapshot only.
+- Image failures must not hide product name, SKU spec, quantity, price, or
+  availability text.
+
+Test protection to add during implementation modules:
+
+- CloudFunction core tests: customer scoping, empty bag state, unavailable
+  product/SKU handling, and no stock reservation on bag writes.
+- CloudBase client tests: `getCustomerShoppingBagSnapshot` and write command
+  action contracts.
+- Facade tests: ViewModel labels, totals, unavailable states, selected totals,
+  and command messages.
+- Page-state tests: onShow request dedupe, cached return entry, failure state,
+  retry scope, and write-after-refresh behavior.
+- Existing customer order tests remain the authority for stock reservation and
+  oversell prevention.
+
 ## Customer Product List
 
 Feature module:

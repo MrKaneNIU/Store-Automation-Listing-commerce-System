@@ -61,6 +61,67 @@ customer-mine:{customerId}:v1
 - Target P0 performance budget: one first-screen mine snapshot action, O(1)
   from the page perspective.
 
+## Execution Governance
+
+- This PRD must be executed module by module. Do not combine unrelated modules,
+  merchant workbench entry, shopping-bag implementation, favorites
+  implementation, checkout, payment, logistics, coupons, refunds, or
+  customer-service work into a customer mine implementation without explicit
+  approval.
+- Before any implementation edit, produce a Repository Impact Map and Execution
+  Plan for the current module only.
+- Frontend UI work must load and apply `ui-ux-pro-max` before editing UI code.
+  It must also load the smallest necessary set of project-required frontend
+  skills, such as `design-taste-frontend`; use specialized skills like
+  `high-end-visual-design`, `redesign-existing-projects`, `image-to-code`, or
+  image-generation skills only when the task actually needs them.
+- Use only necessary skills and tools for the active module. Do not invoke broad
+  research, multi-agent, design, browser, or automation tooling unless it is
+  required by the current acceptance criteria.
+- Preserve the existing bottom navigation entries already reserved on the
+  customer side. Do not redesign navigation or add new global entry points
+  unless a later approved task opens that scope.
+- Do not touch unrelated business code. Merchant workbench routing,
+  admin/staff permissions, order state transitions, stock reservation and
+  restoration, product publish rules, payment, logistics, coupons, refunds, and
+  customer-service features remain out of scope.
+- Keep code modular and reviewable. New customer mine work should be split
+  across focused domain, feature/facade, service/client, CloudBase action,
+  page-state, and page files as appropriate. Do not pile unrelated logic into
+  `.vue` pages, global helpers, or oversized files.
+- Pages may call page-facing facades and commands only. Pages must not directly
+  write repositories, CloudBase collections, order rows, stock rows, auth rows,
+  or hidden global state.
+- Each module must finish with necessary verification for the files touched:
+  targeted tests for changed contracts, relevant lint/type/build checks when
+  code changes, `pnpm.cmd run verify` for meaningful implementation changes,
+  and `pnpm.cmd run verify:full` when mini-program build behavior can be
+  affected. PRD-only edits require a diff review and targeted document check.
+- Each module report must list changed files, business code intentionally not
+  changed, checks run and results, remaining harness/product gaps, and whether
+  manual acceptance is still open. Build smoke is not manual acceptance.
+
+## Module Sequence
+
+1. Module A - Contract and impact map:
+   Define the concrete page-facing contract, snapshot shape, mine entries,
+   recent-order summary fields, invalidation rules, and protected out-of-scope
+   business contracts before writing implementation code.
+2. Module B - Customer-scoped snapshot action:
+   Add the customer-private mine snapshot with customer identity, phone binding
+   status, recent orders, utility counts, and strict customer scoping.
+3. Module C - Page-facing facade and ViewModel:
+   Build focused ViewModel helpers for identity labels, phone status, recent
+   order summaries, utility entries, empty states, loading, failure, and retry.
+4. Module D - UI integration:
+   Wire the existing reserved mine entry and customer mine page without adding
+   merchant workbench access or changing order, auth, or inventory behavior.
+5. Module E - Verification and acceptance:
+   Run the required targeted tests and project checks, then record manual
+   acceptance evidence for first entry, return entry, slow network, unauth
+   state, phone-bound state, recent-order empty state, failure, retry, and
+   image-failure behavior where applicable.
+
 ## Testing Decisions
 
 - CloudFunction core tests must verify customer scoping and that one customer

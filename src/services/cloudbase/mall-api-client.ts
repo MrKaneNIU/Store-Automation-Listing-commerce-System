@@ -144,6 +144,69 @@ type CreateCustomerOrderInput = {
   session: CustomerSession
 }
 
+type CustomerShoppingBagAvailability = 'available' | 'unpublished' | 'skuUnavailable' | 'outOfStock'
+
+export type CustomerShoppingBagItem = {
+  id: string
+  productId: string
+  skuId: string
+  productName: string
+  skuSpec: string
+  quantity: number
+  unitPrice: number
+  lineTotal: number
+  mainImageUrl: string
+  availability: CustomerShoppingBagAvailability
+  availabilityLabel: string
+  isAvailableForCheckout: boolean
+  isSelected: boolean
+}
+
+export type CustomerShoppingBagSnapshot = {
+  customerId: string
+  items: CustomerShoppingBagItem[]
+  totalQuantity: number
+  selectedQuantity: number
+  selectedSubtotal: number
+  unavailableCount: number
+  serverTime: string
+}
+
+type AddCustomerShoppingBagItemInput = {
+  productId: string
+  skuId: string
+  quantity: number
+}
+
+type UpdateCustomerShoppingBagItemQuantityInput = {
+  quantity: number
+}
+
+type SelectCustomerShoppingBagItemInput = {
+  isSelected: boolean
+}
+
+type CustomerShoppingBagCommandResult = {
+  item: {
+    id: string
+    customerId: string
+    productId: string
+    skuId: string
+    quantity: number
+    isSelected: boolean
+    createdAt: string
+    updatedAt: string
+  }
+  snapshot: CustomerShoppingBagSnapshot
+  invalidatedSnapshotKeys: string[]
+}
+
+type ClearUnavailableCustomerShoppingBagItemsResult = {
+  removedItemIds: string[]
+  snapshot: CustomerShoppingBagSnapshot
+  invalidatedSnapshotKeys: string[]
+}
+
 export type CloudBaseMallApiClient = {
   getCurrentCustomer: () => Promise<{ customer: CustomerIdentity }>
   bindCustomerPhone: (input: BindCustomerPhoneInput) => Promise<{ customer: CustomerIdentity }>
@@ -179,6 +242,18 @@ export type CloudBaseMallApiClient = {
   getCustomerOrder: (orderId: string) => Promise<{ order: Order }>
   getOwnerOrderSnapshot: () => Promise<OwnerOrderSnapshot>
   getOwnerDashboardSnapshot: () => Promise<OwnerDashboardSnapshot>
+  getCustomerShoppingBagSnapshot: () => Promise<CustomerShoppingBagSnapshot>
+  addCustomerShoppingBagItem: (input: AddCustomerShoppingBagItemInput) => Promise<CustomerShoppingBagCommandResult>
+  updateCustomerShoppingBagItemQuantity: (
+    itemId: string,
+    input: UpdateCustomerShoppingBagItemQuantityInput,
+  ) => Promise<CustomerShoppingBagCommandResult>
+  selectCustomerShoppingBagItem: (
+    itemId: string,
+    input: SelectCustomerShoppingBagItemInput,
+  ) => Promise<CustomerShoppingBagCommandResult>
+  removeCustomerShoppingBagItem: (itemId: string) => Promise<CustomerShoppingBagCommandResult>
+  clearUnavailableCustomerShoppingBagItems: () => Promise<ClearUnavailableCustomerShoppingBagItemsResult>
   listMerchantOrders: () => Promise<{ orders: Order[] }>
   confirmMerchantOrder: (orderId: string) => Promise<{ order: Order }>
   cancelMerchantOrder: (orderId: string) => Promise<{ order: Order }>
@@ -311,6 +386,32 @@ export const createCloudBaseMallApiClient = (
   },
   getOwnerDashboardSnapshot() {
     return callMallApi(functionClient, { action: 'getOwnerDashboardSnapshot' })
+  },
+  getCustomerShoppingBagSnapshot() {
+    return callMallApi(functionClient, { action: 'getCustomerShoppingBagSnapshot' })
+  },
+  addCustomerShoppingBagItem(input) {
+    return callMallApi(functionClient, { action: 'addCustomerShoppingBagItem', payload: input })
+  },
+  updateCustomerShoppingBagItemQuantity(itemId, input) {
+    return callMallApi(functionClient, {
+      action: 'updateCustomerShoppingBagItemQuantity',
+      params: { itemId },
+      payload: input,
+    })
+  },
+  selectCustomerShoppingBagItem(itemId, input) {
+    return callMallApi(functionClient, {
+      action: 'selectCustomerShoppingBagItem',
+      params: { itemId },
+      payload: input,
+    })
+  },
+  removeCustomerShoppingBagItem(itemId) {
+    return callMallApi(functionClient, { action: 'removeCustomerShoppingBagItem', params: { itemId } })
+  },
+  clearUnavailableCustomerShoppingBagItems() {
+    return callMallApi(functionClient, { action: 'clearUnavailableCustomerShoppingBagItems' })
   },
   listMerchantOrders() {
     return callMallApi(functionClient, { action: 'listMerchantOrders' })

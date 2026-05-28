@@ -92,6 +92,13 @@
       }
     },
     {
+      "path": "pages/customer/shopping-bag/index",
+      "style": {
+        "navigationBarTitleText": "购物袋",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/customer/product-detail/index",
       "style": {
         "navigationBarTitleText": "商品详情",

@@ -30,15 +30,21 @@ const createStore = () => createMemoryDocumentStore()
 const createTracedStore = () => {
   const store = createStore()
   const listCalls = []
+  const insertCalls = []
   return {
     store: {
       ...store,
+      async insert(name, document) {
+        insertCalls.push({ name, document })
+        return store.insert(name, document)
+      },
       async list(name, query) {
         listCalls.push({ name, query })
         return store.list(name, query)
       },
     },
     listCalls,
+    insertCalls,
   }
 }
 
@@ -1435,6 +1441,225 @@ describe('mallApi Phase 4 auth and role permissions', () => {
         code: 'FORBIDDEN',
       },
     })
+  })
+})
+
+describe('mallApi customer shopping bag actions', () => {
+  it('returns an empty customer-scoped snapshot without phone authorization', async () => {
+    const handler = createHandler()
+
+    const result = await handler({
+      action: 'getCustomerShoppingBagSnapshot',
+      identity: customerIdentity,
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        items: [],
+        totalQuantity: 0,
+        selectedQuantity: 0,
+        selectedSubtotal: 0,
+        unavailableCount: 0,
+        serverTime: '2026-05-11T00:00:00.000Z',
+      },
+    })
+    expect(result.data.customerId).toMatch(/^customer-/)
+  })
+
+  it('keeps shopping-bag items scoped to the verified customer identity', async () => {
+    const store = createStore()
+    const handler = createMallApiHandler(store, {
+      createId: (() => {
+        let index = 0
+        return (prefix) => `${prefix}-${++index}`
+      })(),
+      now: () => '2026-05-11T00:00:00.000Z',
+      allowTestIdentityRoles: true,
+    })
+    const { product, sku } = await createProductFixture(handler)
+
+    await handler({
+      action: 'addCustomerShoppingBagItem',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+      },
+    })
+    const firstCustomer = await handler({
+      action: 'getCustomerShoppingBagSnapshot',
+      identity: customerIdentity,
+    })
+    const secondCustomer = await handler({
+      action: 'getCustomerShoppingBagSnapshot',
+      identity: {
+        openid: 'other-customer-openid',
+        appid: 'wxa63c53796488d4d4',
+        roles: ['customer'],
+      },
+    })
+
+    expect(firstCustomer.data.items).toHaveLength(1)
+    expect(firstCustomer.data.items[0]).toMatchObject({
+      productId: product.id,
+      skuId: sku.id,
+      productName: product.productName,
+      skuSpec: sku.spec,
+      quantity: 1,
+      unitPrice: sku.salePrice,
+      lineTotal: sku.salePrice,
+      availability: 'available',
+      availabilityLabel: 'Available',
+      isAvailableForCheckout: true,
+      isSelected: true,
+    })
+    expect(secondCustomer.data.items).toEqual([])
+  })
+
+  it('marks unpublished or out-of-stock shopping-bag items without deleting them', async () => {
+    const handler = createHandler()
+    const { product, sku } = await createProductFixture(handler)
+    await handler({
+      action: 'addCustomerShoppingBagItem',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 2,
+      },
+    })
+
+    await handler({
+      action: 'updateSku',
+      identity: ownerIdentity,
+      params: { productId: product.id, skuId: sku.id },
+      payload: {
+        spec: sku.spec,
+        salePrice: sku.salePrice,
+        stock: 0,
+        reason: 'stock audit',
+      },
+    })
+    const outOfStock = await handler({
+      action: 'getCustomerShoppingBagSnapshot',
+      identity: customerIdentity,
+    })
+    await handler({
+      action: 'unpublishProduct',
+      identity: ownerIdentity,
+      params: { productId: product.id },
+    })
+    const unpublished = await handler({
+      action: 'getCustomerShoppingBagSnapshot',
+      identity: customerIdentity,
+    })
+
+    expect(outOfStock.data.items).toHaveLength(1)
+    expect(outOfStock.data.items[0]).toMatchObject({
+      availability: 'outOfStock',
+      availabilityLabel: 'Out of stock',
+      isAvailableForCheckout: false,
+    })
+    expect(unpublished.data.items).toHaveLength(1)
+    expect(unpublished.data.items[0]).toMatchObject({
+      availability: 'unpublished',
+      availabilityLabel: 'Unavailable',
+      isAvailableForCheckout: false,
+    })
+  })
+
+  it('updates and removes shopping-bag items without reserving stock', async () => {
+    const tracedStore = createTracedStore()
+    const handler = createTracedHandler(tracedStore)
+    const { product, sku } = await createProductFixture(handler)
+
+    const added = await handler({
+      action: 'addCustomerShoppingBagItem',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+      },
+    })
+    const updated = await handler({
+      action: 'updateCustomerShoppingBagItemQuantity',
+      identity: customerIdentity,
+      params: { itemId: added.data.item.id },
+      payload: { quantity: 2 },
+    })
+    const detailAfterUpdate = await handler({
+      action: 'getPublishedProductDetail',
+      identity: customerIdentity,
+      params: { productId: product.id },
+    })
+    const unselected = await handler({
+      action: 'selectCustomerShoppingBagItem',
+      identity: customerIdentity,
+      params: { itemId: added.data.item.id },
+      payload: { isSelected: false },
+    })
+    const removed = await handler({
+      action: 'removeCustomerShoppingBagItem',
+      identity: customerIdentity,
+      params: { itemId: added.data.item.id },
+    })
+    const finalSnapshot = await handler({
+      action: 'getCustomerShoppingBagSnapshot',
+      identity: customerIdentity,
+    })
+
+    expect(updated.data.snapshot.items[0]).toMatchObject({
+      id: added.data.item.id,
+      quantity: 2,
+      lineTotal: sku.salePrice * 2,
+    })
+    expect(unselected.data.snapshot).toMatchObject({
+      selectedQuantity: 0,
+      selectedSubtotal: 0,
+    })
+    expect(unselected.data.snapshot.items[0]).toMatchObject({
+      isSelected: false,
+    })
+    expect(detailAfterUpdate.data.skus[0].stock).toBe(sku.stock)
+    expect(tracedStore.insertCalls.filter((call) => call.name === 'inventory_ledger')).toEqual([])
+    expect(removed.data.item).toMatchObject({ id: added.data.item.id })
+    expect(finalSnapshot.data.items).toEqual([])
+  })
+
+  it('clears only unavailable shopping-bag items for the current customer', async () => {
+    const handler = createHandler()
+    const { product, sku } = await createProductFixture(handler)
+    await handler({
+      action: 'addCustomerShoppingBagItem',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+      },
+    })
+    await handler({
+      action: 'updateSku',
+      identity: ownerIdentity,
+      params: { productId: product.id, skuId: sku.id },
+      payload: {
+        spec: sku.spec,
+        salePrice: sku.salePrice,
+        stock: 0,
+        reason: 'stock audit',
+      },
+    })
+
+    const cleared = await handler({
+      action: 'clearUnavailableCustomerShoppingBagItems',
+      identity: customerIdentity,
+    })
+
+    expect(cleared.data.removedItemIds).toHaveLength(1)
+    expect(cleared.data.snapshot.items).toEqual([])
   })
 })
 

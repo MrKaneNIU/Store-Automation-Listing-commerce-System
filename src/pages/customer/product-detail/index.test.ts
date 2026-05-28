@@ -36,4 +36,11 @@ describe('customer product detail real checkout authorization wiring', () => {
     expect(source).toContain('class="detail-copy"')
     expect(source).not.toContain('利落廓形与精致比例适合通勤和晚间场景。浏览本页不会触发登录，下单时才进入微信授权。')
   })
+  it('adds the selected SKU to the customer shopping bag without changing checkout wiring', () => {
+    expect(source).toContain('addCloudBaseCustomerShoppingBagItem')
+    expect(source).toContain('const addToShoppingBag = async () => {')
+    expect(source).toContain('@tap="addToShoppingBag"')
+    expect(source).toContain('submitCloudBaseCustomerProductDetailOrder')
+    expect(source).toContain('confirmPhoneAuthorization')
+  })
 })
