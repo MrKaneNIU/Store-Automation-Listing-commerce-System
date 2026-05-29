@@ -326,6 +326,51 @@ describe('CloudBase mall API client', () => {
     ])
   })
 
+  it('maps customer favorites actions through mallApi', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        return { items: [], favorite: { id: 'favorite-1' }, removedFavorite: { id: 'favorite-1' } } as never
+      },
+    })
+
+    await client.getCustomerFavoriteProductsSnapshot()
+    await client.favoriteCustomerProduct('product-1')
+    await client.unfavoriteCustomerProduct('product-1')
+    await client.removeCustomerFavoriteProduct('product-1')
+
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'getCustomerFavoriteProductsSnapshot',
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'favoriteCustomerProduct',
+          payload: { productId: 'product-1' },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'unfavoriteCustomerProduct',
+          payload: { productId: 'product-1' },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'removeCustomerFavoriteProduct',
+          payload: { productId: 'product-1' },
+        },
+      },
+    ])
+  })
+
   it('maps product description updates through mallApi', async () => {
     const calls: Array<{ name: string; data: unknown }> = []
     const client = createCloudBaseMallApiClient({

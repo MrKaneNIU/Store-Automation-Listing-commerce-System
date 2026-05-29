@@ -201,6 +201,49 @@ type CustomerShoppingBagCommandResult = {
   invalidatedSnapshotKeys: string[]
 }
 
+type CustomerFavoriteProductAvailability = 'available' | 'unpublished' | 'deleted'
+
+export type CustomerFavoriteProductItem = {
+  favoriteId: string
+  productId: string
+  productCode: string
+  productName: string
+  mainImageUrl: string
+  minPrice: number | '-'
+  availability: CustomerFavoriteProductAvailability
+  availabilityLabel: string
+  canOpenDetail: boolean
+  favoritedAt: string
+}
+
+export type CustomerFavoriteProductsSnapshot = {
+  customerId: string
+  items: CustomerFavoriteProductItem[]
+  totalCount: number
+  availableCount: number
+  unavailableCount: number
+  serverTime: string
+}
+
+type CustomerFavoriteProductRecord = {
+  id: string
+  customerId: string
+  productId: string
+  createdAt: string
+  updatedAt: string
+}
+
+type CustomerFavoriteProductInput = {
+  productId: string
+}
+
+type CustomerFavoriteProductCommandResult = {
+  favorite?: CustomerFavoriteProductRecord
+  removedFavorite?: CustomerFavoriteProductRecord | null
+  snapshot: CustomerFavoriteProductsSnapshot
+  invalidatedSnapshotKeys: string[]
+}
+
 type ClearUnavailableCustomerShoppingBagItemsResult = {
   removedItemIds: string[]
   snapshot: CustomerShoppingBagSnapshot
@@ -254,6 +297,10 @@ export type CloudBaseMallApiClient = {
   ) => Promise<CustomerShoppingBagCommandResult>
   removeCustomerShoppingBagItem: (itemId: string) => Promise<CustomerShoppingBagCommandResult>
   clearUnavailableCustomerShoppingBagItems: () => Promise<ClearUnavailableCustomerShoppingBagItemsResult>
+  getCustomerFavoriteProductsSnapshot: () => Promise<CustomerFavoriteProductsSnapshot>
+  favoriteCustomerProduct: (productId: string) => Promise<CustomerFavoriteProductCommandResult>
+  unfavoriteCustomerProduct: (productId: string) => Promise<CustomerFavoriteProductCommandResult>
+  removeCustomerFavoriteProduct: (productId: string) => Promise<CustomerFavoriteProductCommandResult>
   listMerchantOrders: () => Promise<{ orders: Order[] }>
   confirmMerchantOrder: (orderId: string) => Promise<{ order: Order }>
   cancelMerchantOrder: (orderId: string) => Promise<{ order: Order }>
@@ -412,6 +459,21 @@ export const createCloudBaseMallApiClient = (
   },
   clearUnavailableCustomerShoppingBagItems() {
     return callMallApi(functionClient, { action: 'clearUnavailableCustomerShoppingBagItems' })
+  },
+  getCustomerFavoriteProductsSnapshot() {
+    return callMallApi(functionClient, { action: 'getCustomerFavoriteProductsSnapshot' })
+  },
+  favoriteCustomerProduct(productId) {
+    const payload: CustomerFavoriteProductInput = { productId }
+    return callMallApi(functionClient, { action: 'favoriteCustomerProduct', payload })
+  },
+  unfavoriteCustomerProduct(productId) {
+    const payload: CustomerFavoriteProductInput = { productId }
+    return callMallApi(functionClient, { action: 'unfavoriteCustomerProduct', payload })
+  },
+  removeCustomerFavoriteProduct(productId) {
+    const payload: CustomerFavoriteProductInput = { productId }
+    return callMallApi(functionClient, { action: 'removeCustomerFavoriteProduct', payload })
   },
   listMerchantOrders() {
     return callMallApi(functionClient, { action: 'listMerchantOrders' })
