@@ -31,12 +31,17 @@ const createTracedStore = () => {
   const store = createStore()
   const listCalls = []
   const insertCalls = []
+  const upsertCalls = []
   return {
     store: {
       ...store,
       async insert(name, document) {
         insertCalls.push({ name, document })
         return store.insert(name, document)
+      },
+      async upsert(name, document) {
+        upsertCalls.push({ name, document })
+        return store.upsert(name, document)
       },
       async list(name, query) {
         listCalls.push({ name, query })
@@ -45,6 +50,7 @@ const createTracedStore = () => {
     },
     listCalls,
     insertCalls,
+    upsertCalls,
   }
 }
 
@@ -1660,6 +1666,304 @@ describe('mallApi customer shopping bag actions', () => {
 
     expect(cleared.data.removedItemIds).toHaveLength(1)
     expect(cleared.data.snapshot.items).toEqual([])
+  })
+})
+
+describe('mallApi customer favorites actions', () => {
+  it('advertises favorites actions through listContracts', async () => {
+    const handler = createHandler()
+
+    const result = await handler({ action: 'listContracts' })
+
+    expect(result.data.actions).toEqual(expect.arrayContaining([
+      'getCustomerFavoriteProductsSnapshot',
+      'favoriteCustomerProduct',
+      'unfavoriteCustomerProduct',
+      'removeCustomerFavoriteProduct',
+    ]))
+  })
+
+  it('returns an empty customer-scoped favorites snapshot without phone authorization', async () => {
+    const handler = createHandler()
+
+    const result = await handler({
+      action: 'getCustomerFavoriteProductsSnapshot',
+      identity: customerIdentity,
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        items: [],
+        totalCount: 0,
+        availableCount: 0,
+        unavailableCount: 0,
+        serverTime: '2026-05-11T00:00:00.000Z',
+      },
+    })
+    expect(result.data.customerId).toMatch(/^customer-/)
+  })
+
+  it('creates product-level favorites idempotently and keeps them scoped to the verified customer', async () => {
+    const tracedStore = createTracedStore()
+    const handler = createTracedHandler(tracedStore)
+    const { product } = await createProductFixture(handler)
+    tracedStore.insertCalls.length = 0
+
+    const first = await handler({
+      action: 'favoriteCustomerProduct',
+      identity: customerIdentity,
+      payload: { productId: product.id },
+    })
+    const duplicate = await handler({
+      action: 'favoriteCustomerProduct',
+      identity: customerIdentity,
+      payload: { productId: product.id },
+    })
+    const firstCustomer = await handler({
+      action: 'getCustomerFavoriteProductsSnapshot',
+      identity: customerIdentity,
+    })
+    const secondCustomer = await handler({
+      action: 'getCustomerFavoriteProductsSnapshot',
+      identity: {
+        openid: 'other-customer-openid',
+        appid: 'wxa63c53796488d4d4',
+        roles: ['customer'],
+      },
+    })
+
+    expect(first).toMatchObject({
+      success: true,
+      data: {
+        favorite: {
+          productId: product.id,
+        },
+        invalidatedSnapshotKeys: [
+          expect.stringMatching(/^customer-favorites:customer-\d+:v1$/),
+          `customer-product-detail:${product.id}:v1`,
+        ],
+      },
+    })
+    expect(duplicate.data.favorite.id).toBe(first.data.favorite.id)
+    expect(firstCustomer.data.items).toHaveLength(1)
+    expect(firstCustomer.data.items[0]).toMatchObject({
+      favoriteId: first.data.favorite.id,
+      productId: product.id,
+      productCode: product.productCode,
+      productName: product.productName,
+      mainImageUrl: product.mainImageUrl,
+      minPrice: 129,
+      availability: 'available',
+      availabilityLabel: 'Available',
+      canOpenDetail: true,
+      favoritedAt: '2026-05-11T00:00:00.000Z',
+    })
+    expect(secondCustomer.data.items).toEqual([])
+    expect(tracedStore.upsertCalls.filter((call) => call.name === 'customer_favorites')).toHaveLength(1)
+    expect(tracedStore.insertCalls.filter((call) => call.name === 'customer_favorites')).toEqual([])
+    expect(tracedStore.insertCalls.filter((call) => call.name === 'shopping_bag_items')).toEqual([])
+    expect(tracedStore.insertCalls.filter((call) => call.name === 'orders')).toEqual([])
+    expect(tracedStore.insertCalls.filter((call) => call.name === 'inventory_ledger')).toEqual([])
+  })
+
+  it('keeps concurrent duplicate favorites to one deterministic customer-product document', async () => {
+    const tracedStore = createTracedStore()
+    const handler = createTracedHandler(tracedStore)
+    const { product } = await createProductFixture(handler)
+    await handler({
+      action: 'getCustomerFavoriteProductsSnapshot',
+      identity: customerIdentity,
+    })
+    tracedStore.insertCalls.length = 0
+    tracedStore.upsertCalls.length = 0
+
+    const [first, second] = await Promise.all([
+      handler({
+        action: 'favoriteCustomerProduct',
+        identity: customerIdentity,
+        payload: { productId: product.id },
+      }),
+      handler({
+        action: 'favoriteCustomerProduct',
+        identity: customerIdentity,
+        payload: { productId: product.id },
+      }),
+    ])
+    const customerId = first.data.favorite.customerId
+    const storedFavorites = await tracedStore.store.list('customer_favorites', {
+      customer_id: customerId,
+      product_id: product.id,
+    })
+
+    expect(first.success).toBe(true)
+    expect(second.success).toBe(true)
+    expect(second.data.favorite.id).toBe(first.data.favorite.id)
+    expect(storedFavorites).toHaveLength(1)
+    expect(storedFavorites[0]).toMatchObject({
+      _id: first.data.favorite.id,
+      customer_id: customerId,
+      product_id: product.id,
+    })
+    expect(tracedStore.upsertCalls.filter((call) => call.name === 'customer_favorites')).toHaveLength(2)
+    expect(tracedStore.insertCalls.filter((call) => call.name === 'customer_favorites')).toEqual([])
+    expect(tracedStore.insertCalls.filter((call) => call.name === 'orders')).toEqual([])
+    expect(tracedStore.insertCalls.filter((call) => call.name === 'inventory_ledger')).toEqual([])
+  })
+
+  it('keeps unavailable and deleted products in the favorites snapshot without changing product rules', async () => {
+    const handler = createHandler()
+    const { product } = await createProductFixture(handler)
+    await handler({
+      action: 'favoriteCustomerProduct',
+      identity: customerIdentity,
+      payload: { productId: product.id },
+    })
+
+    await handler({
+      action: 'unpublishProduct',
+      identity: ownerIdentity,
+      params: { productId: product.id },
+    })
+    const unpublished = await handler({
+      action: 'getCustomerFavoriteProductsSnapshot',
+      identity: customerIdentity,
+    })
+    await handler({
+      action: 'deleteProduct',
+      identity: ownerIdentity,
+      params: { productId: product.id },
+    })
+    const deleted = await handler({
+      action: 'getCustomerFavoriteProductsSnapshot',
+      identity: customerIdentity,
+    })
+
+    expect(unpublished.data.items).toHaveLength(1)
+    expect(unpublished.data.items[0]).toMatchObject({
+      productId: product.id,
+      productName: product.productName,
+      availability: 'unpublished',
+      availabilityLabel: 'Unavailable',
+      canOpenDetail: false,
+    })
+    expect(deleted.data.items).toHaveLength(1)
+    expect(deleted.data.items[0]).toMatchObject({
+      productId: product.id,
+      productCode: '',
+      productName: 'Unavailable product',
+      mainImageUrl: '',
+      minPrice: '-',
+      availability: 'deleted',
+      availabilityLabel: 'Deleted',
+      canOpenDetail: false,
+    })
+  })
+
+  it('rejects SKU-level favorite payloads', async () => {
+    const handler = createHandler()
+    const { product, sku } = await createProductFixture(handler)
+
+    const result = await handler({
+      action: 'favoriteCustomerProduct',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+      },
+    })
+
+    expect(result).toMatchObject({
+      success: false,
+      error: {
+        code: 'VALIDATION_ERROR',
+      },
+    })
+  })
+
+  it('does not leak favorite state through public product summaries', async () => {
+    const handler = createHandler()
+    const { product } = await createProductFixture(handler)
+    await handler({
+      action: 'favoriteCustomerProduct',
+      identity: customerIdentity,
+      payload: { productId: product.id },
+    })
+
+    const summaries = await handler({
+      action: 'listPublishedProductSummaries',
+      identity: customerIdentity,
+    })
+
+    expect(summaries.data.products).toHaveLength(1)
+    expect(summaries.data.products[0]).toMatchObject({
+      id: product.id,
+      productName: product.productName,
+    })
+    expect(summaries.data.products[0]).not.toHaveProperty('isFavorited')
+    expect(summaries.data.products[0]).not.toHaveProperty('favoriteId')
+    expect(summaries.data.products[0]).not.toHaveProperty('customerId')
+  })
+
+  it('unfavorites with product-detail and favorites invalidation', async () => {
+    const handler = createHandler()
+    const { product } = await createProductFixture(handler)
+    await handler({
+      action: 'favoriteCustomerProduct',
+      identity: customerIdentity,
+      payload: { productId: product.id },
+    })
+
+    const removed = await handler({
+      action: 'unfavoriteCustomerProduct',
+      identity: customerIdentity,
+      payload: { productId: product.id },
+    })
+
+    expect(removed).toMatchObject({
+      success: true,
+      data: {
+        removedFavorite: {
+          productId: product.id,
+        },
+        invalidatedSnapshotKeys: [
+          expect.stringMatching(/^customer-favorites:customer-\d+:v1$/),
+          `customer-product-detail:${product.id}:v1`,
+        ],
+      },
+    })
+  })
+
+  it('removes favorites with favorites-only invalidation', async () => {
+    const handler = createHandler()
+    const { product } = await createProductFixture(handler)
+    await handler({
+      action: 'favoriteCustomerProduct',
+      identity: customerIdentity,
+      payload: { productId: product.id },
+    })
+
+    const removed = await handler({
+      action: 'removeCustomerFavoriteProduct',
+      identity: customerIdentity,
+      payload: { productId: product.id },
+    })
+    const snapshot = await handler({
+      action: 'getCustomerFavoriteProductsSnapshot',
+      identity: customerIdentity,
+    })
+
+    expect(removed).toMatchObject({
+      success: true,
+      data: {
+        removedFavorite: {
+          productId: product.id,
+        },
+        invalidatedSnapshotKeys: [expect.stringMatching(/^customer-favorites:customer-\d+:v1$/)],
+      },
+    })
+    expect(removed.data.invalidatedSnapshotKeys).not.toContain(`customer-product-detail:${product.id}:v1`)
+    expect(snapshot.data.items).toEqual([])
   })
 })
 

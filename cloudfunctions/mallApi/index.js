@@ -30,6 +30,11 @@ const createCloudBaseDocumentStore = () => {
       await collection(name).doc(_id).update(data)
       return document
     },
+    async upsert(name, document) {
+      const { _id, ...data } = document
+      await collection(name).doc(_id).set(data)
+      return document
+    },
     async deleteByField(name, field, value) {
       const existing = resultData(await collection(name).where({ [field]: value }).get())
       for (const document of existing) {

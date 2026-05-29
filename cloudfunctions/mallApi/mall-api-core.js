@@ -38,6 +38,10 @@ const SUPPORTED_ACTIONS = [
   'selectCustomerShoppingBagItem',
   'removeCustomerShoppingBagItem',
   'clearUnavailableCustomerShoppingBagItems',
+  'getCustomerFavoriteProductsSnapshot',
+  'favoriteCustomerProduct',
+  'unfavoriteCustomerProduct',
+  'removeCustomerFavoriteProduct',
   'listMerchantOrders',
   'confirmMerchantOrder',
   'cancelMerchantOrder',
@@ -60,6 +64,7 @@ const COLLECTIONS = [
   'staff_users',
   'role_assignments',
   'shopping_bag_items',
+  'customer_favorites',
   'inventory_ledger',
   'operation_audit_logs',
   'uploaded_assets',
@@ -305,6 +310,17 @@ const parseShoppingBagItemInput = (value) => {
     productId: readString(value, 'productId'),
     skuId: readString(value, 'skuId'),
     quantity: readPositiveInteger(value, 'quantity'),
+  }
+}
+
+const parseFavoriteProductInput = (value) => {
+  if (!isRecord(value)) throw validationError('Request body must be a JSON object')
+  const allowed = ['productId']
+  Object.keys(value).forEach((field) => {
+    if (!allowed.includes(field)) throw validationError(`${field} is not a favorite product field`)
+  })
+  return {
+    productId: readString(value, 'productId'),
   }
 }
 
@@ -718,6 +734,25 @@ const toShoppingBagItem = (document) => ({
   updatedAt: document.updated_at,
 })
 
+const toCustomerFavoriteDocument = (favorite) => ({
+  _id: favorite.id,
+  customer_id: favorite.customerId,
+  product_id: favorite.productId,
+  created_at: favorite.createdAt,
+  updated_at: favorite.updatedAt,
+})
+
+const toCustomerFavorite = (document) => ({
+  id: document._id,
+  customerId: document.customer_id,
+  productId: document.product_id,
+  createdAt: document.created_at,
+  updatedAt: document.updated_at,
+})
+
+const createCustomerFavoriteId = (customerId, productId) =>
+  `favorite-${Buffer.from(`${customerId}:${productId}`).toString('hex')}`
+
 const toAuditLogDocument = (auditLog) => ({
   _id: auditLog.id,
   action: auditLog.action,
@@ -764,10 +799,22 @@ const shoppingBagAvailabilityLabels = {
   outOfStock: 'Out of stock',
 }
 
+const favoriteAvailabilityLabels = {
+  available: 'Available',
+  unpublished: 'Unavailable',
+  deleted: 'Deleted',
+}
+
 const getShoppingBagAvailability = (product, sku) => {
   if (!product || product.status !== 'published') return 'unpublished'
   if (!sku || sku.productId !== product.id) return 'skuUnavailable'
   if (sku.stock <= 0) return 'outOfStock'
+  return 'available'
+}
+
+const getFavoriteAvailability = (product, skus) => {
+  if (!product) return 'deleted'
+  if (product.status !== 'published' || validateProductForPublish(product, skus).length > 0) return 'unpublished'
   return 'available'
 }
 
@@ -813,6 +860,43 @@ const createShoppingBagSnapshot = async (customerId, context) => {
       .filter((item) => item.isSelected && item.isAvailableForCheckout)
       .reduce((sum, item) => sum + item.lineTotal, 0),
     unavailableCount: snapshotItems.filter((item) => !item.isAvailableForCheckout).length,
+    serverTime: context.now(),
+  }
+}
+
+const createFavoriteProductsSnapshot = async (customerId, context) => {
+  const [favorites, products, skus] = await Promise.all([
+    context.repository.listCustomerFavorites(customerId),
+    context.repository.listProducts(),
+    context.repository.listSkus(),
+  ])
+  const productById = new Map(products.map((product) => [product.id, product]))
+  const snapshotItems = favorites.map((favorite) => {
+    const product = productById.get(favorite.productId)
+    const productSkus = product ? skus.filter((sku) => sku.productId === product.id) : []
+    const availability = getFavoriteAvailability(product, productSkus)
+    const summary = product ? toPublishedProductSummary(product, productSkus) : null
+
+    return {
+      favoriteId: favorite.id,
+      productId: favorite.productId,
+      productCode: product ? product.productCode : '',
+      productName: product ? product.productName : 'Unavailable product',
+      mainImageUrl: product ? product.mainImageUrl : '',
+      minPrice: summary ? summary.minPrice : '-',
+      availability,
+      availabilityLabel: favoriteAvailabilityLabels[availability],
+      canOpenDetail: availability === 'available',
+      favoritedAt: favorite.createdAt,
+    }
+  })
+
+  return {
+    customerId,
+    items: snapshotItems,
+    totalCount: snapshotItems.length,
+    availableCount: snapshotItems.filter((item) => item.availability === 'available').length,
+    unavailableCount: snapshotItems.filter((item) => item.availability !== 'available').length,
     serverTime: context.now(),
   }
 }
@@ -946,6 +1030,16 @@ const createRepository = (store) => ({
     await store.deleteByField('shopping_bag_items', '_id', itemId)
     return item ? toShoppingBagItem(item) : null
   },
+  listCustomerFavorites: async (customerId) =>
+    (await store.list('customer_favorites', { customer_id: customerId }))
+      .map(toCustomerFavorite)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+  saveCustomerFavorite: async (favorite) => toCustomerFavorite(await store.upsert('customer_favorites', toCustomerFavoriteDocument(favorite))),
+  deleteCustomerFavorite: async (favoriteId) => {
+    const favorite = (await store.list('customer_favorites', { _id: favoriteId }))[0]
+    await store.deleteByField('customer_favorites', '_id', favoriteId)
+    return favorite ? toCustomerFavorite(favorite) : null
+  },
   saveAuditLog: async (auditLog) => store.insert('operation_audit_logs', toAuditLogDocument(auditLog)),
 })
 
@@ -1076,11 +1170,19 @@ const resolveShoppingBagCustomer = async (event, context) => {
   return upsertCustomerFromIdentity(context.repository, identity, context)
 }
 
+const resolveFavoriteCustomer = async (event, context) => {
+  const identity = await requireResolvedIdentity(event, context)
+  return upsertCustomerFromIdentity(context.repository, identity, context)
+}
+
 const findShoppingBagItemForCustomer = async (context, customerId, itemId) => {
   const item = (await context.repository.listShoppingBagItems(customerId)).find((current) => current.id === itemId)
   if (!item) throw notFoundError('Shopping-bag item not found')
   return item
 }
+
+const findCustomerFavoriteByProduct = async (context, customerId, productId) =>
+  (await context.repository.listCustomerFavorites(customerId)).find((favorite) => favorite.productId === productId) || null
 
 const resolveIdentityRoles = async (identity, context) => {
   if (context.allowTestIdentityRoles && identity.roles.length > 0) return identity
@@ -1265,6 +1367,65 @@ const apiHandlers = {
       removedItemIds: unavailableItems.map((item) => item.id),
       snapshot: await createShoppingBagSnapshot(customer.id, context),
       invalidatedSnapshotKeys: [`customer-shopping-bag:${customer.id}:v1`],
+    }
+  },
+  async getCustomerFavoriteProductsSnapshot(event, context) {
+    const customer = await resolveFavoriteCustomer(event, context)
+    return createFavoriteProductsSnapshot(customer.id, context)
+  },
+  async favoriteCustomerProduct(event, context) {
+    const customer = await resolveFavoriteCustomer(event, context)
+    const input = parseFavoriteProductInput(event.payload)
+    const product = await findProduct(context.repository, input.productId)
+    const skus = await context.repository.listSkus(product.id)
+    if (getFavoriteAvailability(product, skus) !== 'available') {
+      throw conflictError('Only published products can be favorited')
+    }
+
+    const timestamp = context.now()
+    const existing = await findCustomerFavoriteByProduct(context, customer.id, product.id)
+    const favorite = existing || await context.repository.saveCustomerFavorite({
+      id: createCustomerFavoriteId(customer.id, product.id),
+      customerId: customer.id,
+      productId: product.id,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+
+    return {
+      favorite,
+      snapshot: await createFavoriteProductsSnapshot(customer.id, context),
+      invalidatedSnapshotKeys: [
+        `customer-favorites:${customer.id}:v1`,
+        `customer-product-detail:${product.id}:v1`,
+      ],
+    }
+  },
+  async unfavoriteCustomerProduct(event, context) {
+    const customer = await resolveFavoriteCustomer(event, context)
+    const input = parseFavoriteProductInput(event.payload)
+    const favorite = await findCustomerFavoriteByProduct(context, customer.id, input.productId)
+    const removedFavorite = favorite ? await context.repository.deleteCustomerFavorite(favorite.id) : null
+
+    return {
+      removedFavorite,
+      snapshot: await createFavoriteProductsSnapshot(customer.id, context),
+      invalidatedSnapshotKeys: [
+        `customer-favorites:${customer.id}:v1`,
+        `customer-product-detail:${input.productId}:v1`,
+      ],
+    }
+  },
+  async removeCustomerFavoriteProduct(event, context) {
+    const customer = await resolveFavoriteCustomer(event, context)
+    const input = parseFavoriteProductInput(event.payload)
+    const favorite = await findCustomerFavoriteByProduct(context, customer.id, input.productId)
+    const removedFavorite = favorite ? await context.repository.deleteCustomerFavorite(favorite.id) : null
+
+    return {
+      removedFavorite,
+      snapshot: await createFavoriteProductsSnapshot(customer.id, context),
+      invalidatedSnapshotKeys: [`customer-favorites:${customer.id}:v1`],
     }
   },
   async createOcrBatch(event, context) {
@@ -1764,6 +1925,13 @@ const createMemoryDocumentStore = () => {
     },
     async replace(name, document) {
       state[name] = state[name].map((item) => (item._id === document._id ? clone(document) : item))
+      return clone(document)
+    },
+    async upsert(name, document) {
+      const exists = state[name].some((item) => item._id === document._id)
+      state[name] = exists
+        ? state[name].map((item) => (item._id === document._id ? clone(document) : item))
+        : [...state[name], clone(document)]
       return clone(document)
     },
     async deleteByField(name, field, value) {
