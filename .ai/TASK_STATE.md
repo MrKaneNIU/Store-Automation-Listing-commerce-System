@@ -2,7 +2,7 @@
 
 Current module: Module D
 
-Current slice: D3
+Current slice: D4
 
 ## Completed
 
@@ -85,12 +85,21 @@ Current slice: D3
   - `customer-product-detail:{productId}:v1`
 - Added targeted product detail tests for initial favorite state display, favorite success, unfavorite success, failure preservation, and no checkout/stock/shopping-bag coupling.
 - Did not modify `.vue` pages, homepage navigation, bottom navigation, shopping bag, orders, checkout, stock, inventory ledger, payment, logistics, coupons, refunds, or recommendations.
+- Started Module D4 product list favorite state / toggle UI integration.
+- Loaded and applied `ui-ux-pro-max` for product-list card favorite state, touch target, busy, and failure feedback behavior.
+- Loaded and applied `design-taste-frontend` as the minimal project frontend skill for this UI change.
+- Product list now derives product-level favorite state from the Module C customer favorites facade.
+- Product list favorite toggle now calls only Module C page-facing favorite/unfavorite commands.
+- Product list favorite toggle keeps previous product list cards visible on failure.
+- Product list favorite toggle checks PRD favorites invalidation key returned by Module C commands:
+  - `customer-favorites:{customerId}:v1`
+- Added targeted product list tests for initial favorite state display, favorite success, unfavorite success, failure preservation, unchanged product visibility/publish eligibility, and no checkout/stock/shopping-bag coupling.
 
 ## Incomplete
 
 - Existing reserved favorites bottom-nav entries on homepage/product-list are not rewired in this slice.
-- Product-detail favorite toggle is implemented and pending reviewer.
-- Product-list favorite toggle/state is not implemented.
+- Product-detail favorite toggle is implemented and passed reviewer.
+- Product-list favorite toggle/state is implemented and pending reviewer.
 - Reserved favorites bottom-nav navigation is not implemented.
 - Module E verification/manual acceptance is not started.
 
@@ -391,5 +400,35 @@ Scope guard for D2:
 
 - GREEN: `pnpm.cmd exec vitest run --config vitest.config.ts src/pages/customer/product-detail/index.test.ts` passed with 1 file / 10 tests.
 - GREEN: `pnpm.cmd exec eslint src/pages/customer/product-detail/index.vue src/pages/customer/product-detail/index.test.ts` passed.
+- GREEN: `pnpm.cmd run type-check` passed.
+- GREEN: `pnpm.cmd run verify` passed.
+
+## Module D4 Implementation
+
+- Changed:
+  - `src/pages/customer/product-list/index.vue`
+  - `src/pages/customer/product-list/index.test.ts`
+  - `.ai/TASK_STATE.md`
+- Kept out of scope:
+  - favorites page
+  - product-detail favorite toggle behavior
+  - homepage navigation
+  - bottom navigation redesign
+  - shopping bag
+  - orders
+  - checkout
+  - stock
+  - inventory ledger
+  - payment
+  - logistics
+  - coupons
+  - refunds
+  - recommendations
+  - product visibility / publish eligibility
+
+## Module D4 Verification
+
+- GREEN: `pnpm.cmd exec vitest run --config vitest.config.ts src/pages/customer/product-list/index.test.ts` passed with 1 file / 6 tests.
+- GREEN: `pnpm.cmd exec eslint src/pages/customer/product-list/index.vue src/pages/customer/product-list/index.test.ts` passed.
 - GREEN: `pnpm.cmd run type-check` passed.
 - GREEN: `pnpm.cmd run verify` passed.

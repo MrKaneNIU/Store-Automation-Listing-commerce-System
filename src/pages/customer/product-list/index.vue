@@ -96,8 +96,15 @@
         <view class="catalog-media">
           <image v-if="product.mainImageUrl" class="image" :src="product.mainImageUrl" mode="aspectFill" />
           <view v-else class="fashion-visual" :class="getVisualClass(product.productCode)" />
-          <button class="favorite-button" hover-class="press-feedback" @tap.stop="showVisualOnlyToast('收藏为视觉入口，真实收藏能力需单独 PRD')">
-            <text>♡</text>
+          <button
+            class="favorite-button"
+            :class="{ active: isFavoriteProduct(product.id), busy: favoriteBusyProductId === product.id }"
+            :disabled="favoriteBusyProductId === product.id"
+            :aria-label="favoriteButtonLabel(product.id)"
+            hover-class="press-feedback"
+            @tap.stop="toggleFavorite(product.id)"
+          >
+            <text>{{ isFavoriteProduct(product.id) ? '♥' : '♡' }}</text>
           </button>
         </view>
 
@@ -106,6 +113,10 @@
         <text class="rating">4.8 <text>已上架</text></text>
         <text class="price">￥{{ product.minPrice }}</text>
       </view>
+    </view>
+
+    <view v-if="favoriteMessage" class="favorite-feedback" :class="{ danger: favoriteProductsView.loadingState === 'failed' }">
+      <text>{{ favoriteMessage }}</text>
     </view>
 
     <view class="customer-nav">
@@ -152,13 +163,26 @@ import { navigateTo, redirectTo } from '../../../app/navigation'
 import { routes } from '../../../app/routes'
 import type { CustomerProductListItem } from '../../../features/customer-product-list/customer-product-list'
 import { getCloudBaseCustomerProductListView } from '../../../features/cloudbase-mall/customer-product-list'
+import {
+  favoriteCloudBaseCustomerProduct,
+  getCloudBaseCustomerFavoriteProductsView,
+  unfavoriteCloudBaseCustomerProduct,
+} from '../../../features/cloudbase-mall/customer-favorites'
+import {
+  createCustomerFavoriteProductsLoadingView,
+  type CustomerFavoriteProductCommandResult,
+  type CustomerFavoriteProductsView,
+} from '../../../features/customer-favorites/customer-favorites'
 
 const products = ref<CustomerProductListItem[]>([])
 const emptyMessage = ref('暂无已上架商品')
+const favoriteMessage = ref('')
 const isLoading = ref(false)
 const isHomeNavigating = ref(false)
 const isShoppingBagNavigating = ref(false)
 const navigatingProductId = ref('')
+const favoriteBusyProductId = ref('')
+const favoriteProductsView = ref<CustomerFavoriteProductsView>(createCustomerFavoriteProductsLoadingView())
 const DEFAULT_HEADER_TOP_PADDING = 'calc(env(safe-area-inset-top) + 28rpx)'
 const HEADER_TOP_OFFSET_RPX = -8
 const STATUS_BAR_FALLBACK_GAP_RPX = 44
@@ -244,10 +268,75 @@ const reloadView = () => {
   void refreshView({ showLoading: true })
 }
 
+const keepPreviousFavoritesOnFailure = (
+  resultView: CustomerFavoriteProductsView,
+  previousView: CustomerFavoriteProductsView,
+): CustomerFavoriteProductsView => {
+  if (resultView.loadingState === 'failed' && previousView.items.length > 0) {
+    return {
+      ...previousView,
+      loadingState: 'failed',
+      failureMessage: resultView.failureMessage,
+    }
+  }
+
+  return resultView
+}
+
+const loadFavoriteState = async () => {
+  const previousFavoriteView = favoriteProductsView.value
+  const resultView = await getCloudBaseCustomerFavoriteProductsView()
+  favoriteProductsView.value = keepPreviousFavoritesOnFailure(resultView, previousFavoriteView)
+
+  if (favoriteProductsView.value.loadingState === 'failed') {
+    favoriteMessage.value = favoriteProductsView.value.failureMessage
+  }
+}
+
+const isFavoriteProduct = (productId: string): boolean =>
+  favoriteProductsView.value.items.some((item) => item.productId === productId)
+
+const favoriteButtonLabel = (productId: string): string => {
+  if (favoriteBusyProductId.value === productId) {
+    return isFavoriteProduct(productId) ? '取消中' : '保存中'
+  }
+
+  return isFavoriteProduct(productId) ? '已收藏' : '收藏'
+}
+
+const hasExpectedListToggleInvalidation = (result: CustomerFavoriteProductCommandResult): boolean =>
+  result.invalidatedSnapshotKeys.some((key) => key.startsWith('customer-favorites:') && key.endsWith(':v1'))
+
+const toggleFavorite = async (productId: string) => {
+  if (favoriteBusyProductId.value) {
+    return
+  }
+
+  const previousFavoriteView = favoriteProductsView.value
+
+  favoriteBusyProductId.value = productId
+  favoriteMessage.value = ''
+
+  try {
+    const result = isFavoriteProduct(productId)
+      ? await unfavoriteCloudBaseCustomerProduct(productId, undefined, previousFavoriteView)
+      : await favoriteCloudBaseCustomerProduct(productId, undefined, previousFavoriteView)
+
+    favoriteProductsView.value = result.view
+    favoriteMessage.value =
+      result.status === 'succeeded' && !hasExpectedListToggleInvalidation(result)
+        ? '收藏已更新，稍后同步最新状态'
+        : result.message
+  } finally {
+    favoriteBusyProductId.value = ''
+  }
+}
+
 onShow(() => {
   navigatingProductId.value = ''
   clearHomeNavigationLock()
   clearShoppingBagNavigationLock()
+  void loadFavoriteState()
 
   if (cachedProducts) {
     products.value = cachedProducts
@@ -829,6 +918,11 @@ const getVisualClass = (productCode: string) => {
   box-shadow: 0 18rpx 44rpx rgba(0, 0, 0, 0.1);
 }
 
+.favorite-button.active {
+  background: #050505;
+  color: #ffffff;
+}
+
 .favorite-button text {
   font-size: 32rpx;
   line-height: 1;
@@ -879,6 +973,28 @@ const getVisualClass = (productCode: string) => {
   font-weight: 500;
   line-height: 1;
   overflow-wrap: anywhere;
+}
+
+.favorite-feedback {
+  position: fixed;
+  right: 32rpx;
+  bottom: calc(166rpx + env(safe-area-inset-bottom));
+  left: 32rpx;
+  z-index: 9;
+  display: flex;
+  box-sizing: border-box;
+  padding: 20rpx 24rpx;
+  border-radius: 24rpx;
+  background: rgba(255, 255, 255, 0.96);
+  color: #666666;
+  font-size: 26rpx;
+  line-height: 1.4;
+  box-shadow: 0 18rpx 44rpx rgba(5, 5, 5, 0.1);
+}
+
+.favorite-feedback.danger {
+  background: #fff3f1;
+  color: #9f2b1f;
 }
 
 .customer-nav {
