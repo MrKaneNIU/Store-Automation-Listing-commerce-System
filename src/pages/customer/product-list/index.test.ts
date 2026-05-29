@@ -28,6 +28,19 @@ describe('customer product list shopping bag entry', () => {
     expect(toggleSource).not.toContain('refreshView(')
   })
 
+  it('dedupes repeated favorite toggle taps while a list-card write is pending', () => {
+    const toggleSource = source.slice(source.indexOf('const toggleFavorite'), source.indexOf('onShow(() =>'))
+    const busyGuardIndex = toggleSource.indexOf('if (favoriteBusyProductId.value)')
+    const favoriteCommandIndex = toggleSource.indexOf('favoriteCloudBaseCustomerProduct(productId')
+    const unfavoriteCommandIndex = toggleSource.indexOf('unfavoriteCloudBaseCustomerProduct(productId')
+
+    expect(toggleSource).toContain('favoriteBusyProductId.value = productId')
+    expect(toggleSource).toContain("favoriteBusyProductId.value = ''")
+    expect(busyGuardIndex).toBeGreaterThanOrEqual(0)
+    expect(busyGuardIndex).toBeLessThan(favoriteCommandIndex)
+    expect(busyGuardIndex).toBeLessThan(unfavoriteCommandIndex)
+  })
+
   it('keeps previous product list cards visible when favorite toggle fails', () => {
     const toggleSource = source.slice(source.indexOf('const toggleFavorite'), source.indexOf('onShow(() =>'))
 

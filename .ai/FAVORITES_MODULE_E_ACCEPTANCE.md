@@ -1,0 +1,152 @@
+# Favorites Module E Acceptance
+
+## Scope
+
+Module E is verification and acceptance only. No new feature, business logic,
+CloudBase action behavior, UI behavior, dependency, route, or navigation change
+was implemented in this slice.
+
+## Changed Files Summary
+
+Module A - contracts and workflow:
+
+- `AGENTS.md`
+- `.codex/config.toml`
+- `.codex/agents/*.toml`
+- `docs/contracts/page-facing-ui-contracts.md`
+
+Module B - customer-scoped storage and CloudBase actions:
+
+- `cloudfunctions/mallApi/mall-api-core.js`
+- `cloudfunctions/mallApi/index.js`
+- `cloudfunctions/mallApi/mall-api-core.test.js`
+- `src/services/cloudbase/mall-api-client.ts`
+- `src/services/cloudbase/mall-api-client.test.ts`
+
+Module C - page-facing facade and ViewModel:
+
+- `src/features/customer-favorites/customer-favorites.ts`
+- `src/features/customer-favorites/customer-favorites.test.ts`
+- `src/features/cloudbase-mall/customer-favorites.ts`
+- `src/features/cloudbase-mall/customer-favorites.test.ts`
+
+Module D - UI integration:
+
+- `src/app/routes.ts`
+- `src/pages.json`
+- `src/pages/customer/favorites/index.vue`
+- `src/pages/customer/favorites/index.test.ts`
+- `src/pages/customer/product-detail/index.vue`
+- `src/pages/customer/product-detail/index.test.ts`
+- `src/pages/customer/product-list/index.vue`
+- `src/pages/customer/product-list/index.test.ts`
+
+Module E - verification and acceptance:
+
+- `.ai/FAVORITES_MODULE_E_ACCEPTANCE.md`
+
+## Business Code Intentionally Not Changed
+
+- Shopping bag behavior, rows, commands, and page state.
+- Orders and order creation.
+- Checkout authorization flow.
+- Stock and inventory ledger behavior.
+- Payment, logistics, coupons, refunds, and recommendations.
+- Product publish eligibility and visibility rules.
+- SKU-level wishlist semantics.
+- Public product-list APIs leaking customer favorite state.
+
+## PRD Constraint Evidence
+
+- Favorites remain product-level: tests assert favorite payloads do not accept
+  `skuId`, and product detail/list UI toggle paths pass only `productId`.
+- Customer-private scoping is server-side: CloudFunction tests cover customer
+  scoping and private `customer_favorites` behavior.
+- Phone authorization is not a favorite/unfavorite precondition: UI and facade
+  tests keep phone authorization isolated to checkout/order flows.
+- Invalidation keys:
+  - Product detail favorite/unfavorite validates
+    `customer-favorites:{customerId}:v1`.
+  - Product detail favorite/unfavorite validates
+    `customer-product-detail:{productId}:v1`.
+  - Favorites page remove validates `customer-favorites:{customerId}:v1`.
+  - Product list toggle checks the favorites invalidation key and does not
+    operate on product-detail cache from the page layer.
+- Favorites do not affect shopping bag, orders, checkout, stock, or inventory
+  ledger: product list/detail tests assert no coupling to checkout, stock, or
+  shopping-bag commands, and project checks passed.
+
+## Checks Run And Results
+
+- GREEN: `pnpm.cmd exec vitest run --config vitest.config.ts cloudfunctions/mallApi/mall-api-core.test.js src/services/cloudbase/mall-api-client.test.ts src/features/customer-favorites/customer-favorites.test.ts src/features/cloudbase-mall/customer-favorites.test.ts src/pages/customer/favorites/index.test.ts src/pages/customer/product-detail/index.test.ts src/pages/customer/product-list/index.test.ts`
+  - 7 files passed.
+  - 101 tests passed.
+- GREEN: `pnpm.cmd exec vitest run --config vitest.config.ts src/pages/customer/product-detail/index.test.ts src/pages/customer/product-list/index.test.ts`
+  - 2 files passed.
+  - 18 tests passed.
+  - Added request-dedupe coverage for repeated favorite toggle taps while a
+    product-detail or product-list write is pending.
+- GREEN: `pnpm.cmd run verify`
+  - lint passed.
+  - boundary-check passed.
+  - unit test suite passed: 65 files / 372 tests.
+  - coverage passed.
+  - type-check passed.
+  - backend tests/build passed: 12 backend files / 60 tests.
+  - prod/all audits passed with no known vulnerabilities.
+- GREEN: `pnpm.cmd run verify:full`
+  - reran `verify` successfully.
+  - `build:mp-weixin` completed.
+  - `smoke:mp-weixin` passed: mp-weixin build artifacts and page routes are
+    present.
+
+## Testing Decisions Coverage
+
+- CloudFunction core tests cover customer scoping, empty state, duplicate
+  favorite idempotency, and removal behavior.
+- CloudBase client tests cover snapshot and favorite/unfavorite/remove action
+  mapping.
+- Facade tests cover favorite labels/messages, unavailable product handling,
+  empty messages, failure state, and write-after-refresh command results.
+- Page-level tests cover local display behavior, failure preservation, retry
+  behavior, loading/empty/failure states, and write-after-refresh surfaces.
+- Page-level request dedupe is covered by product detail and product list tests:
+  repeated favorite toggle taps while a write is pending are guarded before the
+  Module C favorite/unfavorite command is called, preserving previous context
+  and avoiding duplicate writes for the same active UI operation.
+- Product listing/detail tests cover that favorites do not change publish
+  eligibility, stock, checkout behavior, or shopping-bag behavior.
+
+## Remaining Harness / Product Gaps
+
+- Manual acceptance is still open. Automated checks and mp-weixin smoke are not
+  a substitute for human acceptance in WeChat DevTools or on a device.
+- Slow-network and image-failure behavior are represented by page states/tests
+  and the acceptance checklist below, but still need human validation.
+- Reserved favorites entry navigation from homepage/product-list bottom nav is
+  not wired in the completed D slices unless explicitly opened by a later task.
+
+## Manual Acceptance Checklist
+
+Use this as the human acceptance evidence template. Record date, device or
+DevTools version, tester, and result for each item.
+
+| Scenario | Steps | Expected Result | Evidence | Status |
+| --- | --- | --- | --- | --- |
+| First entry | Open customer product list, favorite a product, open favorites page. | Product appears once in favorites, marked as saved, with list-card image/name/price. | Screenshot / notes | OPEN |
+| Return entry | Leave favorites page and return later. | Saved favorites reload from customer-scoped snapshot; previous context is understandable while refreshing. | Screenshot / notes | OPEN |
+| Slow network | Simulate slow network and open favorites page. | Loading state is visible; page does not show a blank or broken surface. | Screenshot / notes | OPEN |
+| Empty state | Use a customer with no favorites. | Favorites page shows clear empty state and retry/return affordance where applicable. | Screenshot / notes | OPEN |
+| Failure | Force snapshot failure or block network. | Existing favorite cards remain visible when previous data exists; failure message and retry entry are visible. | Screenshot / notes | OPEN |
+| Write-after-refresh | Favorite/unfavorite from detail/list, then revisit favorites page and detail/list. | Favorite state reflects the latest write after invalidation/refresh; no duplicate favorites appear. | Screenshot / notes | OPEN |
+| Image-failure behavior | Use a favorite product with missing/broken image URL. | Page shows fallback visual and keeps product card usable; unavailable/deleted/unpublished state remains clear. | Screenshot / notes | OPEN |
+
+## Manual Acceptance Status
+
+Manual acceptance is still open.
+
+## Final Human Review Readiness
+
+The Favorites PRD is ready for final human review from an automated verification
+standpoint. Human acceptance should be completed before marking the product
+experience fully accepted.

@@ -30,6 +30,19 @@ describe('customer product detail real checkout authorization wiring', () => {
     expect(toggleSource).not.toContain('refreshView(')
   })
 
+  it('dedupes repeated favorite toggle taps while a product detail write is pending', () => {
+    const toggleSource = source.slice(source.indexOf('const toggleFavorite'), source.indexOf('const selectSku'))
+    const busyGuardIndex = toggleSource.indexOf('if (!viewModel.value.product || isFavoriteBusy.value)')
+    const favoriteCommandIndex = toggleSource.indexOf('favoriteCloudBaseCustomerProduct(productId.value')
+    const unfavoriteCommandIndex = toggleSource.indexOf('unfavoriteCloudBaseCustomerProduct(productId.value')
+
+    expect(toggleSource).toContain('isFavoriteBusy.value = true')
+    expect(toggleSource).toContain('isFavoriteBusy.value = false')
+    expect(busyGuardIndex).toBeGreaterThanOrEqual(0)
+    expect(busyGuardIndex).toBeLessThan(favoriteCommandIndex)
+    expect(busyGuardIndex).toBeLessThan(unfavoriteCommandIndex)
+  })
+
   it('keeps product detail context when favorite toggle fails', () => {
     const toggleSource = source.slice(source.indexOf('const toggleFavorite'), source.indexOf('const selectSku'))
 
