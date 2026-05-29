@@ -234,6 +234,194 @@ Test protection to add during implementation modules:
 - Existing customer order tests remain the authority for stock reservation and
   oversell prevention.
 
+## Customer Favorites
+
+Governing PRD:
+
+- `docs/prd/2026-05-27-favorites-module-prd.md`
+
+Planned feature module:
+
+- `src/features/customer-favorites/customer-favorites.ts`
+
+Planned CloudBase facade:
+
+- `src/features/cloudbase-mall/customer-favorites.ts`
+
+Planned UI entry points:
+
+- Product-detail favorite toggle from
+  `src/pages/customer/product-detail/index.vue`.
+- Dedicated favorites page from a later Module D page.
+- Existing reserved customer navigation entries only. Future UI work must not
+  redesign navigation or add new global entry points for Module A.
+
+Snapshot action:
+
+- `getCustomerFavoriteProductsSnapshot`
+
+Snapshot key:
+
+- `customer-favorites:{customerId}:v1`
+
+Customer identity:
+
+- Required for all server-persisted favorite reads and writes because
+  favorites are private customer data.
+- The server must derive customer identity from verified CloudBase identity or
+  customer session.
+- Pages and clients must not pass openid or customerId as trusted ownership
+  fields for server writes.
+
+Phone authorization:
+
+- Not required to favorite, unfavorite, remove, or list favorite products.
+- Phone authorization remains unrelated to favorites and must not become a
+  favorite/unfavorite precondition.
+
+Favorite target:
+
+- Favorites are product-level only.
+- `productId` is the favorite target.
+- `skuId` is not accepted as a favorite target.
+
+UI may read from the favorites ViewModel:
+
+- `items`
+- `items[].favoriteId`
+- `items[].productId`
+- `items[].productCode`
+- `items[].productName`
+- `items[].mainImageUrl`: renderable display URL or empty string.
+- `items[].minPrice`: feature-derived minimum product price or `-`.
+- `items[].availability`: `'available' | 'unpublished' | 'deleted'`
+- `items[].availabilityLabel`
+- `items[].canOpenDetail`
+- `items[].favoritedAt`
+- `totalCount`
+- `availableCount`
+- `unavailableCount`
+- `emptyMessage`
+- `loadingState`: `'idle' | 'loading' | 'refreshing' | 'failed'`
+- `failureMessage`
+- `lastUpdatedAt`
+- command `status`, `message`, `invalidatedSnapshotKeys`, and refreshed `view`
+  fields where applicable.
+
+UI may pass to favorites commands:
+
+- `productId`: current published product id or already-favorited product id.
+- `retry`: user intent to retry the current favorites snapshot only.
+- `confirmLogin`: UI confirmation callback only when identity is missing.
+- No phone authorization callback is accepted by favorites commands.
+
+Page-facing commands:
+
+- `loadCustomerFavoriteProductsSnapshot()`
+- `favoriteCustomerProduct(productId)`
+- `unfavoriteCustomerProduct(productId)`
+- `removeCustomerFavoriteProduct(productId)`
+- `retryCustomerFavoriteProductsSnapshot()`
+
+Command result shape:
+
+```ts
+type CustomerFavoriteProductCommandResult = {
+  status: 'succeeded' | 'failed'
+  message: string
+  invalidatedSnapshotKeys: string[]
+  view?: CustomerFavoriteProductsView
+}
+```
+
+Write-after-refresh rules:
+
+- Successful product-detail favorite and unfavorite toggles must invalidate:
+  - `customer-favorites:{customerId}:v1`
+  - `customer-product-detail:{productId}:v1`
+- Successful favorites-page remove commands must invalidate only:
+  - `customer-favorites:{customerId}:v1`
+- Failed writes must not dirty or replace the last usable favorites snapshot.
+
+UI must not:
+
+- Treat favorite rows as shopping-bag rows.
+- Create shopping-bag items.
+- Create orders or checkout payloads.
+- Reserve, decrement, restore, or clear stock.
+- Decide product publish eligibility in the page.
+- Read or write repositories, CloudBase collections, `mockDb`, or hidden
+  global state from pages.
+- Persist signed temporary image URLs as canonical product data.
+- Require phone authorization for favorite, unfavorite, remove, or list
+  actions.
+- Accept `skuId` as the favorite target.
+- Touch shopping bag, orders, inventory, checkout, payment, logistics, coupons,
+  refunds, or recommendations.
+
+Target snapshot shape:
+
+```ts
+type CustomerFavoriteProductsSnapshot = {
+  customerId: string
+  items: CustomerFavoriteProductItem[]
+  totalCount: number
+  availableCount: number
+  unavailableCount: number
+  serverTime: string
+}
+
+type CustomerFavoriteProductItem = {
+  favoriteId: string
+  productId: string
+  productCode: string
+  productName: string
+  mainImageUrl: string
+  minPrice: number | '-'
+  availability: 'available' | 'unpublished' | 'deleted'
+  availabilityLabel: string
+  canOpenDetail: boolean
+  favoritedAt: string
+}
+```
+
+Performance and loading contract:
+
+- First-screen remote business budget is O(1): one
+  `getCustomerFavoriteProductsSnapshot` action from the page perspective.
+- The favorites list uses list-card data and resolves only image data needed
+  for the list surface.
+- The snapshot must not include SKU fields, shopping-bag quantity, selected
+  item state, subtotal, checkout, or stock-reservation fields.
+- Retry must reload the favorites snapshot only.
+- Image failures must not hide product name, price, or availability text.
+
+Test protection to add during later implementation modules:
+
+- CloudFunction core tests: customer scoping, empty state, duplicate favorite
+  idempotency, removal behavior, and unavailable product handling.
+- CloudBase client tests: `getCustomerFavoriteProductsSnapshot` plus favorite,
+  unfavorite, and remove action mappings.
+- Facade tests: labels, unavailable product handling, empty state, loading,
+  failure, and command messages.
+- Page-state tests: request dedupe, cached return entry, failure state, retry
+  scope, and write-after-refresh behavior.
+- Product listing/detail tests: favorites do not change publish eligibility,
+  stock, or checkout behavior.
+- Module A itself requires document diff review and targeted contract
+  inspection only. Module B, C, D, and E tests remain follow-up work.
+
+Later module boundaries:
+
+- Module B may implement customer-scoped storage and CloudBase actions, but
+  remains out of scope for Module A.
+- Module C may implement the page-facing facade and ViewModel, but remains out
+  of scope for Module A.
+- Module D may wire UI entry points, existing reserved navigation, and favorite
+  toggles, but remains out of scope for Module A.
+- Module E may run full verification and manual acceptance, but remains out of
+  scope for Module A.
+
 ## Customer Product List
 
 Feature module:

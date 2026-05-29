@@ -1,97 +1,128 @@
-# Codex Project Instructions
+# Codex 项目工作流
 
-This project is a uni-app + Vue 3 + TypeScript WeChat mini-program MVP. The
-current priority is engineering maturity: protect the existing closed loop,
-make changes small, and keep future iterations verifiable.
+本项目采用 PRD 驱动的多角色交付流程。
 
-## Codex Working Principles
+当用户要求“根据 PRD 实现功能”、“执行 PRD”、“ship PRD”、“处理 PRD.md”时，必须按以下顺序执行：
 
-- Work from repository facts, not imagined architecture.
-- Keep every task scoped to the user's approved goal.
-- Prefer small, staged changes over broad rewrites.
-- Preserve the current MVP business loop unless the task explicitly changes it.
-- Do not perform drive-by cleanup, opportunistic refactors, or style churn.
-- Do not introduce dependencies unless the task needs them and the reason is
-  stated before editing.
-- Treat `docs/prd/` and `docs/plans/` as product history. Do not rewrite
-  accepted PRDs or delivery logs unless the user asks.
+1. Planner
+2. Implementer
+3. Reviewer
+4. Debugger，如测试失败或 Reviewer 不通过
+5. Reporter
 
-## Required Before Editing
+## 全局规则
 
-Every implementation task must start with a Repository Impact Map and an
-Execution Plan.
+- 不要扩大 PRD 范围。
+- 不要做无关重构。
+- 不要修改 PRD 未要求的功能。
+- 所有代码改动必须能解释为服务于 PRD。
+- 优先补测试，再实现代码。
+- 如果测试失败，必须先定位根因，再做最小修复。
+- Reviewer 不允许修改代码。
+- Reporter 不允许修改代码。
+- Debugger 最多修复两轮，超过两轮必须停止并汇报原因。
 
-Repository Impact Map must list:
-- Files or directories expected to change.
-- Files or directories explicitly out of scope.
-- Business contracts that must remain unchanged.
-- Verification commands that will be run.
+## 固定输出文件
 
-Execution Plan must list:
-- The small steps to perform.
-- The acceptance criteria for each step.
-- Any uncertain assumptions.
+请尽量把阶段性结果写入：
 
-## Boundaries
+- `.ai/PLAN.md`
+- `.ai/IMPLEMENTATION.md`
+- `.ai/REVIEW.md`
+- `.ai/DEBUG.md`
+- `.ai/FINAL_REPORT.md`
 
-- Do not modify business logic when the task is documentation, harness, CI, or
-  planning only.
-- Do not modify UI when the task is backend, service, docs, tests, or harness
-  only.
-- Do not change data models or API contracts without explicit approval.
-- Do not delete tests.
-- Do not weaken assertions.
-- Do not modify approved fixtures unless the user explicitly approves the new
-  expected behavior.
-- Do not bypass existing workflow methods from pages. Pages should not grow new
-  direct storage writes.
-- Do not add hidden global state outside the existing service/repository layer.
+## 验收标准
 
-## Current Layer Rules
+最终必须输出：
 
-- `src/domain/` owns entity types, pure rules, status checks, and business
-  invariants.
-- `src/features/` owns use-case orchestration across domain and services.
-- `src/services/` owns external IO adapters, mock providers, auth, upload, and
-  repository implementations.
-- `src/pages/` owns page rendering, page-local state, user interaction, and
-  `uni` APIs.
-- `docs/` owns PRDs, delivery logs, architecture, test strategy, and quality
-  process.
+1. 是否完成 PRD
+2. 修改了哪些文件
+3. 测试是否通过
+4. Reviewer 是否通过
+5. 剩余风险
+6. 是否建议合并
 
-## Dependency Rules
+# Codex 项目说明
 
-- `domain` must not import `features`, `services`, `pages`, or `uni` APIs.
-- `features` may import `domain` and service ports/adapters.
-- `pages` may call feature use-cases and page-safe queries, but should not add
-  new direct repository writes.
-- Mock implementations must stay behind service interfaces whenever possible.
-- New packages require a clear reason and must not be added casually.
+本项目是一个基于 uni-app、Vue 3 和 TypeScript 的微信小程序 MVP。当前优先级是提升工程成熟度：保护已经闭环的业务流程，保持改动小而可控，并让后续迭代可以被验证。
 
-## Required Checks Before Completion
+## Codex 工作原则
 
-Run the strongest existing checks that match the task:
+- 基于仓库事实工作，不凭空假设架构。
+- 每个任务都必须限定在用户已批准的目标内。
+- 优先采用小步、分阶段的改动，避免大范围重写。
+- 除非任务明确要求改变现有 MVP 业务闭环，否则必须保留它。
+- 不做顺手清理、机会性重构或无关样式调整。
+- 除非任务确实需要，否则不要引入新依赖；如果必须引入，编辑前说明原因。
+- 将 `docs/prd/` 和 `docs/plans/` 视为产品历史记录。除非用户要求，不要重写已接受的 PRD 或交付日志。
+
+## 编辑前必做
+
+每个实现任务开始前，必须先给出 Repository Impact Map 和 Execution Plan。
+
+Repository Impact Map 必须列出：
+
+- 预计会修改的文件或目录。
+- 明确不在范围内的文件或目录。
+- 必须保持不变的业务契约。
+- 将要运行的验证命令。
+
+Execution Plan 必须列出：
+
+- 准备执行的小步骤。
+- 每一步的验收标准。
+- 仍不确定的假设。
+
+## 边界
+
+- 如果任务只涉及文档、测试工具、CI 或规划，不要修改业务逻辑。
+- 如果任务只涉及后端、服务、文档、测试或工具链，不要修改 UI。
+- 未经明确批准，不要更改数据模型或 API 契约。
+- 不要删除测试。
+- 不要削弱断言。
+- 除非用户明确批准新的预期行为，否则不要修改已批准的 fixture。
+- 页面不要绕过现有工作流方法；页面层不应新增直接仓储写入。
+- 不要在现有 service/repository 层之外添加隐藏的全局状态。
+
+## 当前分层规则
+
+- `src/domain/` 负责实体类型、纯规则、状态检查和业务不变量。
+- `src/features/` 负责跨 domain 和 services 的用例编排。
+- `src/services/` 负责外部 IO 适配器、mock provider、认证、上传和仓储实现。
+- `src/pages/` 负责页面渲染、页面局部状态、用户交互和 `uni` API。
+- `docs/` 负责 PRD、交付日志、架构、测试策略和质量流程。
+
+## 依赖规则
+
+- `domain` 不得导入 `features`、`services`、`pages` 或 `uni` API。
+- `features` 可以导入 `domain` 和 service ports/adapters。
+- `pages` 可以调用 feature use-cases 和页面安全的查询，但不应新增直接仓储写入。
+- mock 实现应尽量保持在 service interface 后面。
+- 新包必须有清晰原因，不得随意添加。
+
+## 完成前必须检查
+
+运行与任务匹配的最强现有检查：
 
 ```powershell
 pnpm.cmd run verify
 ```
 
-`verify` runs lint, boundary checks, tests, coverage, type-check, and dependency
-audits. When code or build configuration changes can affect the mini-program
-build, also run:
+`verify` 会运行 lint、边界检查、测试、覆盖率、类型检查和依赖审计。当代码或构建配置改动可能影响小程序构建时，还要运行：
 
 ```powershell
 pnpm.cmd run verify:full
 ```
 
-If a command does not exist or cannot be run, report that explicitly. Never
-invent a passing result.
+如果命令不存在或无法运行，必须明确说明。绝不能编造通过结果。
 
-## Required Final Output
+## 最终汇报要求
 
-Every completed task report must include:
-- Files changed and why.
-- Business code that was intentionally not changed.
-- Checks run and their results.
-- Remaining harness or product gaps.
-- Suggested next task when useful.
+每个完成任务的汇报必须包含：
+
+- 修改了哪些文件，以及修改原因。
+- 哪些业务代码被有意保持不变。
+- 运行了哪些检查及结果。
+- 剩余的测试工具或产品缺口。
+- 有用时，给出建议的下一项任务。

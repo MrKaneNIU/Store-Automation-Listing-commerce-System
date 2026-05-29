@@ -1,0 +1,23 @@
+[agents]
+max_threads = 6
+max_depth = 1
+
+[agents.prd_planner]
+description = "PRD workflow planner. Reads PRD and codebase, produces implementation plan."
+config_file = "./agents/prd_planner.toml"
+
+[agents.prd_implementer]
+description = "PRD workflow implementer. Implements scoped changes based on planner output."
+config_file = "./agents/prd_implementer.toml"
+
+[agents.prd_reviewer]
+description = "PRD workflow reviewer. Reviews diff against PRD and planner output."
+config_file = "./agents/prd_reviewer.toml"
+
+[agents.prd_debugger]
+description = "PRD workflow debugger. Fixes test failures or reviewer blockers with minimal changes."
+config_file = "./agents/prd_debugger.toml"
+
+[agents.prd_reporter]
+description = "PRD workflow reporter. Summarizes delivery result for human owner."
+config_file = "./agents/prd_reporter.toml"
