@@ -59,8 +59,16 @@
       <view class="detail-body">
         <view class="detail-meta">
           <text class="product-code">SKU {{ viewModel.product.productCode }}</text>
-          <button class="favorite-button" @tap="showVisualOnlyToast('收藏为视觉入口，真实收藏能力需单独 PRD')">
-            <text>♡</text>
+          <button
+            class="favorite-button"
+            :class="{ active: isFavorite, busy: isFavoriteBusy }"
+            :disabled="isFavoriteBusy"
+            :aria-label="favoriteButtonLabel"
+            hover-class="press-feedback"
+            @tap="toggleFavorite"
+          >
+            <text>{{ isFavorite ? '♥' : '♡' }}</text>
+            <text class="favorite-label">{{ favoriteButtonLabel }}</text>
           </button>
         </view>
 
@@ -110,6 +118,10 @@
         <view v-if="message" class="auth-feedback">
           <text>{{ message }}</text>
           <text>若你取消授权，系统不会创建订单。</text>
+        </view>
+
+        <view v-if="favoriteMessage" class="favorite-feedback" :class="{ danger: favoriteProductsView.loadingState === 'failed' }">
+          <text>{{ favoriteMessage }}</text>
         </view>
       </view>
 
@@ -198,6 +210,16 @@ import {
   selectCloudBaseCustomerProductSkuInView,
   submitCloudBaseCustomerProductDetailOrder,
 } from '../../../features/cloudbase-mall/customer-product-detail'
+import {
+  favoriteCloudBaseCustomerProduct,
+  getCloudBaseCustomerFavoriteProductsView,
+  unfavoriteCloudBaseCustomerProduct,
+} from '../../../features/cloudbase-mall/customer-favorites'
+import {
+  createCustomerFavoriteProductsLoadingView,
+  type CustomerFavoriteProductCommandResult,
+  type CustomerFavoriteProductsView,
+} from '../../../features/customer-favorites/customer-favorites'
 import { addCloudBaseCustomerShoppingBagItem } from '../../../features/cloudbase-mall/customer-shopping-bag'
 import { createCloudBaseWechatAuthService } from '../../../services/auth/cloudbase-wechat-auth-service'
 
@@ -220,11 +242,13 @@ type PhoneNumberAuthorizationEvent = {
 const productId = ref('')
 const selectedSkuId = ref('')
 const message = ref('')
+const favoriteMessage = ref('')
 const authPrompt = ref<AuthPrompt | null>(null)
 const phoneCodeRequest = ref<PhoneCodeRequest | null>(null)
 const isDetailLoading = ref(true)
 const isBackNavigating = ref(false)
 const isAddingToBag = ref(false)
+const isFavoriteBusy = ref(false)
 const customerAuthService = createCloudBaseWechatAuthService()
 const viewModel = ref<CustomerProductDetailViewModel>({
   product: null,
@@ -234,8 +258,21 @@ const viewModel = ref<CustomerProductDetailViewModel>({
   canSubmitOrder: false,
   emptyMessage: '商品不存在或未上架',
 })
+const favoriteProductsView = ref<CustomerFavoriteProductsView>(createCustomerFavoriteProductsLoadingView())
 
 const selectedSku = computed(() => viewModel.value.skus.find((sku) => sku.isSelected))
+
+const isFavorite = computed(() =>
+  favoriteProductsView.value.items.some((item) => item.productId === productId.value),
+)
+
+const favoriteButtonLabel = computed(() => {
+  if (isFavoriteBusy.value) {
+    return isFavorite.value ? '取消中' : '保存中'
+  }
+
+  return isFavorite.value ? '已收藏' : '收藏'
+})
 
 const selectedPrice = computed(() => {
   if (selectedSku.value) {
@@ -268,7 +305,7 @@ const primaryVisualClass = computed(() => {
 
 onLoad((query) => {
   productId.value = String(query?.id ?? '')
-  void refreshView()
+  void loadInitialView()
 })
 
 type RefreshOptions = {
@@ -286,6 +323,65 @@ const refreshView = async (options: RefreshOptions = { showLoading: true }) => {
     if (options.showLoading) {
       isDetailLoading.value = false
     }
+  }
+}
+
+const keepPreviousFavoritesOnFailure = (
+  resultView: CustomerFavoriteProductsView,
+  previousView: CustomerFavoriteProductsView,
+): CustomerFavoriteProductsView => {
+  if (resultView.loadingState === 'failed' && previousView.items.length > 0) {
+    return {
+      ...previousView,
+      loadingState: 'failed',
+      failureMessage: resultView.failureMessage,
+    }
+  }
+
+  return resultView
+}
+
+const loadFavoriteState = async () => {
+  const previousFavoriteView = favoriteProductsView.value
+  const resultView = await getCloudBaseCustomerFavoriteProductsView()
+  favoriteProductsView.value = keepPreviousFavoritesOnFailure(resultView, previousFavoriteView)
+
+  if (favoriteProductsView.value.loadingState === 'failed') {
+    favoriteMessage.value = favoriteProductsView.value.failureMessage
+  }
+}
+
+const loadInitialView = async () => {
+  await refreshView()
+  void loadFavoriteState()
+}
+
+const hasExpectedToggleInvalidation = (result: CustomerFavoriteProductCommandResult): boolean =>
+  result.invalidatedSnapshotKeys.some((key) => key.startsWith('customer-favorites:') && key.endsWith(':v1')) &&
+  result.invalidatedSnapshotKeys.includes(`customer-product-detail:${productId.value}:v1`)
+
+const toggleFavorite = async () => {
+  if (!viewModel.value.product || isFavoriteBusy.value) {
+    return
+  }
+
+  const previousFavoriteView = favoriteProductsView.value
+
+  isFavoriteBusy.value = true
+  favoriteMessage.value = ''
+
+  try {
+    const result = isFavorite.value
+      ? await unfavoriteCloudBaseCustomerProduct(productId.value, undefined, previousFavoriteView)
+      : await favoriteCloudBaseCustomerProduct(productId.value, undefined, previousFavoriteView)
+
+    favoriteProductsView.value = result.view
+    favoriteMessage.value =
+      result.status === 'succeeded' && !hasExpectedToggleInvalidation(result)
+        ? '收藏已更新，稍后同步最新状态'
+        : result.message
+  } finally {
+    isFavoriteBusy.value = false
   }
 }
 
@@ -679,18 +775,29 @@ const showVisualOnlyToast = (title: string) => {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 76rpx;
+  gap: 8rpx;
+  min-width: 128rpx;
   height: 76rpx;
-  padding: 0;
+  padding: 0 20rpx;
   border-radius: 999rpx;
   background: rgba(255, 255, 255, 0.9);
   color: #050505;
   box-shadow: 0 18rpx 44rpx rgba(0, 0, 0, 0.1);
 }
 
+.favorite-button.active {
+  background: #050505;
+  color: #ffffff;
+}
+
 .favorite-button text {
   font-size: 34rpx;
   line-height: 1;
+}
+
+.favorite-label {
+  font-size: 24rpx !important;
+  font-weight: 500;
 }
 
 .title {
@@ -844,6 +951,22 @@ const showVisualOnlyToast = (title: string) => {
   color: #9a9a9a;
   font-size: 24rpx;
   line-height: 1.45;
+}
+
+.favorite-feedback {
+  display: flex;
+  margin-top: 22rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 24rpx;
+  background: #f8f8f8;
+  color: #666666;
+  font-size: 26rpx;
+  line-height: 1.4;
+}
+
+.favorite-feedback.danger {
+  background: #fff3f1;
+  color: #9f2b1f;
 }
 
 .detail-cta {

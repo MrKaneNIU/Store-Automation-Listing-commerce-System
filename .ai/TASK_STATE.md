@@ -1,8 +1,8 @@
 # Favorites Task State
 
-Current module: Module C
+Current module: Module D
 
-Current slice: C2
+Current slice: D3
 
 ## Completed
 
@@ -51,12 +51,47 @@ Current slice: C2
 - Implemented Module C2 CloudBase favorites facade and command helpers.
 - Added targeted tests for favorites empty, loading, failure, unavailable/deleted, and write-after-refresh command mapping.
 - Kept Module D UI integration unstarted.
+- Completed Module D1 read-only UI landing point confirmation.
+- Loaded and confirmed future UI implementation must apply `ui-ux-pro-max`.
+- Loaded and confirmed future UI implementation must apply `design-taste-frontend`.
+- Confirmed reserved favorites entries currently exist as visual-only bottom-nav entries in:
+  - `src/pages/index/index.vue`
+  - `src/pages/customer/product-list/index.vue`
+- Confirmed the favorites page does not yet exist under `src/pages/customer/favorites/`.
+- Confirmed `src/pages.json` and `src/app/routes.ts` do not yet register a favorites page.
+- Confirmed product-detail favorite toggle landing point is the existing visual-only `.favorite-button` in `src/pages/customer/product-detail/index.vue`.
+- Confirmed product-list favorite toggle landing point is the existing visual-only `.favorite-button` in `src/pages/customer/product-list/index.vue`.
+- Confirmed pages must call only Module C favorites facade/commands and must not write repositories, CloudBase collections, or hidden global state.
+- Wrote `.ai/FAVORITES_MODULE_D1_IMPACT.md`.
+- Started Module D2 favorites page UI integration.
+- Loaded and applied `ui-ux-pro-max` for UI structure, page states, touch targets, and feedback rules.
+- Loaded and applied `design-taste-frontend` as the minimal project frontend skill.
+- Registered the customer favorites page route.
+- Added the customer favorites page UI.
+- Favorites page calls only Module C page-facing favorites facade/ViewModel/commands.
+- Favorites page displays saved product cards, empty state, loading state, failure/retry state, image fallback, and unavailable/deleted/unpublished product state.
+- Favorites page remove action uses `removeCloudBaseCustomerFavoriteProduct`.
+- Added targeted favorites page UI integration tests.
+- Fixed the D2 reviewer blocker so refresh/retry failures preserve previous favorite cards when available while still showing failure and retry UI.
+- Added targeted coverage that refresh/retry failure keeps previous favorite cards visible.
+- Started Module D3 product detail favorite toggle UI integration.
+- Loaded and applied `ui-ux-pro-max` for detail-page favorite toggle states and interaction feedback.
+- Loaded and applied `design-taste-frontend` as the minimal project frontend skill for this UI change.
+- Product detail now derives product-level favorite state from the Module C customer favorites facade.
+- Product detail favorite toggle now calls only Module C page-facing favorite/unfavorite commands.
+- Product detail favorite toggle keeps previous product detail context on failure.
+- Product detail favorite toggle checks PRD invalidation keys returned by Module C commands:
+  - `customer-favorites:{customerId}:v1`
+  - `customer-product-detail:{productId}:v1`
+- Added targeted product detail tests for initial favorite state display, favorite success, unfavorite success, failure preservation, and no checkout/stock/shopping-bag coupling.
 - Did not modify `.vue` pages, homepage navigation, bottom navigation, shopping bag, orders, checkout, stock, inventory ledger, payment, logistics, coupons, refunds, or recommendations.
 
 ## Incomplete
 
-- Module C reviewer review is pending.
-- Module D UI integration is not started.
+- Existing reserved favorites bottom-nav entries on homepage/product-list are not rewired in this slice.
+- Product-detail favorite toggle is implemented and pending reviewer.
+- Product-list favorite toggle/state is not implemented.
+- Reserved favorites bottom-nav navigation is not implemented.
 - Module E verification/manual acceptance is not started.
 
 ## Files Read
@@ -226,3 +261,135 @@ Scope guard for C2:
 - Stop for reviewer result.
 - If reviewer passes, isolate and commit Module C2 facade/ViewModel files and related task-state docs.
 - Do not enter Module D/E until explicitly requested.
+
+## Module D1 Read-Only Landing Point Confirmation
+
+- Read the governing Favorites PRD.
+- Read `.ai/TASK_STATE.md`.
+- Reviewed current git diff/status.
+- Confirmed current tracked diff before D1 docs was `AGENTS.md` only and unrelated to Module D UI implementation.
+- Read future UI workflow skills:
+  - `C:/Users/65188/.codex/skills/ui-ux-pro-max/SKILL.md`
+  - `C:/Users/65188/.codex/skills/design-taste-frontend/SKILL.md`
+- Read related UI/facade files:
+  - `src/app/routes.ts`
+  - `src/pages.json`
+  - `src/pages/index/index.vue`
+  - `src/pages/customer/product-detail/index.vue`
+  - `src/pages/customer/product-list/index.vue`
+  - `src/features/cloudbase-mall/customer-favorites.ts`
+  - `src/features/customer-favorites/customer-favorites.ts`
+  - `src/pages/customer/product-detail/index.test.ts`
+  - `src/pages/customer/product-list/index.test.ts`
+- Confirmed Module D minimal candidates:
+  - `src/pages/customer/favorites/index.vue`
+  - `src/pages/customer/favorites/index.test.ts`
+  - `src/app/routes.ts`
+  - `src/pages.json`
+  - `src/pages/customer/product-detail/index.vue`
+  - `src/pages/customer/product-detail/index.test.ts`
+  - `src/pages/customer/product-list/index.vue`
+  - `src/pages/customer/product-list/index.test.ts`
+- Confirmed D1 made no implementation edits to pages, navigation, product visibility, stock, checkout, shopping bag, orders, inventory ledger, payment, logistics, coupons, refunds, or recommendations.
+
+## Module D1 Next Step Recommendation
+
+- Stop after D1.
+- Do not enter D2 without explicit user approval.
+- Recommended D2 target: favorites page shell and route registration only.
+- Keep product-detail and product-list favorite toggles for later focused D slices.
+
+## Can Enter Module D2
+
+Yes, after explicit user approval.
+
+Scope guard for D2:
+
+- UI implementation must load/apply `ui-ux-pro-max` and `design-taste-frontend`.
+- Page must call Module C facade/commands only.
+- No direct repository writes.
+- No direct CloudBase collection writes.
+- No hidden global favorite state.
+- Product-level favorites only.
+- No phone authorization precondition.
+- No shopping bag, orders, checkout, stock, inventory ledger, payment, logistics, coupons, refunds, recommendations, product visibility, or Module E changes.
+
+## Module D2 Implementation
+
+- Changed:
+  - `src/app/routes.ts`
+  - `src/pages.json`
+  - `src/pages/customer/favorites/index.vue`
+  - `src/pages/customer/favorites/index.test.ts`
+  - `.ai/TASK_STATE.md`
+- Kept out of scope:
+  - product-detail favorite toggle
+  - product-list favorite toggle/state
+  - homepage navigation structure
+  - bottom navigation redesign
+  - shopping bag
+  - orders
+  - checkout
+  - stock
+  - inventory ledger
+  - payment
+  - logistics
+  - coupons
+  - refunds
+  - recommendations
+  - product visibility / publish eligibility
+
+## Module D2 Verification
+
+- GREEN: `pnpm.cmd exec vitest run --config vitest.config.ts src/pages/customer/favorites/index.test.ts` passed with 1 file / 4 tests.
+- GREEN: `pnpm.cmd exec eslint src/app/routes.ts src/pages/customer/favorites/index.vue src/pages/customer/favorites/index.test.ts` passed.
+- GREEN: `pnpm.cmd run type-check` passed.
+- GREEN: `pnpm.cmd run verify` passed.
+
+## Module D2 Reviewer Blocker Fix
+
+- Source: reviewer reported `src/pages/customer/favorites/index.vue` refreshed/retried failure state replaced an existing favorites list with an empty failure view.
+- Changed only:
+  - `src/pages/customer/favorites/index.vue`
+  - `src/pages/customer/favorites/index.test.ts`
+  - `.ai/TASK_STATE.md`
+- Added page-local `keepPreviousCardsOnFailure` so failed refresh/retry keeps the previous favorite cards when available and updates only `loadingState` / `failureMessage`.
+- Preserved first-load failure behavior when no previous cards exist.
+- Did not modify `src/app/routes.ts`, `src/pages.json`, product detail toggle, product list toggle, homepage navigation, bottom navigation, shopping bag, orders, checkout, stock, inventory ledger, payment, logistics, coupons, refunds, recommendations, or product visibility.
+
+## Module D2 Blocker Fix Verification
+
+- GREEN: `pnpm.cmd exec vitest run --config vitest.config.ts src/pages/customer/favorites/index.test.ts` passed with 1 file / 5 tests.
+- GREEN: `pnpm.cmd exec eslint src/pages/customer/favorites/index.vue src/pages/customer/favorites/index.test.ts` passed.
+- GREEN: `pnpm.cmd run type-check` passed.
+- GREEN: `pnpm.cmd run verify` passed.
+
+## Module D3 Implementation
+
+- Changed:
+  - `src/pages/customer/product-detail/index.vue`
+  - `src/pages/customer/product-detail/index.test.ts`
+  - `.ai/TASK_STATE.md`
+- Kept out of scope:
+  - favorites page
+  - product-list favorite toggle/state
+  - homepage navigation
+  - bottom navigation
+  - shopping bag
+  - orders
+  - checkout
+  - stock
+  - inventory ledger
+  - payment
+  - logistics
+  - coupons
+  - refunds
+  - recommendations
+  - product visibility / publish eligibility
+
+## Module D3 Verification
+
+- GREEN: `pnpm.cmd exec vitest run --config vitest.config.ts src/pages/customer/product-detail/index.test.ts` passed with 1 file / 10 tests.
+- GREEN: `pnpm.cmd exec eslint src/pages/customer/product-detail/index.vue src/pages/customer/product-detail/index.test.ts` passed.
+- GREEN: `pnpm.cmd run type-check` passed.
+- GREEN: `pnpm.cmd run verify` passed.
