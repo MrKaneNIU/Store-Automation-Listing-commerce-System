@@ -13,6 +13,7 @@ export const routes = {
   ownerAccountManagement: '/pages/owner/account-management/index',
   staffImageTasks: '/pages/staff/image-tasks/index',
   customerProductList: '/pages/customer/product-list/index',
+  customerFavorites: '/pages/customer/favorites/index',
   customerShoppingBag: '/pages/customer/shopping-bag/index',
   customerProductDetail: '/pages/customer/product-detail/index',
 } as const
