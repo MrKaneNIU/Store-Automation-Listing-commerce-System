@@ -1,8 +1,8 @@
 # Favorites Task State
 
-Current module: Module B
+Current module: Module C
 
-Current slice: B3
+Current slice: C2
 
 ## Completed
 
@@ -42,11 +42,20 @@ Current slice: B3
 - Changed favorite persistence to use store upsert instead of random-id insert.
 - Added CloudBase document-store upsert support for deterministic favorite document writes.
 - Added targeted coverage for concurrent duplicate favorite calls producing one `customer_favorites` record.
+- Started Module C1 read-only landing point confirmation.
+- Confirmed existing page-facing facade pattern under `src/features/cloudbase-mall/`.
+- Confirmed existing pure ViewModel pattern under `src/features/customer-shopping-bag/`, `src/features/customer-product-list/`, and `src/features/customer-product-detail/`.
+- Confirmed page-state lives under `src/pages/**` and must remain out of Module C unless explicitly opened.
+- Wrote `.ai/FAVORITES_MODULE_C1_IMPACT.md`.
+- Implemented Module C2 page-facing favorites ViewModel.
+- Implemented Module C2 CloudBase favorites facade and command helpers.
+- Added targeted tests for favorites empty, loading, failure, unavailable/deleted, and write-after-refresh command mapping.
+- Kept Module D UI integration unstarted.
+- Did not modify `.vue` pages, homepage navigation, bottom navigation, shopping bag, orders, checkout, stock, inventory ledger, payment, logistics, coupons, refunds, or recommendations.
 
 ## Incomplete
 
-- Module B broad/full verification is not run.
-- Module C facade/ViewModel is not started.
+- Module C reviewer review is pending.
 - Module D UI integration is not started.
 - Module E verification/manual acceptance is not started.
 
@@ -142,3 +151,78 @@ Yes, with scope guard:
 - GREEN: `pnpm.cmd exec vitest run --config vitest.config.ts cloudfunctions/mallApi/mall-api-core.test.js` passed with 1 file / 56 tests.
 - GREEN: `pnpm.cmd exec vitest run --config vitest.config.ts src/services/cloudbase/mall-api-client.test.ts cloudfunctions/mallApi/mall-api-core.test.js src/features/cloudbase-mall/cloudbase-mall.test.ts src/features/cloudbase-mall/customer-shopping-bag.test.ts src/services/auth/cloudbase-wechat-auth-service.test.ts` passed with 5 files / 104 tests.
 - GREEN: `pnpm.cmd run verify` passed.
+
+## Module C1 Read-Only Landing Point Confirmation
+
+- Read the governing Favorites PRD.
+- Read `.ai/TASK_STATE.md`.
+- Read `.ai/FAVORITES_MODULE_B1_IMPACT.md`.
+- Read `.ai/REVIEW.md`.
+- Reviewed current git diff/status.
+- Read related facade/ViewModel/page-state files:
+  - `src/features/cloudbase-mall/customer-product-list.ts`
+  - `src/features/cloudbase-mall/customer-product-detail.ts`
+  - `src/features/cloudbase-mall/customer-shopping-bag.ts`
+  - `src/features/customer-shopping-bag/customer-shopping-bag.ts`
+  - `src/pages/customer/shopping-bag/useCustomerShoppingBagPageState.ts`
+  - `src/services/cloudbase/mall-api-client.ts`
+  - `src/features/customer-product-list/customer-product-list.ts`
+  - `src/features/customer-product-detail/customer-product-detail.ts`
+- Confirmed Module C minimal candidates:
+  - `src/features/customer-favorites/customer-favorites.ts`
+  - `src/features/customer-favorites/customer-favorites.test.ts`
+  - `src/features/cloudbase-mall/customer-favorites.ts`
+  - `src/features/cloudbase-mall/customer-favorites.test.ts`
+- Confirmed Module C should keep UI/page wiring out of scope.
+- Current diff still contains uncommitted Module B CloudBase client contract/test-helper files; isolate or commit them before C2 so Module C diff is clean.
+
+## Module C1 Next Step Recommendation
+
+- Do not enter Module D/E.
+- Before C2, resolve the remaining Module B client diff:
+  - `src/services/cloudbase/mall-api-client.ts`
+  - `src/services/cloudbase/mall-api-client.test.ts`
+  - related test helper files updated for the expanded client contract.
+- Then C2 can implement only the favorites ViewModel and CloudBase facade with targeted tests.
+
+## Can Enter Module C2
+
+Yes, after isolating the remaining Module B client diff or explicitly accepting it as baseline.
+
+Scope guard for C2:
+
+- Pure ViewModel and CloudBase facade only.
+- No UI pages.
+- No homepage/navigation.
+- No shopping bag behavior.
+- No orders, checkout, stock, inventory ledger, payment, logistics, coupons, refunds, or recommendations.
+
+## Module C2 Implementation
+
+- Added `src/features/customer-favorites/customer-favorites.ts`.
+  - Builds page-facing `CustomerFavoriteProductsView`.
+  - Derives `priceText`, `isUnavailable`, empty message, loading state, failure state, and `lastUpdatedAt`.
+  - Preserves previous view on refresh failure.
+- Added `src/features/cloudbase-mall/customer-favorites.ts`.
+  - Provides `getCloudBaseCustomerFavoriteProductsView`.
+  - Provides `favoriteCloudBaseCustomerProduct`, `unfavoriteCloudBaseCustomerProduct`, and `removeCloudBaseCustomerFavoriteProduct`.
+  - Provides `retryCloudBaseCustomerFavoriteProductsSnapshot`.
+  - Propagates Module B `invalidatedSnapshotKeys` for write-after-refresh.
+  - Does not require phone authorization.
+  - Does not access repositories or CloudBase collections directly.
+- Added targeted tests:
+  - `src/features/customer-favorites/customer-favorites.test.ts`
+  - `src/features/cloudbase-mall/customer-favorites.test.ts`
+
+## Module C2 Verification
+
+- GREEN: `pnpm.cmd exec vitest run --config vitest.config.ts src/features/customer-favorites/customer-favorites.test.ts src/features/cloudbase-mall/customer-favorites.test.ts` passed with 2 files / 5 tests.
+- GREEN: `pnpm.cmd exec eslint src/features/customer-favorites/customer-favorites.ts src/features/customer-favorites/customer-favorites.test.ts src/features/cloudbase-mall/customer-favorites.ts src/features/cloudbase-mall/customer-favorites.test.ts` passed.
+- GREEN: `pnpm.cmd run type-check` passed.
+- GREEN: `pnpm.cmd run verify` passed.
+
+## Module C2 Next Step Recommendation
+
+- Stop for reviewer result.
+- If reviewer passes, isolate and commit Module C2 facade/ViewModel files and related task-state docs.
+- Do not enter Module D/E until explicitly requested.
