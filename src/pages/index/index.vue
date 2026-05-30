@@ -102,22 +102,32 @@
       </button>
       <button
         class="tab"
-        :class="{ busy: navigatingRoute === routes.customerProductList }"
+        :class="{ busy: navigatingRoute === customerBottomNavRoutes.catalog }"
         :disabled="Boolean(navigatingRoute)"
         @tap="goProductList"
       >
         <text class="tab-icon">◇</text>
         <text>商品</text>
       </button>
-      <button class="tab" @tap="showVisualOnlyToast('购物袋为视觉入口，真实购物袋能力需单独 PRD')">
+      <button
+        class="tab"
+        :class="{ busy: navigatingRoute === customerBottomNavRoutes.shoppingBag }"
+        :disabled="Boolean(navigatingRoute)"
+        @tap="goShoppingBag"
+      >
         <text class="tab-icon">▢</text>
         <text>购物袋</text>
       </button>
-      <button class="tab" @tap="showVisualOnlyToast('收藏为视觉入口，真实收藏能力需单独 PRD')">
+      <button
+        class="tab"
+        :class="{ busy: navigatingRoute === customerBottomNavRoutes.favorites }"
+        :disabled="Boolean(navigatingRoute)"
+        @tap="goFavorites"
+      >
         <text class="tab-icon">♡</text>
         <text>收藏</text>
       </button>
-      <button class="tab" @tap="showVisualOnlyToast('我的为视觉入口，不新增个人中心数据模型')">
+      <button class="tab" @tap="showVisualOnlyToast(CUSTOMER_MINE_PLACEHOLDER)">
         <text class="tab-icon">○</text>
         <text>我的</text>
       </button>
@@ -133,6 +143,7 @@ import type { AppRoute } from '../../app/routes'
 import { routes } from '../../app/routes'
 import { getAdminWorkbenchEntryRoute } from '../../features/admin-workbench-auth/admin-workbench-entry'
 import { getHomepageSettingsView } from '../../features/homepage-settings/homepage-settings'
+import { CUSTOMER_MINE_PLACEHOLDER, customerBottomNavRoutes } from '../customer/customer-bottom-nav'
 
 const DEFAULT_TOPBAR_TOP = 'calc(env(safe-area-inset-top) + 40rpx)'
 
@@ -175,8 +186,26 @@ const goProductList = () => {
     return
   }
 
-  navigatingRoute.value = routes.customerProductList
-  redirectTo(routes.customerProductList)
+  navigatingRoute.value = customerBottomNavRoutes.catalog
+  redirectTo(customerBottomNavRoutes.catalog)
+}
+
+const goShoppingBag = () => {
+  if (navigatingRoute.value) {
+    return
+  }
+
+  navigatingRoute.value = customerBottomNavRoutes.shoppingBag
+  redirectTo(customerBottomNavRoutes.shoppingBag)
+}
+
+const goFavorites = () => {
+  if (navigatingRoute.value) {
+    return
+  }
+
+  navigatingRoute.value = customerBottomNavRoutes.favorites
+  redirectTo(customerBottomNavRoutes.favorites)
 }
 
 const goOwnerDashboard = () => {

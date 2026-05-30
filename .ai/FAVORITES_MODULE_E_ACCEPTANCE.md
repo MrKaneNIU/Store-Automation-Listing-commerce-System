@@ -139,6 +139,69 @@ Module E - verification and acceptance:
   - Unit suite: 66 files / 379 tests.
   - Backend suite: 12 files / 60 tests.
 
+## 2026-05-30 Follow-up: Customer Bottom Navigation Consistency
+
+- Scope: navigation consistency repair only. This did not add a customer mine
+  route, implement a customer center, or change Favorites / Shopping Bag
+  business semantics.
+- Added shared customer bottom-nav route config:
+  `src/pages/customer/customer-bottom-nav.ts`.
+- Customer bottom-nav matrix after repair:
+  - Home page:
+    - Home: current page scroll/top handling.
+    - Catalog: `customerBottomNavRoutes.catalog`.
+    - Shopping bag: `customerBottomNavRoutes.shoppingBag`.
+    - Favorites: `customerBottomNavRoutes.favorites`.
+    - Mine: `CUSTOMER_MINE_PLACEHOLDER`.
+  - Product list page:
+    - Home: `customerBottomNavRoutes.home`.
+    - Catalog: current page active state.
+    - Shopping bag: `customerBottomNavRoutes.shoppingBag`.
+    - Favorites: `customerBottomNavRoutes.favorites`.
+    - Mine: `CUSTOMER_MINE_PLACEHOLDER`.
+  - Favorites page:
+    - Home: `customerBottomNavRoutes.home`.
+    - Catalog: `customerBottomNavRoutes.catalog`.
+    - Shopping bag: `customerBottomNavRoutes.shoppingBag`.
+    - Favorites: current page active state.
+    - Mine: `CUSTOMER_MINE_PLACEHOLDER`.
+  - Shopping bag page:
+    - Home: `customerBottomNavRoutes.home`.
+    - Catalog: `customerBottomNavRoutes.catalog`.
+    - Shopping bag: current page active state.
+    - Favorites: `customerBottomNavRoutes.favorites`.
+    - Mine: `CUSTOMER_MINE_PLACEHOLDER`.
+- The old misleading bottom-nav placeholder copy for existing routes was
+  removed from customer-facing pages:
+  - `购物袋为视觉入口，真实购物袋能力需单独 PRD`
+  - `收藏能力需单独 PRD 接入`
+  - `收藏为视觉入口，真实收藏能力需单独 PRD`
+- Real bottom-nav jumps remain guarded by pending/busy page state before
+  calling `redirectTo`.
+- RED before fix:
+  `pnpm.cmd exec vitest run --config vitest.config.ts src/pages/customer/customer-bottom-nav.test.ts src/pages/index/index.test.ts src/pages/customer/product-list/index.test.ts src/pages/customer/favorites/index.test.ts src/pages/customer/shopping-bag/useCustomerShoppingBagPageState.test.ts`
+  - Failed because the shared bottom-nav config did not exist, home shopping
+    bag was still a placeholder, and product-list tests still expected direct
+    route constants instead of shared config.
+- GREEN after fix:
+  `pnpm.cmd exec vitest run --config vitest.config.ts src/pages/customer/customer-bottom-nav.test.ts src/pages/index/index.test.ts src/pages/customer/product-list/index.test.ts src/pages/customer/favorites/index.test.ts src/pages/customer/shopping-bag/useCustomerShoppingBagPageState.test.ts`
+  - 5 files passed.
+  - 28 tests passed.
+- Final targeted nav regression:
+  `pnpm.cmd exec vitest run --config vitest.config.ts src/pages/customer/customer-bottom-nav.test.ts src/pages/index/index.test.ts src/pages/customer/product-list/index.test.ts src/pages/customer/favorites/index.test.ts src/pages/customer/shopping-bag/useCustomerShoppingBagPageState.test.ts src/app/navigation.test.ts`
+  - 6 files passed.
+  - 37 tests passed.
+- Full verification:
+  `pnpm.cmd run verify`
+  - Passed lint, boundary-check, unit tests, coverage, type-check,
+    backend tests/build, prod audit, and full audit.
+  - Unit tests: 67 files passed, 387 tests passed.
+  - Backend tests: 12 files passed, 60 tests passed.
+  `pnpm.cmd run verify:full`
+  - Passed full verify, `build:mp-weixin`, and `smoke:mp-weixin`.
+  - mp-weixin build artifacts and page routes are present.
+
+
 ## Remaining Harness / Product Gaps
 
 - Manual acceptance is still open. Automated checks and mp-weixin smoke are not

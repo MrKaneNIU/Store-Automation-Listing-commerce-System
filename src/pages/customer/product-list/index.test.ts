@@ -87,9 +87,15 @@ describe('customer product list shopping bag entry', () => {
   })
 
   it('wires the reserved shopping-bag bottom-nav entry to the shopping-bag page', () => {
-    expect(source).toContain('routes.customerShoppingBag')
+    expect(source).toContain('customerBottomNavRoutes.shoppingBag')
     expect(source).toContain('goShoppingBag')
     expect(source).toContain('@tap="goShoppingBag"')
-    expect(source).not.toContain('璐墿琚嬩负瑙嗚鍏ュ彛')
+  })
+
+  it('wires the reserved favorites bottom-nav entry to the favorites page', () => {
+    expect(source).toContain('customerBottomNavRoutes.favorites')
+    expect(source).toContain('goFavorites')
+    expect(source).toContain('@tap="goFavorites"')
+    expect(source).not.toContain("showVisualOnlyToast('收藏为视觉入口")
   })
 })

@@ -144,11 +144,17 @@
         <text class="tab-icon">▢</text>
         <text>购物袋</text>
       </button>
-      <button class="tab" hover-class="tab-pressed" @tap="showVisualOnlyToast('收藏为视觉入口，真实收藏能力需单独 PRD')">
+      <button
+        class="tab"
+        :class="{ busy: isFavoritesNavigating }"
+        :disabled="isFavoritesNavigating"
+        hover-class="tab-pressed"
+        @tap="goFavorites"
+      >
         <text class="tab-icon">♡</text>
         <text>收藏</text>
       </button>
-      <button class="tab" hover-class="tab-pressed" @tap="showVisualOnlyToast('我的为视觉入口，不新增个人中心数据模型')">
+      <button class="tab" hover-class="tab-pressed" @tap="showVisualOnlyToast(CUSTOMER_MINE_PLACEHOLDER)">
         <text class="tab-icon">○</text>
         <text>我的</text>
       </button>
@@ -160,7 +166,6 @@
 import { onMounted, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { navigateTo, redirectTo } from '../../../app/navigation'
-import { routes } from '../../../app/routes'
 import type { CustomerProductListItem } from '../../../features/customer-product-list/customer-product-list'
 import { getCloudBaseCustomerProductListView } from '../../../features/cloudbase-mall/customer-product-list'
 import {
@@ -173,6 +178,7 @@ import {
   type CustomerFavoriteProductCommandResult,
   type CustomerFavoriteProductsView,
 } from '../../../features/customer-favorites/customer-favorites'
+import { CUSTOMER_MINE_PLACEHOLDER, customerBottomNavRoutes } from '../customer-bottom-nav'
 
 const products = ref<CustomerProductListItem[]>([])
 const emptyMessage = ref('暂无已上架商品')
@@ -180,6 +186,7 @@ const favoriteMessage = ref('')
 const isLoading = ref(false)
 const isHomeNavigating = ref(false)
 const isShoppingBagNavigating = ref(false)
+const isFavoritesNavigating = ref(false)
 const navigatingProductId = ref('')
 const favoriteBusyProductId = ref('')
 const favoriteProductsView = ref<CustomerFavoriteProductsView>(createCustomerFavoriteProductsLoadingView())
@@ -191,6 +198,7 @@ let cachedProducts: CustomerProductListItem[] | null = null
 let pendingRefresh: Promise<void> | null = null
 let homeNavigationFallbackTimer: ReturnType<typeof setTimeout> | null = null
 let shoppingBagNavigationFallbackTimer: ReturnType<typeof setTimeout> | null = null
+let favoritesNavigationFallbackTimer: ReturnType<typeof setTimeout> | null = null
 
 const clearHomeNavigationLock = () => {
   isHomeNavigating.value = false
@@ -207,6 +215,15 @@ const clearShoppingBagNavigationLock = () => {
   if (shoppingBagNavigationFallbackTimer) {
     clearTimeout(shoppingBagNavigationFallbackTimer)
     shoppingBagNavigationFallbackTimer = null
+  }
+}
+
+const clearFavoritesNavigationLock = () => {
+  isFavoritesNavigating.value = false
+
+  if (favoritesNavigationFallbackTimer) {
+    clearTimeout(favoritesNavigationFallbackTimer)
+    favoritesNavigationFallbackTimer = null
   }
 }
 
@@ -333,6 +350,7 @@ onShow(() => {
   navigatingProductId.value = ''
   clearHomeNavigationLock()
   clearShoppingBagNavigationLock()
+  clearFavoritesNavigationLock()
   void loadFavoriteState()
 
   if (cachedProducts) {
@@ -371,7 +389,7 @@ const goHome = () => {
 
   isHomeNavigating.value = true
   homeNavigationFallbackTimer = setTimeout(clearHomeNavigationLock, 900)
-  redirectTo(routes.customerHome, {
+  redirectTo(customerBottomNavRoutes.home, {
     onFail: () => {
       uni.showToast({
         title: '页面切换失败，请稍后重试',
@@ -390,7 +408,7 @@ const goShoppingBag = () => {
 
   isShoppingBagNavigating.value = true
   shoppingBagNavigationFallbackTimer = setTimeout(clearShoppingBagNavigationLock, 900)
-  redirectTo(routes.customerShoppingBag, {
+  redirectTo(customerBottomNavRoutes.shoppingBag, {
     onFail: () => {
       uni.showToast({
         title: '页面切换失败，请稍后重试',
@@ -399,6 +417,25 @@ const goShoppingBag = () => {
       })
     },
     onComplete: clearShoppingBagNavigationLock,
+  })
+}
+
+const goFavorites = () => {
+  if (isFavoritesNavigating.value) {
+    return
+  }
+
+  isFavoritesNavigating.value = true
+  favoritesNavigationFallbackTimer = setTimeout(clearFavoritesNavigationLock, 900)
+  redirectTo(customerBottomNavRoutes.favorites, {
+    onFail: () => {
+      uni.showToast({
+        title: '页面切换失败，请稍后重试',
+        icon: 'none',
+        duration: 1600,
+      })
+    },
+    onComplete: clearFavoritesNavigationLock,
   })
 }
 

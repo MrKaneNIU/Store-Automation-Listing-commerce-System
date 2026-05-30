@@ -151,7 +151,7 @@
         <text class="tab-icon">♡</text>
         <text>收藏</text>
       </button>
-      <button class="tab" hover-class="tab-pressed" @tap="showToast('我的页面需要单独 PRD 接入')">
+      <button class="tab" hover-class="tab-pressed" @tap="showToast(CUSTOMER_MINE_PLACEHOLDER)">
         <text class="tab-icon">●</text>
         <text>我的</text>
       </button>
@@ -174,6 +174,7 @@ import {
   type CustomerFavoriteProductViewItem,
   type CustomerFavoriteProductsView,
 } from '../../../features/customer-favorites/customer-favorites'
+import { CUSTOMER_MINE_PLACEHOLDER, customerBottomNavRoutes } from '../customer-bottom-nav'
 
 const viewModel = ref<CustomerFavoriteProductsView>(createCustomerFavoriteProductsLoadingView())
 const failedImageIds = ref<string[]>([])
@@ -284,7 +285,7 @@ const goHome = () => {
 
   isHomeNavigating.value = true
   scheduleNavigationFallback()
-  redirectTo(routes.customerHome, {
+  redirectTo(customerBottomNavRoutes.home, {
     onComplete: clearNavigationLocks,
   })
 }
@@ -296,7 +297,7 @@ const goCatalog = () => {
 
   isCatalogNavigating.value = true
   scheduleNavigationFallback()
-  redirectTo(routes.customerProductList, {
+  redirectTo(customerBottomNavRoutes.catalog, {
     onComplete: clearNavigationLocks,
   })
 }
@@ -308,7 +309,7 @@ const goShoppingBag = () => {
 
   isShoppingBagNavigating.value = true
   scheduleNavigationFallback()
-  redirectTo(routes.customerShoppingBag, {
+  redirectTo(customerBottomNavRoutes.shoppingBag, {
     onComplete: clearNavigationLocks,
   })
 }

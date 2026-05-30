@@ -156,11 +156,17 @@
         <text class="tab-icon">▢</text>
         <text>购物袋</text>
       </button>
-      <button class="tab" hover-class="tab-pressed" @tap="showToast('收藏能力需单独 PRD 接入')">
+      <button
+        class="tab"
+        :class="{ busy: isFavoritesNavigating }"
+        :disabled="isFavoritesNavigating"
+        hover-class="tab-pressed"
+        @tap="goFavorites"
+      >
         <text class="tab-icon">♡</text>
         <text>收藏</text>
       </button>
-      <button class="tab" hover-class="tab-pressed" @tap="showToast('我的页面需单独 PRD 接入')">
+      <button class="tab" hover-class="tab-pressed" @tap="showToast(CUSTOMER_MINE_PLACEHOLDER)">
         <text class="tab-icon">○</text>
         <text>我的</text>
       </button>
@@ -173,6 +179,7 @@ import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { navigateTo, redirectTo } from '../../../app/navigation'
 import { routes } from '../../../app/routes'
+import { CUSTOMER_MINE_PLACEHOLDER, customerBottomNavRoutes } from '../customer-bottom-nav'
 import { createCustomerShoppingBagPageState } from './useCustomerShoppingBagPageState'
 
 const shoppingBagState = createCustomerShoppingBagPageState()
@@ -181,11 +188,13 @@ const message = shoppingBagState.message
 const failedImageIds = ref<string[]>([])
 const isHomeNavigating = ref(false)
 const isCatalogNavigating = ref(false)
+const isFavoritesNavigating = ref(false)
 let navigationFallbackTimer: ReturnType<typeof setTimeout> | null = null
 
 const clearNavigationLocks = () => {
   isHomeNavigating.value = false
   isCatalogNavigating.value = false
+  isFavoritesNavigating.value = false
 
   if (navigationFallbackTimer) {
     clearTimeout(navigationFallbackTimer)
@@ -260,7 +269,7 @@ const goCatalog = () => {
 
   isCatalogNavigating.value = true
   scheduleNavigationFallback()
-  redirectTo(routes.customerProductList, {
+  redirectTo(customerBottomNavRoutes.catalog, {
     onComplete: clearNavigationLocks,
   })
 }
@@ -272,7 +281,19 @@ const goHome = () => {
 
   isHomeNavigating.value = true
   scheduleNavigationFallback()
-  redirectTo(routes.customerHome, {
+  redirectTo(customerBottomNavRoutes.home, {
+    onComplete: clearNavigationLocks,
+  })
+}
+
+const goFavorites = () => {
+  if (isFavoritesNavigating.value) {
+    return
+  }
+
+  isFavoritesNavigating.value = true
+  scheduleNavigationFallback()
+  redirectTo(customerBottomNavRoutes.favorites, {
     onComplete: clearNavigationLocks,
   })
 }
