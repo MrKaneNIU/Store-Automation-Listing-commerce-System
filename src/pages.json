@@ -106,6 +106,13 @@
       }
     },
     {
+      "path": "pages/customer/mine/index",
+      "style": {
+        "navigationBarTitleText": "我的",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/customer/product-detail/index",
       "style": {
         "navigationBarTitleText": "商品详情",

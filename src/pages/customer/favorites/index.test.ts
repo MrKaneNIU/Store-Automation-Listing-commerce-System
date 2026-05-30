@@ -5,6 +5,8 @@ import path from 'node:path'
 const source = readFileSync(path.resolve(__dirname, 'index.vue'), 'utf8')
 const routesSource = readFileSync(path.resolve(__dirname, '../../../app/routes.ts'), 'utf8')
 const pagesJson = readFileSync(path.resolve(__dirname, '../../../pages.json'), 'utf8')
+const legacyVisualEntryCopy = '视觉' + '入口'
+const legacySeparatePrdCopy = '单独' + ' PRD'
 
 describe('customer favorites page UI integration', () => {
   it('registers the customer favorites page route', () => {
@@ -52,5 +54,22 @@ describe('customer favorites page UI integration', () => {
     expect(source).toContain('viewModel.value = keepPreviousCardsOnFailure(view, previousView)')
     expect(source).toContain('viewModel.loadingState === \'failed\'')
     expect(source).toContain('@tap="reload"')
+  })
+
+  it('routes shopping-bag and mine through shared bottom-nav routes', () => {
+    expect(source).toContain('customerBottomNavRoutes.shoppingBag')
+    expect(source).toContain('customerBottomNavRoutes.mine')
+    expect(source).toContain('@tap="goShoppingBag"')
+    expect(source).toContain('@tap="goMine"')
+    expect(source).not.toContain('CUSTOMER_MINE_PLACEHOLDER')
+    expect(source).not.toContain(legacyVisualEntryCopy)
+    expect(source).not.toContain(legacySeparatePrdCopy)
+  })
+
+  it('keeps current favorites tab from issuing a duplicate redirect', () => {
+    expect(source).toContain('currentRoute: customerBottomNavRoutes.favorites')
+    expect(source).toContain('shouldIgnoreCustomerBottomNavTap')
+    expect(source).toContain('class="tab active"')
+    expect(source).toContain(':disabled="Boolean(navigatingRoute)"')
   })
 })

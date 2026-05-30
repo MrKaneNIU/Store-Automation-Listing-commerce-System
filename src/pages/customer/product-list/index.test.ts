@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
 const source = readFileSync(path.resolve(__dirname, 'index.vue'), 'utf8')
+const legacyVisualEntryCopy = '视觉' + '入口'
+const legacySeparatePrdCopy = '单独' + ' PRD'
 
 describe('customer product list shopping bag entry', () => {
   it('loads and displays product-level favorite state from the Module C facade', () => {
@@ -96,6 +98,24 @@ describe('customer product list shopping bag entry', () => {
     expect(source).toContain('customerBottomNavRoutes.favorites')
     expect(source).toContain('goFavorites')
     expect(source).toContain('@tap="goFavorites"')
-    expect(source).not.toContain("showVisualOnlyToast('收藏为视觉入口")
+    expect(source).not.toContain("showVisualOnlyToast('收藏为" + legacyVisualEntryCopy)
+  })
+
+  it('wires the mine bottom-nav entry to the customer mine page', () => {
+    expect(source).toContain('customerBottomNavRoutes.mine')
+    expect(source).toContain('goMine')
+    expect(source).toContain('@tap="goMine"')
+    expect(source).not.toContain('CUSTOMER_MINE_PLACEHOLDER')
+    expect(source).not.toContain(legacySeparatePrdCopy)
+  })
+
+  it('blocks rapid bottom-nav switching with one shared pending route guard', () => {
+    expect(source).toContain("const navigatingRoute = ref<AppRoute | ''>('')")
+    expect(source).toContain('goCustomerBottomNav')
+    expect(source).toContain('shouldIgnoreCustomerBottomNavTap')
+    expect(source).toContain('pendingRoute: navigatingRoute.value')
+    expect(source).toContain(':disabled="Boolean(navigatingRoute)"')
+    expect(source).not.toContain('isShoppingBagNavigating')
+    expect(source).not.toContain('isFavoritesNavigating')
   })
 })

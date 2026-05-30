@@ -266,6 +266,114 @@ Remote CloudBase deployment:
   - Passed full verify, `build:mp-weixin`, and `smoke:mp-weixin`.
   - mp-weixin build artifacts and page routes are present.
 
+## 2026-05-30 Follow-up: Customer Bottom Navigation Full Fix
+
+- Scope: customer bottom navigation behavior only. This did not add Favorites
+  or Shopping Bag business semantics and did not implement a real customer
+  center.
+- Five exposed issues:
+  - Shopping Bag page Favorites entry: CLOSED. It now redirects through
+    `customerBottomNavRoutes.favorites`.
+  - Home page Shopping Bag entry: CLOSED. It now redirects through
+    `customerBottomNavRoutes.shoppingBag`.
+  - Mine entry misleading toast: CLOSED. `routes.customerMine` and
+    `pages/customer/mine/index` now provide a minimal product placeholder page
+    with Home / Catalog / Favorites / Shopping Bag exits.
+  - Bottom-nav duplication drift: CLOSED. Customer pages use the shared
+    `src/pages/customer/customer-bottom-nav.ts` route matrix and tap guard.
+  - Fast switching old toast / pending issue: CLOSED by automated source,
+    navigation tests, and 2026-05-30 human acceptance.
+- Navigation matrix after full fix:
+  - Home: Home current page, Catalog `customerBottomNavRoutes.catalog`,
+    Favorites `customerBottomNavRoutes.favorites`, Shopping Bag
+    `customerBottomNavRoutes.shoppingBag`, Mine `customerBottomNavRoutes.mine`.
+  - Product list: Home `customerBottomNavRoutes.home`, Catalog current page,
+    Favorites `customerBottomNavRoutes.favorites`, Shopping Bag
+    `customerBottomNavRoutes.shoppingBag`, Mine `customerBottomNavRoutes.mine`.
+  - Favorites: Home `customerBottomNavRoutes.home`, Catalog
+    `customerBottomNavRoutes.catalog`, Favorites current page, Shopping Bag
+    `customerBottomNavRoutes.shoppingBag`, Mine `customerBottomNavRoutes.mine`.
+  - Shopping Bag: Home `customerBottomNavRoutes.home`, Catalog
+    `customerBottomNavRoutes.catalog`, Favorites
+    `customerBottomNavRoutes.favorites`, Shopping Bag current page, Mine
+    `customerBottomNavRoutes.mine`.
+  - Mine: Home `customerBottomNavRoutes.home`, Catalog
+    `customerBottomNavRoutes.catalog`, Favorites
+    `customerBottomNavRoutes.favorites`, Shopping Bag
+    `customerBottomNavRoutes.shoppingBag`, Mine current page.
+- Changed files:
+  - `src/app/routes.ts`
+  - `src/pages.json`
+  - `src/pages/customer/customer-bottom-nav.ts`
+  - `src/pages/customer/customer-bottom-nav.test.ts`
+  - `src/pages/index/index.vue`
+  - `src/pages/index/index.test.ts`
+  - `src/pages/customer/product-list/index.vue`
+  - `src/pages/customer/product-list/index.test.ts`
+  - `src/pages/customer/favorites/index.vue`
+  - `src/pages/customer/favorites/index.test.ts`
+  - `src/pages/customer/shopping-bag/index.vue`
+  - `src/pages/customer/shopping-bag/useCustomerShoppingBagPageState.test.ts`
+  - `src/pages/customer/mine/index.vue`
+  - `src/pages/customer/mine/index.test.ts`
+  - `src/pages/customer/product-detail/index.vue`
+- Unchanged boundaries:
+  - Order: unchanged.
+  - Inventory: unchanged.
+  - Payment: unchanged.
+  - Logistics: unchanged.
+  - Coupons: unchanged.
+  - CloudBase action logic: unchanged.
+  - Real customer-center business: not implemented.
+  - Sensitive customer data reads: not added.
+- Search check:
+  `Get-ChildItem -Path src\pages,src\app -Recurse -File | Select-String -Pattern '视觉入口|单独 PRD|收藏能力需单独 PRD|购物袋为视觉入口|真实购物袋能力需单独 PRD'`
+  - GREEN. No matches in `src/pages` or `src/app`.
+- Targeted tests:
+  `pnpm.cmd exec vitest run --config vitest.config.ts src/pages/customer/customer-bottom-nav.test.ts src/pages/index/index.test.ts src/pages/customer/product-list/index.test.ts src/pages/customer/favorites/index.test.ts src/pages/customer/shopping-bag/useCustomerShoppingBagPageState.test.ts src/pages/customer/mine/index.test.ts src/app/navigation.test.ts`
+  - GREEN. 7 files passed, 45 tests passed.
+- Full verification:
+  `pnpm.cmd run verify`
+  - GREEN. Lint, boundary-check, unit tests, coverage, type-check, backend
+    tests/build, prod audit, and full audit passed.
+  - Unit tests: 68 files passed, 395 tests passed.
+  - Backend tests: 12 files passed, 60 tests passed.
+  `pnpm.cmd run verify:full`
+  - GREEN. Full verify passed, `build:mp-weixin` completed, and
+    `smoke:mp-weixin` passed.
+- WeChat Developer Tools / human acceptance: PASS on 2026-05-30.
+  - Acceptance scope: Customer Bottom Navigation Full Fix.
+  - Acceptance result: PASS, no issues found so far.
+  - Acceptance paths:
+    - Home -> Catalog.
+    - Home -> Favorites.
+    - Home -> Shopping Bag.
+    - Home -> Mine.
+    - Product list -> Home.
+    - Product list -> Favorites.
+    - Product list -> Shopping Bag.
+    - Product list -> Mine.
+    - Favorites -> Home.
+    - Favorites -> Catalog.
+    - Favorites -> Shopping Bag.
+    - Favorites -> Mine.
+    - Shopping Bag -> Home.
+    - Shopping Bag -> Catalog.
+    - Shopping Bag -> Favorites.
+    - Shopping Bag -> Mine.
+    - Mine -> Home.
+    - Mine -> Catalog.
+    - Mine -> Favorites.
+    - Mine -> Shopping Bag.
+    - Rapid repeated taps on bottom navigation did not show old misleading
+      visual-entry or separate-PRD toasts.
+  - Boundaries retained during human acceptance:
+    - Real customer center was not implemented.
+    - Phone number, openid, order history, and address were not read.
+    - Order, inventory, payment, logistics, and coupons were not changed.
+    - CloudBase action logic was not changed.
+    - Favorites / Shopping Bag business semantics were not changed.
+
 ## Remaining Harness / Product Gaps
 
 - Manual acceptance is still open. Automated checks and mp-weixin smoke are not

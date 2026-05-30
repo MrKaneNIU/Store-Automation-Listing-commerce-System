@@ -39,7 +39,7 @@
           <text class="chevron">‹</text>
         </button>
         <text class="nav-title">商品详情</text>
-        <button class="icon-button plain" aria-label="更多操作" hover-class="press-feedback" @tap="showVisualOnlyToast('分享与更多操作仅做视觉入口')">
+        <button class="icon-button plain" aria-label="更多操作" hover-class="press-feedback" @tap="showVisualOnlyToast('分享与更多操作暂未开放')">
           <text class="more-mark">•••</text>
         </button>
       </view>

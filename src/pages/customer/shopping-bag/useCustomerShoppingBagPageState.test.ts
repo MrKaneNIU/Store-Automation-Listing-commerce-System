@@ -1,8 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { createCustomerShoppingBagView, type CustomerShoppingBagViewModel } from '../../../features/customer-shopping-bag/customer-shopping-bag'
 import type { CloudBaseCustomerShoppingBagCommandResult } from '../../../features/cloudbase-mall/customer-shopping-bag'
 import type { CustomerShoppingBagSnapshot } from '../../../services/cloudbase/mall-api-client'
 import { createCustomerShoppingBagPageState } from './useCustomerShoppingBagPageState'
+
+const pageSource = readFileSync(path.resolve(__dirname, 'index.vue'), 'utf8')
+const legacyVisualEntryCopy = '视觉' + '入口'
+const legacySeparatePrdCopy = '单独' + ' PRD'
+const legacyFavoritesSeparatePrdCopy = '收藏能力需' + legacySeparatePrdCopy + ' 接入'
 
 const createSnapshot = (quantity: number): CustomerShoppingBagSnapshot => ({
   customerId: 'customer-1',
@@ -105,5 +112,24 @@ describe('customer shopping bag page state', () => {
     expect(state.message.value).toBe('Quantity updated')
     expect(state.invalidatedSnapshotKeys.value).toEqual(['customer-shopping-bag:customer-1:v1'])
     expect(state.viewModel.value.selectedSubtotalText).toBe('¥258.00')
+  })
+
+  it('routes favorites and mine through shared bottom-nav routes without old placeholder copy', () => {
+    expect(pageSource).toContain('customerBottomNavRoutes.favorites')
+    expect(pageSource).toContain('customerBottomNavRoutes.mine')
+    expect(pageSource).toContain('@tap="goFavorites"')
+    expect(pageSource).toContain('@tap="goMine"')
+    expect(pageSource).not.toContain('CUSTOMER_MINE_PLACEHOLDER')
+    expect(pageSource).not.toContain(legacyFavoritesSeparatePrdCopy)
+    expect(pageSource).not.toContain(legacyVisualEntryCopy)
+    expect(pageSource).not.toContain(legacySeparatePrdCopy)
+  })
+
+  it('blocks rapid bottom-nav switching with one shared pending route guard', () => {
+    expect(pageSource).toContain("const navigatingRoute = ref<AppRoute | ''>('')")
+    expect(pageSource).toContain('goCustomerBottomNav')
+    expect(pageSource).toContain('shouldIgnoreCustomerBottomNavTap')
+    expect(pageSource).toContain('pendingRoute: navigatingRoute.value')
+    expect(pageSource).toContain(':disabled="Boolean(navigatingRoute)"')
   })
 })

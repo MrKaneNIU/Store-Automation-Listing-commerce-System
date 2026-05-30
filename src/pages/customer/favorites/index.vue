@@ -4,8 +4,8 @@
       <view class="favorites-nav">
         <button
           class="icon-button plain"
-          :class="{ busy: isCatalogNavigating }"
-          :disabled="isCatalogNavigating"
+          :class="{ busy: navigatingRoute === customerBottomNavRoutes.catalog }"
+          :disabled="Boolean(navigatingRoute)"
           aria-label="返回商品目录"
           hover-class="press-feedback"
           @tap="goCatalog"
@@ -119,8 +119,8 @@
     <view class="customer-nav">
       <button
         class="tab"
-        :class="{ busy: isHomeNavigating }"
-        :disabled="isHomeNavigating"
+        :class="{ busy: navigatingRoute === customerBottomNavRoutes.home }"
+        :disabled="Boolean(navigatingRoute)"
         hover-class="tab-pressed"
         @tap="goHome"
       >
@@ -129,8 +129,8 @@
       </button>
       <button
         class="tab"
-        :class="{ busy: isCatalogNavigating }"
-        :disabled="isCatalogNavigating"
+        :class="{ busy: navigatingRoute === customerBottomNavRoutes.catalog }"
+        :disabled="Boolean(navigatingRoute)"
         hover-class="tab-pressed"
         @tap="goCatalog"
       >
@@ -139,19 +139,25 @@
       </button>
       <button
         class="tab"
-        :class="{ busy: isShoppingBagNavigating }"
-        :disabled="isShoppingBagNavigating"
+        :class="{ busy: navigatingRoute === customerBottomNavRoutes.shoppingBag }"
+        :disabled="Boolean(navigatingRoute)"
         hover-class="tab-pressed"
         @tap="goShoppingBag"
       >
         <text class="tab-icon">■</text>
         <text>购物袋</text>
       </button>
-      <button class="tab active">
+      <button class="tab active" :disabled="Boolean(navigatingRoute)">
         <text class="tab-icon">♡</text>
         <text>收藏</text>
       </button>
-      <button class="tab" hover-class="tab-pressed" @tap="showToast(CUSTOMER_MINE_PLACEHOLDER)">
+      <button
+        class="tab"
+        :class="{ busy: navigatingRoute === customerBottomNavRoutes.mine }"
+        :disabled="Boolean(navigatingRoute)"
+        hover-class="tab-pressed"
+        @tap="goMine"
+      >
         <text class="tab-icon">●</text>
         <text>我的</text>
       </button>
@@ -163,7 +169,7 @@
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { navigateTo, redirectTo } from '../../../app/navigation'
-import { routes } from '../../../app/routes'
+import { routes, type AppRoute } from '../../../app/routes'
 import {
   getCloudBaseCustomerFavoriteProductsView,
   removeCloudBaseCustomerFavoriteProduct,
@@ -174,21 +180,17 @@ import {
   type CustomerFavoriteProductViewItem,
   type CustomerFavoriteProductsView,
 } from '../../../features/customer-favorites/customer-favorites'
-import { CUSTOMER_MINE_PLACEHOLDER, customerBottomNavRoutes } from '../customer-bottom-nav'
+import { customerBottomNavRoutes, shouldIgnoreCustomerBottomNavTap } from '../customer-bottom-nav'
 
 const viewModel = ref<CustomerFavoriteProductsView>(createCustomerFavoriteProductsLoadingView())
 const failedImageIds = ref<string[]>([])
 const removingProductIds = ref<string[]>([])
 const message = ref('')
-const isHomeNavigating = ref(false)
-const isCatalogNavigating = ref(false)
-const isShoppingBagNavigating = ref(false)
+const navigatingRoute = ref<AppRoute | ''>('')
 let navigationFallbackTimer: ReturnType<typeof setTimeout> | null = null
 
 const clearNavigationLocks = () => {
-  isHomeNavigating.value = false
-  isCatalogNavigating.value = false
-  isShoppingBagNavigating.value = false
+  navigatingRoute.value = ''
 
   if (navigationFallbackTimer) {
     clearTimeout(navigationFallbackTimer)
@@ -279,47 +281,37 @@ const markImageFailed = (productId: string) => {
 }
 
 const goHome = () => {
-  if (isHomeNavigating.value) {
+  goCustomerBottomNav(customerBottomNavRoutes.home)
+}
+
+const goCustomerBottomNav = (targetRoute: AppRoute) => {
+  if (
+    shouldIgnoreCustomerBottomNavTap({
+      pendingRoute: navigatingRoute.value,
+      targetRoute,
+      currentRoute: customerBottomNavRoutes.favorites,
+    })
+  ) {
     return
   }
 
-  isHomeNavigating.value = true
+  navigatingRoute.value = targetRoute
   scheduleNavigationFallback()
-  redirectTo(customerBottomNavRoutes.home, {
+  redirectTo(targetRoute, {
     onComplete: clearNavigationLocks,
   })
 }
 
 const goCatalog = () => {
-  if (isCatalogNavigating.value) {
-    return
-  }
-
-  isCatalogNavigating.value = true
-  scheduleNavigationFallback()
-  redirectTo(customerBottomNavRoutes.catalog, {
-    onComplete: clearNavigationLocks,
-  })
+  goCustomerBottomNav(customerBottomNavRoutes.catalog)
 }
 
 const goShoppingBag = () => {
-  if (isShoppingBagNavigating.value) {
-    return
-  }
-
-  isShoppingBagNavigating.value = true
-  scheduleNavigationFallback()
-  redirectTo(customerBottomNavRoutes.shoppingBag, {
-    onComplete: clearNavigationLocks,
-  })
+  goCustomerBottomNav(customerBottomNavRoutes.shoppingBag)
 }
 
-const showToast = (title: string) => {
-  uni.showToast({
-    title,
-    icon: 'none',
-    duration: 1600,
-  })
+const goMine = () => {
+  goCustomerBottomNav(customerBottomNavRoutes.mine)
 }
 </script>
 

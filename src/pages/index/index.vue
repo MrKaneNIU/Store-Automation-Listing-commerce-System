@@ -96,7 +96,7 @@
     </view>
 
     <view class="customer-nav">
-      <button class="tab active" @tap="stayHome">
+      <button class="tab active" :disabled="Boolean(navigatingRoute)" @tap="stayHome">
         <text class="tab-icon">⌂</text>
         <text>首页</text>
       </button>
@@ -127,7 +127,12 @@
         <text class="tab-icon">♡</text>
         <text>收藏</text>
       </button>
-      <button class="tab" @tap="showVisualOnlyToast(CUSTOMER_MINE_PLACEHOLDER)">
+      <button
+        class="tab"
+        :class="{ busy: navigatingRoute === customerBottomNavRoutes.mine }"
+        :disabled="Boolean(navigatingRoute)"
+        @tap="goMine"
+      >
         <text class="tab-icon">○</text>
         <text>我的</text>
       </button>
@@ -143,7 +148,7 @@ import type { AppRoute } from '../../app/routes'
 import { routes } from '../../app/routes'
 import { getAdminWorkbenchEntryRoute } from '../../features/admin-workbench-auth/admin-workbench-entry'
 import { getHomepageSettingsView } from '../../features/homepage-settings/homepage-settings'
-import { CUSTOMER_MINE_PLACEHOLDER, customerBottomNavRoutes } from '../customer/customer-bottom-nav'
+import { customerBottomNavRoutes, shouldIgnoreCustomerBottomNavTap } from '../customer/customer-bottom-nav'
 
 const DEFAULT_TOPBAR_TOP = 'calc(env(safe-area-inset-top) + 40rpx)'
 
@@ -178,34 +183,46 @@ onShow(() => {
 })
 
 const stayHome = () => {
+  if (navigatingRoute.value) {
+    return
+  }
+
   uni.pageScrollTo({ scrollTop: 0, duration: 180 })
 }
 
-const goProductList = () => {
-  if (navigatingRoute.value) {
+const goCustomerBottomNav = (targetRoute: AppRoute) => {
+  if (
+    shouldIgnoreCustomerBottomNavTap({
+      pendingRoute: navigatingRoute.value,
+      targetRoute,
+      currentRoute: customerBottomNavRoutes.home,
+    })
+  ) {
     return
   }
 
-  navigatingRoute.value = customerBottomNavRoutes.catalog
-  redirectTo(customerBottomNavRoutes.catalog)
+  navigatingRoute.value = targetRoute
+  redirectTo(targetRoute, {
+    onComplete: () => {
+      navigatingRoute.value = ''
+    },
+  })
+}
+
+const goProductList = () => {
+  goCustomerBottomNav(customerBottomNavRoutes.catalog)
 }
 
 const goShoppingBag = () => {
-  if (navigatingRoute.value) {
-    return
-  }
-
-  navigatingRoute.value = customerBottomNavRoutes.shoppingBag
-  redirectTo(customerBottomNavRoutes.shoppingBag)
+  goCustomerBottomNav(customerBottomNavRoutes.shoppingBag)
 }
 
 const goFavorites = () => {
-  if (navigatingRoute.value) {
-    return
-  }
+  goCustomerBottomNav(customerBottomNavRoutes.favorites)
+}
 
-  navigatingRoute.value = customerBottomNavRoutes.favorites
-  redirectTo(customerBottomNavRoutes.favorites)
+const goMine = () => {
+  goCustomerBottomNav(customerBottomNavRoutes.mine)
 }
 
 const goOwnerDashboard = () => {
@@ -228,13 +245,6 @@ const goOwnerDashboard = () => {
   })
 }
 
-const showVisualOnlyToast = (title: string) => {
-  uni.showToast({
-    title,
-    icon: 'none',
-    duration: 1800,
-  })
-}
 </script>
 
 <style scoped>

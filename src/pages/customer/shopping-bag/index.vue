@@ -4,8 +4,8 @@
       <view class="bag-nav">
         <button
           class="icon-button plain"
-          :class="{ busy: isCatalogNavigating }"
-          :disabled="isCatalogNavigating"
+          :class="{ busy: navigatingRoute === customerBottomNavRoutes.catalog }"
+          :disabled="Boolean(navigatingRoute)"
           aria-label="返回商品列表"
           hover-class="press-feedback"
           @tap="goCatalog"
@@ -134,8 +134,8 @@
     <view class="customer-nav">
       <button
         class="tab"
-        :class="{ busy: isHomeNavigating }"
-        :disabled="isHomeNavigating"
+        :class="{ busy: navigatingRoute === customerBottomNavRoutes.home }"
+        :disabled="Boolean(navigatingRoute)"
         hover-class="tab-pressed"
         @tap="goHome"
       >
@@ -144,29 +144,35 @@
       </button>
       <button
         class="tab"
-        :class="{ busy: isCatalogNavigating }"
-        :disabled="isCatalogNavigating"
+        :class="{ busy: navigatingRoute === customerBottomNavRoutes.catalog }"
+        :disabled="Boolean(navigatingRoute)"
         hover-class="tab-pressed"
         @tap="goCatalog"
       >
         <text class="tab-icon">●</text>
         <text>商品</text>
       </button>
-      <button class="tab active">
+      <button class="tab active" :disabled="Boolean(navigatingRoute)">
         <text class="tab-icon">▢</text>
         <text>购物袋</text>
       </button>
       <button
         class="tab"
-        :class="{ busy: isFavoritesNavigating }"
-        :disabled="isFavoritesNavigating"
+        :class="{ busy: navigatingRoute === customerBottomNavRoutes.favorites }"
+        :disabled="Boolean(navigatingRoute)"
         hover-class="tab-pressed"
         @tap="goFavorites"
       >
         <text class="tab-icon">♡</text>
         <text>收藏</text>
       </button>
-      <button class="tab" hover-class="tab-pressed" @tap="showToast(CUSTOMER_MINE_PLACEHOLDER)">
+      <button
+        class="tab"
+        :class="{ busy: navigatingRoute === customerBottomNavRoutes.mine }"
+        :disabled="Boolean(navigatingRoute)"
+        hover-class="tab-pressed"
+        @tap="goMine"
+      >
         <text class="tab-icon">○</text>
         <text>我的</text>
       </button>
@@ -178,23 +184,19 @@
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { navigateTo, redirectTo } from '../../../app/navigation'
-import { routes } from '../../../app/routes'
-import { CUSTOMER_MINE_PLACEHOLDER, customerBottomNavRoutes } from '../customer-bottom-nav'
+import { routes, type AppRoute } from '../../../app/routes'
+import { customerBottomNavRoutes, shouldIgnoreCustomerBottomNavTap } from '../customer-bottom-nav'
 import { createCustomerShoppingBagPageState } from './useCustomerShoppingBagPageState'
 
 const shoppingBagState = createCustomerShoppingBagPageState()
 const viewModel = shoppingBagState.viewModel
 const message = shoppingBagState.message
 const failedImageIds = ref<string[]>([])
-const isHomeNavigating = ref(false)
-const isCatalogNavigating = ref(false)
-const isFavoritesNavigating = ref(false)
+const navigatingRoute = ref<AppRoute | ''>('')
 let navigationFallbackTimer: ReturnType<typeof setTimeout> | null = null
 
 const clearNavigationLocks = () => {
-  isHomeNavigating.value = false
-  isCatalogNavigating.value = false
-  isFavoritesNavigating.value = false
+  navigatingRoute.value = ''
 
   if (navigationFallbackTimer) {
     clearTimeout(navigationFallbackTimer)
@@ -263,47 +265,37 @@ const markImageFailed = (itemId: string) => {
 }
 
 const goCatalog = () => {
-  if (isCatalogNavigating.value) {
+  goCustomerBottomNav(customerBottomNavRoutes.catalog)
+}
+
+const goCustomerBottomNav = (targetRoute: AppRoute) => {
+  if (
+    shouldIgnoreCustomerBottomNavTap({
+      pendingRoute: navigatingRoute.value,
+      targetRoute,
+      currentRoute: customerBottomNavRoutes.shoppingBag,
+    })
+  ) {
     return
   }
 
-  isCatalogNavigating.value = true
+  navigatingRoute.value = targetRoute
   scheduleNavigationFallback()
-  redirectTo(customerBottomNavRoutes.catalog, {
+  redirectTo(targetRoute, {
     onComplete: clearNavigationLocks,
   })
 }
 
 const goHome = () => {
-  if (isHomeNavigating.value) {
-    return
-  }
-
-  isHomeNavigating.value = true
-  scheduleNavigationFallback()
-  redirectTo(customerBottomNavRoutes.home, {
-    onComplete: clearNavigationLocks,
-  })
+  goCustomerBottomNav(customerBottomNavRoutes.home)
 }
 
 const goFavorites = () => {
-  if (isFavoritesNavigating.value) {
-    return
-  }
-
-  isFavoritesNavigating.value = true
-  scheduleNavigationFallback()
-  redirectTo(customerBottomNavRoutes.favorites, {
-    onComplete: clearNavigationLocks,
-  })
+  goCustomerBottomNav(customerBottomNavRoutes.favorites)
 }
 
-const showToast = (title: string) => {
-  uni.showToast({
-    title,
-    icon: 'none',
-    duration: 1600,
-  })
+const goMine = () => {
+  goCustomerBottomNav(customerBottomNavRoutes.mine)
 }
 </script>
 
