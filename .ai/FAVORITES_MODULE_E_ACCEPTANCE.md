@@ -2,9 +2,13 @@
 
 ## Scope
 
-Module E is verification and acceptance only. No new feature, business logic,
-CloudBase action behavior, UI behavior, dependency, route, or navigation change
-was implemented in this slice.
+Module E started as verification and acceptance. The 2026-05-30 repair slice
+also aligned the deployed CloudBase `mallApi` contract with the local
+Favorites implementation and replaced the remaining customer bottom-nav
+Favorites placeholder with navigation to the existing favorites route.
+
+No shopping bag, order, inventory, payment, logistics, coupon, checkout,
+product visibility, or SKU-level wishlist semantics were changed.
 
 ## Changed Files Summary
 
@@ -44,6 +48,19 @@ Module D - UI integration:
 Module E - verification and acceptance:
 
 - `.ai/FAVORITES_MODULE_E_ACCEPTANCE.md`
+
+2026-05-30 repair slice:
+
+- `src/pages/customer/product-list/index.vue`
+- `src/pages/customer/product-list/index.test.ts`
+- `src/pages/index/index.vue`
+- `src/pages/index/index.test.ts`
+- `.ai/FAVORITES_MODULE_E_ACCEPTANCE.md`
+
+Remote CloudBase deployment:
+
+- `cloud1-d7gifjyzl7721b383` / `mallApi` code updated from
+  `cloudfunctions/mallApi`.
 
 ## Business Code Intentionally Not Changed
 
@@ -116,6 +133,54 @@ Module E - verification and acceptance:
   and avoiding duplicate writes for the same active UI operation.
 - Product listing/detail tests cover that favorites do not change publish
   eligibility, stock, checkout behavior, or shopping-bag behavior.
+
+## Remote CloudBase Deployment And Smoke - 2026-05-30
+
+- Deployment target: `cloud1-d7gifjyzl7721b383` / `mallApi`.
+- Deployment command surface: `manageFunctions(action="updateFunctionCode",
+  functionName="mallApi", functionRootPath="D:\\CodeX\\VX close systhem\\cloudfunctions")`.
+- Deployment result: GREEN, RequestId `30f73f99-6469-46b2-a981-e207a7dc45ec`.
+- Function detail after deploy: `ModTime` `2026-05-30 10:27:34`,
+  `DeployMode` `code`, `Status` `Active`, `AvailableStatus` `Available`.
+- `listContracts` smoke after deploy: GREEN, RequestId
+  `bd3381d2-7193-473e-9d74-0a65c09ea0b6`, 49 actions returned.
+- Favorite actions confirmed present:
+  - `getCustomerFavoriteProductsSnapshot`
+  - `favoriteCustomerProduct`
+  - `unfavoriteCustomerProduct`
+  - `removeCustomerFavoriteProduct`
+- Direct snapshot action smoke: GREEN for contract routing, RequestId
+  `13d2df4d-fec9-4ed6-b146-5d6e94a83b1e`.
+  - Result was not `NOT_FOUND`.
+  - Management-side direct invoke returned `UNAUTHORIZED: Verified WeChat
+    identity is required`, which is expected because this smoke does not run
+    inside a verified WeChat mini-program user context and
+    `MALL_API_ALLOW_TEST_IDENTITY` is disabled in the remote function.
+
+## 2026-05-30 Repair Checks
+
+- RED before fix:
+  `pnpm.cmd exec vitest run --config vitest.config.ts src/pages/index/index.test.ts src/pages/customer/product-list/index.test.ts`
+  - 2 failed tests confirmed the bottom Favorites entries did not reference
+    `routes.customerFavorites`.
+- GREEN after fix:
+  `pnpm.cmd exec vitest run --config vitest.config.ts src/pages/index/index.test.ts src/pages/customer/product-list/index.test.ts`
+  - 2 files passed.
+  - 11 tests passed.
+- GREEN targeted Favorites checks:
+  `pnpm.cmd exec vitest run --config vitest.config.ts cloudfunctions/mallApi/mall-api-core.test.js src/services/cloudbase/mall-api-client.test.ts src/features/customer-favorites/customer-favorites.test.ts src/features/cloudbase-mall/customer-favorites.test.ts src/pages/customer/favorites/index.test.ts src/pages/customer/product-detail/index.test.ts src/pages/customer/product-list/index.test.ts src/pages/index/index.test.ts`
+  - 8 files passed.
+  - 105 tests passed.
+- GREEN: `pnpm.cmd run verify`
+  - lint, boundary-check, unit tests, coverage, type-check, backend
+    tests/build, and prod/all audits passed.
+  - Unit suite: 66 files / 378 tests.
+  - Backend suite: 12 files / 60 tests.
+- GREEN: `pnpm.cmd run verify:full`
+  - reran `verify` successfully.
+  - `build:mp-weixin` completed.
+  - `smoke:mp-weixin` passed: mp-weixin build artifacts and page routes are
+    present.
 
 ## 2026-05-30 Follow-up: Customer Product Unauthorized Message
 
@@ -201,15 +266,15 @@ Module E - verification and acceptance:
   - Passed full verify, `build:mp-weixin`, and `smoke:mp-weixin`.
   - mp-weixin build artifacts and page routes are present.
 
-
 ## Remaining Harness / Product Gaps
 
 - Manual acceptance is still open. Automated checks and mp-weixin smoke are not
   a substitute for human acceptance in WeChat DevTools or on a device.
 - Slow-network and image-failure behavior are represented by page states/tests
   and the acceptance checklist below, but still need human validation.
-- Reserved favorites entry navigation from homepage/product-list bottom nav is
-  not wired in the completed D slices unless explicitly opened by a later task.
+- Homepage and customer product-list bottom-nav Favorites entries are now wired
+  to the existing `routes.customerFavorites` route. Manual WeChat DevTools or
+  device validation is still open.
 
 ## Manual Acceptance Checklist
 
@@ -229,6 +294,10 @@ DevTools version, tester, and result for each item.
 ## Manual Acceptance Status
 
 Manual acceptance is still open.
+
+Automated checks, CloudBase contract smoke, and mp-weixin route smoke passed on
+2026-05-30, but no WeChat DevTools or physical-device human acceptance was
+performed in this repair slice.
 
 ## Final Human Review Readiness
 
