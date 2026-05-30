@@ -345,10 +345,7 @@ const loadFavoriteState = async () => {
   const previousFavoriteView = favoriteProductsView.value
   const resultView = await getCloudBaseCustomerFavoriteProductsView()
   favoriteProductsView.value = keepPreviousFavoritesOnFailure(resultView, previousFavoriteView)
-
-  if (favoriteProductsView.value.loadingState === 'failed') {
-    favoriteMessage.value = favoriteProductsView.value.failureMessage
-  }
+  favoriteMessage.value = ''
 }
 
 const loadInitialView = async () => {

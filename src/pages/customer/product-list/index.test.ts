@@ -51,6 +51,22 @@ describe('customer product list shopping bag entry', () => {
     expect(toggleSource).not.toContain('isLoading.value = true')
   })
 
+  it('keeps product browsing state independent when favorite snapshot loading fails', () => {
+    const loadFavoriteSource = source.slice(
+      source.indexOf('const loadFavoriteState'),
+      source.indexOf('const isFavoriteProduct'),
+    )
+
+    expect(loadFavoriteSource).toContain('getCloudBaseCustomerFavoriteProductsView')
+    expect(loadFavoriteSource).toContain('favoriteProductsView.value = keepPreviousFavoritesOnFailure')
+    expect(loadFavoriteSource).toContain("favoriteMessage.value = ''")
+    expect(loadFavoriteSource).not.toContain('favoriteMessage.value = favoriteProductsView.value.failureMessage')
+    expect(loadFavoriteSource).not.toContain('products.value =')
+    expect(loadFavoriteSource).not.toContain('emptyMessage.value =')
+    expect(loadFavoriteSource).not.toContain('isLoading.value = true')
+    expect(loadFavoriteSource).not.toContain('refreshView(')
+  })
+
   it('does not route favorites through checkout, stock, or shopping-bag commands', () => {
     const toggleSource = source.slice(source.indexOf('const toggleFavorite'), source.indexOf('onShow(() =>'))
 

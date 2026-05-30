@@ -117,6 +117,28 @@ Module E - verification and acceptance:
 - Product listing/detail tests cover that favorites do not change publish
   eligibility, stock, checkout behavior, or shopping-bag behavior.
 
+## 2026-05-30 Follow-up: Customer Product Unauthorized Message
+
+- Customer product list and detail pages now treat favorite snapshot preload
+  failure as non-blocking background state. A remote `UNAUTHORIZED: Verified
+  WeChat identity is required` response from `getCustomerFavoriteProductsSnapshot`
+  no longer renders the bottom red favorite feedback banner on browsing pages.
+- Explicit favorite/unfavorite write feedback remains unchanged.
+- RED before fix:
+  `pnpm.cmd exec vitest run --config vitest.config.ts src/pages/customer/product-list/index.test.ts src/pages/customer/product-detail/index.test.ts`
+  - 2 failed tests confirmed preload failure still wrote
+    `favoriteProductsView.value.failureMessage` into page feedback.
+- GREEN after fix:
+  `pnpm.cmd exec vitest run --config vitest.config.ts src/pages/customer/product-list/index.test.ts src/pages/customer/product-detail/index.test.ts`
+  - 2 files passed.
+  - 21 tests passed.
+- GREEN: `pnpm.cmd run verify:full`
+  - lint, boundary-check, unit tests, coverage, type-check, backend
+    tests/build, prod/all audits, `build:mp-weixin`, and `smoke:mp-weixin`
+    passed.
+  - Unit suite: 66 files / 379 tests.
+  - Backend suite: 12 files / 60 tests.
+
 ## Remaining Harness / Product Gaps
 
 - Manual acceptance is still open. Automated checks and mp-weixin smoke are not

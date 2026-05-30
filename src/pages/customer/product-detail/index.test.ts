@@ -53,6 +53,21 @@ describe('customer product detail real checkout authorization wiring', () => {
     expect(toggleSource).not.toContain('isDetailLoading.value = true')
   })
 
+  it('keeps product detail browsing quiet when favorite snapshot loading fails', () => {
+    const loadFavoriteSource = source.slice(
+      source.indexOf('const loadFavoriteState'),
+      source.indexOf('const loadInitialView'),
+    )
+
+    expect(loadFavoriteSource).toContain('getCloudBaseCustomerFavoriteProductsView')
+    expect(loadFavoriteSource).toContain('favoriteProductsView.value = keepPreviousFavoritesOnFailure')
+    expect(loadFavoriteSource).toContain("favoriteMessage.value = ''")
+    expect(loadFavoriteSource).not.toContain('favoriteMessage.value = favoriteProductsView.value.failureMessage')
+    expect(loadFavoriteSource).not.toContain('viewModel.value =')
+    expect(loadFavoriteSource).not.toContain('isDetailLoading.value = true')
+    expect(loadFavoriteSource).not.toContain('refreshView(')
+  })
+
   it('uses the CloudBase WeChat auth service for customer checkout', () => {
     expect(source).toContain('createCloudBaseWechatAuthService')
     expect(source).toContain('const customerAuthService = createCloudBaseWechatAuthService()')
