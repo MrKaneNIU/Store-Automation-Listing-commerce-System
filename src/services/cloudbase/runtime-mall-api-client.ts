@@ -26,7 +26,7 @@ export const createRuntimeCloudBaseError = (error: unknown, envId = cloudBaseEnv
 
   if (message.includes('-501000') || message.includes('Environment not found') || message.includes('INVALID_ENV')) {
     return new Error(
-      `CloudBase environment not found for current mini-program AppID. Runtime env: ${envId}. Open WeChat DevTools Cloud panel, confirm this AppID can access the same env, then rebuild. Original error: ${message}`,
+      `CloudBase environment not found for current mini-program AppID. Runtime env: ${envId}. Open WeChat DevTools Cloud panel, confirm this AppID can access the same env, then rebuild.`,
     )
   }
 

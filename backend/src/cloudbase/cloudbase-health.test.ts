@@ -17,7 +17,7 @@ describe('CloudBase health cloud function contract', () => {
         envId: 'vx-mall-staging-123',
         region: 'ap-shanghai',
         billingMode: 'free-quota',
-        requiredCollections: 14,
+        requiredCollections: 16,
       },
       error: null,
       meta: {},

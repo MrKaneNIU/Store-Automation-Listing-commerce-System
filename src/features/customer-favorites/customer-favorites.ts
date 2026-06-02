@@ -2,6 +2,7 @@ import type {
   CustomerFavoriteProductItem,
   CustomerFavoriteProductsSnapshot,
 } from '../../services/cloudbase/mall-api-client'
+import { formatCloudBaseFailureMessage } from '../../services/cloudbase/cloudbase-function-client'
 
 export type CustomerFavoriteProductsLoadingState = 'idle' | 'loading' | 'refreshing' | 'failed'
 
@@ -49,15 +50,7 @@ const formatPrice = (value: number | '-'): string =>
   value === '-' ? '-' : `CNY ${value.toFixed(2)}`
 
 const toFailureMessage = (error: unknown): string => {
-  if (error instanceof Error && error.message.trim()) {
-    return error.message
-  }
-
-  if (typeof error === 'string' && error.trim()) {
-    return error
-  }
-
-  return FAILURE_MESSAGE
+  return formatCloudBaseFailureMessage(error, FAILURE_MESSAGE)
 }
 
 const toViewItem = (item: CustomerFavoriteProductItem): CustomerFavoriteProductViewItem => ({

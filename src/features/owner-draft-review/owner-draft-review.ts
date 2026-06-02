@@ -43,6 +43,7 @@ export type OwnerDraftReviewCommandResult = {
 const noBatchMessage = '暂无 OCR 批次，请先生成草稿'
 const noDraftsMessage = '暂无草稿，请先完成截图识别'
 const lowConfidenceThreshold = 0.8
+const isReviewableDraft = (draft: ProductDraft) => draft.status !== 'deleted' && draft.status !== 'confirmed'
 
 const isLowConfidenceResolved = (draft: ProductDraft) =>
   draft.confidence >= lowConfidenceThreshold
@@ -73,9 +74,9 @@ const toDraftView = (draft: ProductDraft): OwnerDraftReviewDraftView => ({
 
 export const getOwnerDraftReviewView = (): OwnerDraftReviewViewModel => {
   const { latestBatch, drafts } = getLatestBatchDrafts()
-  const priceConflictCodes = findPriceConflictCodes(drafts)
-  const activeDrafts = drafts.filter((draft) => draft.status !== 'deleted')
-  const groups = groupDraftsByProductCode(drafts).map((group) => ({
+  const activeDrafts = drafts.filter(isReviewableDraft)
+  const priceConflictCodes = findPriceConflictCodes(activeDrafts)
+  const groups = groupDraftsByProductCode(activeDrafts).map((group) => ({
     productCode: group.productCode,
     drafts: group.drafts.map(toDraftView),
     hasPriceConflict: priceConflictCodes.has(group.productCode),

@@ -15,6 +15,8 @@ describe('CloudBase Phase 2 data model', () => {
       'orders',
       'order_items',
       'customers',
+      'shopping_bag_items',
+      'customer_favorites',
       'merchant_users',
       'staff_users',
       'role_assignments',
@@ -31,6 +33,29 @@ describe('CloudBase Phase 2 data model', () => {
     expect(result).toEqual({
       valid: true,
       errors: [],
+    })
+  })
+
+  it('defines customer-private collection fields required by the runtime PRD', () => {
+    expect(phase2CloudBaseCollections.find((collection) => collection.name === 'shopping_bag_items')).toMatchObject({
+      requiredFields: ['_id', 'customer_id', 'product_id', 'sku_id', 'quantity', 'created_at', 'updated_at'],
+      indexes: expect.arrayContaining([
+        { name: 'customer_id_updated_at', fields: ['customer_id', 'updated_at'] },
+        { name: 'customer_product_sku', fields: ['customer_id', 'product_id', 'sku_id'] },
+      ]),
+    })
+    expect(phase2CloudBaseCollections.find((collection) => collection.name === 'customer_favorites')).toMatchObject({
+      requiredFields: ['_id', 'customer_id', 'product_id', 'created_at', 'updated_at'],
+      indexes: expect.arrayContaining([
+        { name: 'customer_id_created_at', fields: ['customer_id', 'created_at'] },
+        { name: 'customer_product', fields: ['customer_id', 'product_id'] },
+      ]),
+    })
+    expect(phase2CloudBaseCollections.find((collection) => collection.name === 'orders')).toMatchObject({
+      requiredFields: expect.arrayContaining(['customer_id', 'status', 'created_at', 'updated_at']),
+      indexes: expect.arrayContaining([
+        { name: 'customer_id_created_at', fields: ['customer_id', 'created_at'] },
+      ]),
     })
   })
 

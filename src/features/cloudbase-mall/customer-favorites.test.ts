@@ -54,6 +54,7 @@ const createClient = (
   listPublishedProducts: vi.fn(),
   listPublishedProductSummaries: vi.fn(),
   getPublishedProductDetail: vi.fn(),
+  updateProductBasics: vi.fn(),
   updateProductDescription: vi.fn(),
   updateSku: vi.fn(),
   restockSkus: vi.fn(),

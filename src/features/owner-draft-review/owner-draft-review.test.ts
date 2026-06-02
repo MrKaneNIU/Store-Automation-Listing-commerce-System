@@ -57,6 +57,23 @@ describe('owner draft review ViewModel', () => {
     expect(view.priceConflictCount).toBe(1)
   })
 
+  it('hides confirmed drafts from the review queue after a refresh', async () => {
+    const { batch } = await prepareBatch()
+    const drafts = mallRepository.listDrafts(batch.id)
+    replaceDrafts(batch.id, [
+      { ...drafts[0], id: 'draft-confirmed', productCode: 'A1023', status: 'confirmed' },
+      { ...drafts[0], id: 'draft-deleted', productCode: 'B2088', status: 'deleted' },
+    ])
+
+    const view = getOwnerDraftReviewView()
+
+    expect(view.groups).toEqual([])
+    expect(view.needsCompletionCount).toBe(0)
+    expect(view.lowConfidenceCount).toBe(0)
+    expect(view.priceConflictCount).toBe(0)
+    expect(view.canConfirm).toBe(false)
+  })
+
   it('updates draft fields through the feature entry point', async () => {
     const { batch } = await prepareBatch()
     const draft = mallRepository.listDrafts(batch.id)[0]
@@ -146,5 +163,6 @@ describe('owner draft review ViewModel', () => {
     expect(secondResult.message).toBe('已创建 0 个商品、0 个 SKU')
     expect(mallRepository.listProducts()).toHaveLength(1)
     expect(mallRepository.listSkus()).toHaveLength(1)
+    expect(getOwnerDraftReviewView().groups).toEqual([])
   })
 })

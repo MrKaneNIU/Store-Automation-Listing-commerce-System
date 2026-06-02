@@ -69,6 +69,7 @@ export const phase2CloudBaseCollections: CloudBaseCollectionDefinition[] = [
     name: 'orders',
     requiredFields: [
       '_id',
+      'customer_id',
       'customer_name',
       'customer_phone',
       'status',
@@ -103,6 +104,22 @@ export const phase2CloudBaseCollections: CloudBaseCollectionDefinition[] = [
     name: 'customers',
     requiredFields: ['_id', 'created_at', 'updated_at'],
     indexes: [{ name: 'openid', fields: ['openid'] }],
+  },
+  {
+    name: 'shopping_bag_items',
+    requiredFields: ['_id', 'customer_id', 'product_id', 'sku_id', 'quantity', 'created_at', 'updated_at'],
+    indexes: [
+      { name: 'customer_id_updated_at', fields: ['customer_id', 'updated_at'] },
+      { name: 'customer_product_sku', fields: ['customer_id', 'product_id', 'sku_id'] },
+    ],
+  },
+  {
+    name: 'customer_favorites',
+    requiredFields: ['_id', 'customer_id', 'product_id', 'created_at', 'updated_at'],
+    indexes: [
+      { name: 'customer_id_created_at', fields: ['customer_id', 'created_at'] },
+      { name: 'customer_product', fields: ['customer_id', 'product_id'] },
+    ],
   },
   {
     name: 'merchant_users',
@@ -160,9 +177,17 @@ const requiredCollectionIndexes = new Map<string, { name: string; reason: string
   ['product_drafts', [{ name: 'batch_id', reason: 'draft lookup by OCR batch' }]],
   ['products', [{ name: 'status_updated_at', reason: 'published product browsing and owner review' }]],
   ['skus', [{ name: 'product_id', reason: 'SKU lookup by product' }]],
-  ['orders', [{ name: 'status_created_at', reason: 'merchant order queue lookup' }]],
+  [
+    'orders',
+    [
+      { name: 'status_created_at', reason: 'merchant order queue lookup' },
+      { name: 'customer_id_created_at', reason: 'customer mine order lookup' },
+    ],
+  ],
   ['order_items', [{ name: 'order_id', reason: 'order detail reconstruction' }]],
   ['customers', [{ name: 'openid', reason: 'future WeChat identity lookup' }]],
+  ['shopping_bag_items', [{ name: 'customer_id_updated_at', reason: 'customer shopping bag snapshot lookup' }]],
+  ['customer_favorites', [{ name: 'customer_id_created_at', reason: 'customer favorites snapshot lookup' }]],
   ['staff_users', [{ name: 'role', reason: 'staff role queue and authorization lookup' }]],
   ['merchant_users', [{ name: 'role', reason: 'merchant role lookup' }]],
   ['role_assignments', [{ name: 'user_id', reason: 'future role binding lookup' }]],
@@ -180,6 +205,8 @@ const requiredPhase2CollectionNames = [
   'orders',
   'order_items',
   'customers',
+  'shopping_bag_items',
+  'customer_favorites',
   'merchant_users',
   'staff_users',
   'role_assignments',

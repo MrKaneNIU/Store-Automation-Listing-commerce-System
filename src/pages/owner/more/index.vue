@@ -38,7 +38,7 @@
         <view class="module-copy">
           <text class="module-label">03</text>
           <text class="module-title">账号管理</text>
-          <text class="module-desc">修改当前管理账号密码，重新登录后生效。</text>
+          <text class="module-desc">注册管理账号、设置初始密码，或修改已有账号密码。</text>
         </view>
         <text class="module-arrow">→</text>
       </button>
@@ -130,9 +130,14 @@ const goRoute = (route: AppRoute) => {
   margin-bottom: 34rpx;
 }
 
-.brand {
+.brand,
+.hero-copy,
+.module-copy {
   display: flex;
   flex-direction: column;
+}
+
+.brand {
   gap: 10rpx;
 }
 
@@ -155,11 +160,6 @@ const goRoute = (route: AppRoute) => {
   border-radius: 34rpx;
   background: #202020;
   color: #ffffff;
-}
-
-.hero-copy {
-  display: flex;
-  flex-direction: column;
 }
 
 .hero-label {
@@ -198,6 +198,7 @@ const goRoute = (route: AppRoute) => {
   box-sizing: border-box;
   margin: 0;
   padding: 28rpx 30rpx;
+  border: 0;
   border-radius: 30rpx;
   background: #ffffff;
   color: #202020;
@@ -205,10 +206,9 @@ const goRoute = (route: AppRoute) => {
   box-shadow: 0 18rpx 44rpx rgba(12, 12, 12, 0.05);
 }
 
-.module-copy {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
+.module-card::after,
+.nav-item::after {
+  border: 0;
 }
 
 .module-label {
@@ -270,6 +270,7 @@ const goRoute = (route: AppRoute) => {
   box-sizing: border-box;
   margin: 0;
   padding: 0 10rpx;
+  border: 0;
   border-radius: 30rpx;
   background: transparent;
   color: #7a7a7a;
@@ -278,11 +279,6 @@ const goRoute = (route: AppRoute) => {
   line-height: 1.2;
   text-align: center;
   white-space: nowrap;
-  transition: opacity 120ms ease, transform 120ms ease;
-}
-
-.nav-item::after {
-  border: 0;
 }
 
 .nav-item.active {
@@ -290,12 +286,12 @@ const goRoute = (route: AppRoute) => {
   color: #ffffff;
 }
 
-.admin-nav .busy {
-  transform: none;
-}
-
 .busy {
   opacity: 0.66;
   transform: scale(0.98);
+}
+
+.admin-nav .busy {
+  transform: none;
 }
 </style>

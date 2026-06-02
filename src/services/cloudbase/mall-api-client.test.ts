@@ -326,6 +326,43 @@ describe('CloudBase mall API client', () => {
     ])
   })
 
+  it('maps customer mine snapshots through mallApi without payload fields', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        return {
+          customerId: 'customer-1',
+          identity: {
+            isSignedIn: true,
+            displayName: 'Wechat Customer',
+            authSource: 'wechat',
+            openidMasked: 'cust...enid',
+          },
+          phone: {
+            isBound: false,
+            maskedPhoneNumber: '',
+            statusLabel: 'Phone not bound',
+          },
+          recentOrders: [],
+          recentOrderTotalCount: 0,
+          utilities: [],
+          serverTime: '2026-05-27T00:00:00.000Z',
+        } as never
+      },
+    })
+
+    await client.getCustomerMineSnapshot?.()
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'getCustomerMineSnapshot',
+        },
+      },
+    ])
+  })
+
   it('maps customer favorites actions through mallApi', async () => {
     const calls: Array<{ name: string; data: unknown }> = []
     const client = createCloudBaseMallApiClient({
@@ -391,6 +428,36 @@ describe('CloudBase mall API client', () => {
         },
       },
     ])
+  })
+
+  it('maps product basics updates through mallApi without sending core productCode', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        return { product: { id: 'product-1' } } as never
+      },
+    })
+
+    await client.updateProductBasics('product-1', {
+      productName: 'Updated Cotton Shirt',
+      description: '进口羊毛混纺，适合通勤叠穿。',
+    })
+
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'updateProductBasics',
+          params: { productId: 'product-1' },
+          payload: {
+            productName: 'Updated Cotton Shirt',
+            description: '进口羊毛混纺，适合通勤叠穿。',
+          },
+        },
+      },
+    ])
+    expect(JSON.stringify(calls)).not.toContain('productCode')
   })
 
   it('maps SKU inventory operations through mallApi', async () => {
@@ -507,6 +574,178 @@ describe('CloudBase mall API client', () => {
         data: {
           action: 'retryOcrJob',
           params: { jobId: 'job-1' },
+        },
+      },
+    ])
+  })
+
+  it('maps remaining mallApi actions with their expected params and payloads', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        return {} as never
+      },
+    })
+
+    await client.createOcrBatch({ imageUrls: ['cloud://image'], drafts: [] })
+    await client.listOcrJobs()
+    await client.listOcrBatches()
+    await client.getCurrentOcrBatch()
+    await client.deleteDraft('draft-1')
+    await client.confirmBatch('batch-1')
+    await client.listProducts()
+    await client.listPublishedProducts()
+    await client.publishProduct('product-1')
+    await client.listSkus('product-1')
+    await client.listPendingImageTasks()
+    await client.supplementProductImages('product-1', {
+      mainImageUrl: 'cloud://main',
+      imageUrls: ['cloud://main'],
+    })
+    await client.createCustomerOrder({
+      productId: 'product-1',
+      skuId: 'sku-1',
+      quantity: 1,
+      session: {
+        customerId: 'customer-1',
+        openid: 'openid-1',
+        phoneNumber: '13800138000',
+        authSource: 'wechat',
+        loggedInAt: '2026-06-01T00:00:00.000Z',
+      },
+    })
+    await client.getCustomerOrder('order-1')
+    await client.listMerchantOrders()
+    await client.confirmMerchantOrder('order-1')
+    await client.cancelMerchantOrder('order-1')
+
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'createOcrBatch',
+          payload: { imageUrls: ['cloud://image'], drafts: [] },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'listOcrJobs',
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'listOcrBatches',
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'getCurrentOcrBatch',
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'deleteDraft',
+          params: { draftId: 'draft-1' },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'confirmBatch',
+          params: { batchId: 'batch-1' },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'listProducts',
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'listPublishedProducts',
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'publishProduct',
+          params: { productId: 'product-1' },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'listSkus',
+          params: { productId: 'product-1' },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'listPendingImageTasks',
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'supplementProductImages',
+          params: { productId: 'product-1' },
+          payload: {
+            mainImageUrl: 'cloud://main',
+            imageUrls: ['cloud://main'],
+          },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'createCustomerOrder',
+          payload: {
+            productId: 'product-1',
+            skuId: 'sku-1',
+            quantity: 1,
+            session: {
+              customerId: 'customer-1',
+              openid: 'openid-1',
+              phoneNumber: '13800138000',
+              authSource: 'wechat',
+              loggedInAt: '2026-06-01T00:00:00.000Z',
+            },
+          },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'getCustomerOrder',
+          params: { orderId: 'order-1' },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'listMerchantOrders',
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'confirmMerchantOrder',
+          params: { orderId: 'order-1' },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'cancelMerchantOrder',
+          params: { orderId: 'order-1' },
         },
       },
     ])

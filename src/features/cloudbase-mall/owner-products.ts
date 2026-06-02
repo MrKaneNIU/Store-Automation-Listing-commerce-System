@@ -2,12 +2,13 @@ import type { Product, ProductStatus } from '../../domain/catalog/types'
 import { validateProductForPublish } from '../../domain/catalog/rules'
 import { getRuntimeCloudBaseMallApiClient } from '../../services/cloudbase/runtime-mall-api-client'
 import type { CloudBaseMallApiClient, OwnerProductCard } from '../../services/cloudbase/mall-api-client'
-import { isRenderableProductImageUrl, resolveProductImageUrl, resolveProductImageUrls } from '../../services/storage/product-image-url'
+import { isRenderableProductImageUrl, resolveProductImageFields, resolveProductImageView } from '../../services/storage/product-image-url'
 import { uploadService } from '../../services/storage/runtime-upload-service'
 import {
   ownerProductStatusOptions,
   productDescriptionMaxLength,
   toOwnerSkuInventoryListItem,
+  type OwnerProductBasicsUpdateInput,
   type OwnerProductCommandResult,
   type OwnerProductListItem,
   type OwnerProductSkuInventoryViewModel,
@@ -22,9 +23,9 @@ const statusLabels: Record<ProductStatus, string> = {
   published: '已上架',
 }
 
-const toRenderableListItem = (product: OwnerProductCard, mainImageUrl: string): OwnerProductListItem => ({
+const toRenderableListItem = async (product: OwnerProductCard): Promise<OwnerProductListItem> => ({
   ...product,
-  mainImageUrl,
+  ...(await resolveProductImageView(product, uploadService)),
   imageUrls: product.imageUrls.filter(isRenderableProductImageUrl),
 })
 
@@ -34,11 +35,10 @@ const toInventoryListItem = async (
 ): Promise<OwnerProductListItem> => {
   const { skus } = await client.listSkus(product.id)
   const validation = validateProductForPublish(product, skus)
-  const mainImageUrl = await resolveProductImageUrl(product.mainImageUrl, uploadService)
+  const renderableProduct = await resolveProductImageFields(product, uploadService)
 
   return {
-    ...product,
-    mainImageUrl,
+    ...renderableProduct,
     statusLabel: statusLabels[product.status],
     skuCount: skus.length,
     canPublish: product.status === 'ready_to_publish' && validation.canPublish,
@@ -51,8 +51,7 @@ export const getCloudBaseOwnerProductsView = async (
   client: CloudBaseMallApiClient = getRuntimeCloudBaseMallApiClient(),
 ): Promise<OwnerProductsViewModel> => {
   const { products, readyProductCount } = await client.listOwnerProductCards()
-  const mainImageUrls = await resolveProductImageUrls(products.map((product) => product.mainImageUrl), uploadService)
-  const items = products.map((product, index) => toRenderableListItem(product, mainImageUrls[index] ?? ''))
+  const items = await Promise.all(products.map(toRenderableListItem))
   const filteredProducts = selectedStatus === 'all' ? items : items.filter((product) => product.status === selectedStatus)
 
   return {
@@ -112,6 +111,24 @@ export const updateCloudBaseOwnerProductDescription = async (
 
   await client.updateProductDescription(productId, { description: normalizedDescription })
   return { message: '商品简介已保存' }
+}
+
+export const updateCloudBaseOwnerProductBasics = async (
+  productId: string,
+  input: OwnerProductBasicsUpdateInput,
+  client: CloudBaseMallApiClient = getRuntimeCloudBaseMallApiClient(),
+): Promise<OwnerProductCommandResult> => {
+  const productName = input.productName.trim()
+  const description = input.description.trim()
+  if (!productName) {
+    return { message: '商品名称不能为空' }
+  }
+  if (description.length > productDescriptionMaxLength) {
+    return { message: `商品简介不能超过 ${productDescriptionMaxLength} 字` }
+  }
+
+  await client.updateProductBasics(productId, { productName, description })
+  return { message: '商品基础信息已保存' }
 }
 
 export const getCloudBaseOwnerProductSkuInventoryView = async (

@@ -12,6 +12,7 @@ describe('owner more page contract', () => {
     expect(source).toContain('首页设置')
     expect(source).toContain('账号管理')
     expect(source).toContain('只放三个管理入口')
+    expect(source).toContain('注册管理账号、设置初始密码')
     expect(source).not.toContain('真实配置内容')
     expect(source).not.toContain('入口位')
     expect(source).not.toContain('商品管理</text>')

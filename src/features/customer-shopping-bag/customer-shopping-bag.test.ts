@@ -106,6 +106,24 @@ describe('customer shopping bag ViewModel', () => {
     })
   })
 
+  it('sanitizes raw CloudBase storage errors before rendering failure text', () => {
+    const failureView = createCustomerShoppingBagFailureView(
+      new Error('DATABASE_COLLECTION_NOT_EXIST: Db or Table not exist. https://cloud.tencent.com/document/api/876/34822'),
+    )
+
+    expect(failureView.failureMessage).toBe('系统数据初始化中，请稍后重试')
+  })
+
+  it('sanitizes mp runtime module loader errors before rendering failure text', () => {
+    const failureView = createCustomerShoppingBagFailureView(
+      new Error("module 'services/performance/url.js' is not defined, require args is 'url'"),
+    )
+
+    expect(failureView.failureMessage).toBe('系统数据初始化中，请稍后重试')
+    expect(failureView.failureMessage).not.toContain('services/performance/url.js')
+    expect(failureView.failureMessage).not.toContain('require args')
+  })
+
   it('prepares only selected available items for checkout without creating orders', () => {
     const view = createCustomerShoppingBagView(snapshot)
     const result = submitSelectedCustomerShoppingBagItemsToCheckout(view)

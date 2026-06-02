@@ -15,9 +15,15 @@ import {
   updateCloudBaseCustomerShoppingBagItemQuantity,
   type CloudBaseCustomerShoppingBagCommandResult,
 } from '../../../features/cloudbase-mall/customer-shopping-bag'
+import {
+  logCustomerRuntimeRequest,
+  type CustomerRuntimeRequestLogger,
+  type CustomerRuntimeRequestSource,
+} from '../../../services/performance/customer-runtime-request-log'
 
 type LoadSnapshotOptions = {
   showLoading: boolean
+  source?: CustomerRuntimeRequestSource
 }
 
 type CustomerShoppingBagPageStateDependencies = {
@@ -39,6 +45,9 @@ type CustomerShoppingBagPageStateDependencies = {
   clearUnavailable?: (
     previousView: CustomerShoppingBagViewModel,
   ) => Promise<CloudBaseCustomerShoppingBagCommandResult>
+  now?: () => number
+  cacheTtlMs?: number
+  requestLogger?: CustomerRuntimeRequestLogger
 }
 
 const createInitialView = () =>
@@ -62,6 +71,9 @@ const defaultDependencies = {
     removeCloudBaseCustomerShoppingBagItem(itemId, undefined, previousView),
   clearUnavailable: (previousView: CustomerShoppingBagViewModel) =>
     clearUnavailableCloudBaseCustomerShoppingBagItems(undefined, previousView),
+  now: () => Date.now(),
+  cacheTtlMs: 3000,
+  requestLogger: undefined,
 }
 
 export const createCustomerShoppingBagPageState = (
@@ -76,26 +88,74 @@ export const createCustomerShoppingBagPageState = (
   const invalidatedSnapshotKeys = ref<string[]>([])
   let hasLoadedSnapshot = false
   let pendingSnapshot: Promise<void> | null = null
+  let lastLoadedAt = 0
+  let mutationVersion = 0
 
   const loadSnapshot = (options: LoadSnapshotOptions): Promise<void> => {
     if (pendingSnapshot) {
+      const timestamp = deps.now()
+      logCustomerRuntimeRequest({
+        action: 'getCustomerShoppingBagSnapshot',
+        source: options.source ?? 'onShow',
+        startedAt: timestamp,
+        endedAt: timestamp,
+        status: 'success',
+        deduped: true,
+        logger: deps.requestLogger,
+      })
       return pendingSnapshot
+    }
+    if (!options.showLoading && hasLoadedSnapshot && deps.now() - lastLoadedAt < deps.cacheTtlMs) {
+      const timestamp = deps.now()
+      logCustomerRuntimeRequest({
+        action: 'getCustomerShoppingBagSnapshot',
+        source: options.source ?? 'cache',
+        startedAt: timestamp,
+        endedAt: timestamp,
+        status: 'success',
+        deduped: true,
+        logger: deps.requestLogger,
+      })
+      return Promise.resolve()
     }
 
     const previousView = viewModel.value
+    const loadVersion = mutationVersion
+    const startedAt = deps.now()
     if (options.showLoading || hasLoadedSnapshot) {
       viewModel.value = createCustomerShoppingBagLoadingView(hasLoadedSnapshot ? previousView : undefined)
     }
 
     pendingSnapshot = deps.loadView()
       .then((view) => {
+        if (loadVersion !== mutationVersion) return
         viewModel.value = view
         hasLoadedSnapshot = true
+        lastLoadedAt = deps.now()
         message.value = ''
+        logCustomerRuntimeRequest({
+          action: 'getCustomerShoppingBagSnapshot',
+          source: options.source ?? 'onShow',
+          startedAt,
+          endedAt: deps.now(),
+          status: 'success',
+          deduped: false,
+          logger: deps.requestLogger,
+        })
       })
       .catch((error) => {
+        if (loadVersion !== mutationVersion) return
         viewModel.value = createCustomerShoppingBagFailureView(error, hasLoadedSnapshot ? previousView : undefined)
         message.value = viewModel.value.failureMessage
+        logCustomerRuntimeRequest({
+          action: 'getCustomerShoppingBagSnapshot',
+          source: options.source ?? 'onShow',
+          startedAt,
+          endedAt: deps.now(),
+          status: 'failed',
+          deduped: false,
+          logger: deps.requestLogger,
+        })
       })
       .finally(() => {
         pendingSnapshot = null
@@ -104,17 +164,20 @@ export const createCustomerShoppingBagPageState = (
     return pendingSnapshot
   }
 
-  const handlePageShow = () => loadSnapshot({ showLoading: !hasLoadedSnapshot })
+  const handlePageShow = () => loadSnapshot({ showLoading: !hasLoadedSnapshot, source: 'onShow' })
 
   const applyCommand = async (
     command: (previousView: CustomerShoppingBagViewModel) => Promise<CloudBaseCustomerShoppingBagCommandResult>,
   ) => {
     const previousView = viewModel.value
+    mutationVersion += 1
     const result = await command(previousView)
 
     viewModel.value = result.view
     message.value = result.message
     invalidatedSnapshotKeys.value = result.invalidatedSnapshotKeys
+    hasLoadedSnapshot = true
+    lastLoadedAt = deps.now()
   }
 
   const updateQuantity = (itemId: string, quantity: number) =>

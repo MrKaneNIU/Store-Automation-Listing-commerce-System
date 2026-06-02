@@ -3,10 +3,11 @@ import {
   changeAdminWorkbenchPassword,
   createAdminWorkbenchAuthView,
   resetAdminWorkbenchPasswordsForTests,
+  setAdminWorkbenchInitialPassword,
   submitAdminWorkbenchAuth,
 } from './admin-workbench-auth'
 import { logoutAdminWorkbench } from '../../services/auth/admin-workbench-session'
-import { resetAdminPermissionsForTests } from '../admin-permissions/admin-permissions'
+import { authorizeAdminAccount, resetAdminPermissionsForTests } from '../admin-permissions/admin-permissions'
 
 describe('adminWorkbenchAuth', () => {
   beforeEach(() => {
@@ -48,6 +49,71 @@ describe('adminWorkbenchAuth', () => {
     })
     expect(createAdminWorkbenchAuthView()).toMatchObject({
       isLoggedIn: false,
+    })
+  })
+
+  it('sets an explicit initial password for newly authorized accounts', () => {
+    authorizeAdminAccount({
+      operatorAccount: 'admin',
+      targetAccount: 'staff-a',
+      role: 'staff',
+      permissions: ['workbenchAccess'],
+    })
+
+    expect(setAdminWorkbenchInitialPassword({
+      account: 'staff-a',
+      password: 'abc123',
+      confirmPassword: 'abc123',
+    })).toMatchObject({
+      status: 'success',
+      message: '初始密码已设置',
+    })
+    expect(submitAdminWorkbenchAuth({ account: 'staff-a', password: '123456' }).status).toBe('failed')
+    expect(submitAdminWorkbenchAuth({ account: 'staff-a', password: 'abc123' })).toMatchObject({
+      status: 'success',
+      session: {
+        account: 'staff-a',
+      },
+    })
+  })
+
+  it('does not let newly authorized accounts log in with the shared creator default password', () => {
+    authorizeAdminAccount({
+      operatorAccount: 'admin',
+      targetAccount: 'staff-a',
+      role: 'staff',
+      permissions: ['workbenchAccess'],
+    })
+
+    expect(submitAdminWorkbenchAuth({ account: 'staff-a', password: '123456' })).toMatchObject({
+      status: 'failed',
+      message: '账号或密码错误',
+    })
+  })
+
+  it('rejects unusable initial passwords before login', () => {
+    authorizeAdminAccount({
+      operatorAccount: 'admin',
+      targetAccount: 'staff-a',
+      role: 'staff',
+      permissions: ['workbenchAccess'],
+    })
+
+    expect(setAdminWorkbenchInitialPassword({
+      account: 'staff-a',
+      password: '123',
+      confirmPassword: '123',
+    })).toMatchObject({
+      status: 'failed',
+      message: '新密码至少 6 位',
+    })
+    expect(setAdminWorkbenchInitialPassword({
+      account: 'staff-a',
+      password: 'abc123',
+      confirmPassword: 'abc124',
+    })).toMatchObject({
+      status: 'failed',
+      message: '两次输入的新密码不一致',
     })
   })
 

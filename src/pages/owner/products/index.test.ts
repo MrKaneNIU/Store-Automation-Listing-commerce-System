@@ -5,50 +5,60 @@ import path from 'node:path'
 const source = readFileSync(path.resolve(__dirname, 'index.vue'), 'utf8')
 const stateSource = readFileSync(path.resolve(__dirname, 'useOwnerProductsPageState.ts'), 'utf8')
 
-describe('owner products description editing wiring', () => {
-  it('renders product description summaries and the edit entry', () => {
+describe('owner products unified editing wiring', () => {
+  it('renders product description summaries and the unified edit entry', () => {
     expect(source).toContain('{{ product.description || descriptionFallbackText }}')
-    expect(source).toContain('编辑简介')
+    expect(source).toContain('@tap="openProductEditor(product)"')
     expect(source).toContain('class="description-summary"')
   })
 
-  it('saves descriptions through the CloudBase owner products facade', () => {
+  it('saves product basics through the CloudBase owner products facade', () => {
     expect(source).toContain("import { useOwnerProductsPageState } from './useOwnerProductsPageState'")
     expect(source).not.toContain('updateCloudBaseOwnerProductDescription')
-    expect(stateSource).toContain('updateCloudBaseOwnerProductDescription')
-    expect(source).toContain('saveDescription')
+    expect(stateSource).not.toContain('updateCloudBaseOwnerProductDescription')
+    expect(stateSource).toContain('updateCloudBaseOwnerProductBasics')
+    expect(source).toContain('saveProductBasics')
+    expect(source).not.toContain('saveDescription')
     expect(source).not.toContain('mockDb')
     expect(source).not.toContain('mallRepository')
   })
 
-  it('clears the modal editing state after a successful description save', () => {
-    expect(stateSource).toContain("if (result.message === '商品简介已保存') {")
-    expect(stateSource).toContain('resetDescriptionEditor()')
-    expect(stateSource).not.toContain("if (result.message === '商品简介已保存') {\n      closeDescriptionEditor()")
+  it('refreshes product and SKU views after a successful basics save', () => {
+    expect(stateSource).toContain("if (result.message === '商品基础信息已保存') {")
+    expect(stateSource).toContain('await refreshView()')
+    expect(stateSource).toContain('await loadSkuInventory(editingProductId.value)')
+    expect(stateSource).not.toContain("if (result.message === '商品基础信息已保存') {\n      closeProductEditor()")
   })
 
   it('opens the editor with an empty draft when older product records have no description', () => {
-    expect(source).toContain("openDescriptionEditor(product.id, product.description || '')")
-    expect(stateSource).toContain("const openDescriptionEditor = (productId: string, description = '')")
-    expect(stateSource).toContain("descriptionDraft.value = description || ''")
+    expect(source).toContain('openProductEditor(product)')
+    expect(stateSource).toContain('const openProductEditor = (product: OwnerProductListItem)')
+    expect(stateSource).toContain("descriptionDraft.value = product.description || ''")
   })
 
-  it('keeps the first phase description editor limited to 120 characters', () => {
+  it('keeps the product basics description editor limited to 120 characters', () => {
     expect(source).toContain('maxlength="120"')
     expect(source).toContain('descriptionDraft.length')
     expect(source).toContain('/120')
   })
 
+  it('keeps product code read-only in the unified editor', () => {
+    expect(source).toContain('v-model="productCodeReadonly"')
+    expect(source).toContain('disabled')
+    expect(stateSource).toContain('productCodeReadonly.value = product.productCode')
+    expect(stateSource).not.toContain('productCode: productCodeReadonly')
+  })
+
   it('renders the SKU inventory workbench through CloudBase owner products facade calls', () => {
-    expect(source).toContain('规格库存')
+    expect(source).toContain('class="sku-row"')
     expect(source).not.toContain('getCloudBaseOwnerProductSkuInventoryView')
     expect(stateSource).toContain('getCloudBaseOwnerProductSkuInventoryView')
     expect(stateSource).toContain('updateCloudBaseOwnerProductSku')
     expect(stateSource).toContain('restockCloudBaseOwnerProductSkus')
     expect(stateSource).toContain('clearCloudBaseOwnerProductSkuStock')
-    expect(source).toContain('class="sku-row"')
     expect(source).not.toContain('mallRepository')
   })
+
   it('renders publish blocking reasons without writing directly to storage', () => {
     expect(source).toContain('product.publishBlockReasons')
     expect(source).toContain('class="publish-issues"')

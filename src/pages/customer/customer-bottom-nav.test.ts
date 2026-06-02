@@ -56,9 +56,10 @@ describe('customer bottom navigation matrix', () => {
     }
   })
 
-  it('routes mine to a minimal page instead of showing old placeholder toasts', () => {
+  it('routes mine to the integrated customer Mine page instead of old placeholder toasts', () => {
     expect(bottomNavConfigSource).not.toContain('CUSTOMER_MINE_PLACEHOLDER')
-    expect(mineSource).toContain('客户中心暂未开放')
+    expect(mineSource).toContain('useCustomerMinePageState')
+    expect(mineSource).toContain('Mine')
 
     for (const [name, source] of pages) {
       expect(source, name).toContain('goMine')

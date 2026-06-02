@@ -4,6 +4,7 @@ import { mockWechatAuthService } from '../../services/auth/mock-wechat-auth-serv
 import type { WechatAuthService } from '../../services/auth/wechat-auth-service'
 import { getRuntimeCloudBaseMallApiClient } from '../../services/cloudbase/runtime-mall-api-client'
 import type { CloudBaseMallApiClient } from '../../services/cloudbase/mall-api-client'
+import { formatCloudBaseFailureMessage } from '../../services/cloudbase/cloudbase-function-client'
 import { resolveProductImageFields } from '../../services/storage/product-image-url'
 import { uploadService } from '../../services/storage/runtime-upload-service'
 import type {
@@ -93,8 +94,8 @@ export const submitCloudBaseCustomerProductDetailOrder = async (params: {
   skuId: string
   quantity?: number
   authService?: WechatAuthService
-  confirmLogin: () => Promise<boolean>
-  confirmPhoneAuthorization: () => Promise<boolean>
+  confirmLogin?: () => Promise<boolean>
+  confirmPhoneAuthorization?: () => Promise<boolean>
   requestPhoneNumber?: () => Promise<string | null>
   client?: CloudBaseMallApiClient
 }): Promise<SubmitCustomerProductDetailOrderResult> => {
@@ -109,34 +110,29 @@ export const submitCloudBaseCustomerProductDetailOrder = async (params: {
     return { status: 'blocked', order: null, message: selectAvailableSkuMessage }
   }
 
-  const authService = params.authService ?? mockWechatAuthService
-  let session = authService.getCurrentSession()
-  if (!session) {
-    const shouldLogin = await params.confirmLogin()
-    if (!shouldLogin) {
-      return { status: 'canceled', order: null, message: canceledAuthMessage }
-    }
-    session = await authService.login()
-  }
-
-  if (!session.phoneNumber) {
-    const shouldAuthorizePhone = await params.confirmPhoneAuthorization()
-    if (!shouldAuthorizePhone) {
-      return { status: 'canceled', order: null, message: canceledAuthMessage }
-    }
-    const phoneNumber = params.requestPhoneNumber ? await params.requestPhoneNumber() : undefined
-    const authorizedSession = await authService.authorizePhoneNumber(phoneNumber ?? undefined)
-    if (!authorizedSession) {
-      return { status: 'canceled', order: null, message: canceledAuthMessage }
-    }
-    session = authorizedSession
-  }
-
-  if (!session?.phoneNumber) {
-    return { status: 'canceled', order: null, message: canceledAuthMessage }
-  }
-
   try {
+    const authService = params.authService ?? mockWechatAuthService
+    let session = authService.getCurrentSession()
+    if (!session) {
+      session = await authService.login()
+    }
+
+    if (!session.phoneNumber) {
+      const phoneNumber = params.requestPhoneNumber ? await params.requestPhoneNumber() : undefined
+      if (!phoneNumber?.trim()) {
+        return { status: 'canceled', order: null, message: canceledAuthMessage }
+      }
+      const authorizedSession = await authService.authorizePhoneNumber(phoneNumber.trim())
+      if (!authorizedSession) {
+        return { status: 'canceled', order: null, message: canceledAuthMessage }
+      }
+      session = authorizedSession
+    }
+
+    if (!session?.phoneNumber) {
+      return { status: 'canceled', order: null, message: canceledAuthMessage }
+    }
+
     const { order } = await client.createCustomerOrder({
       productId: view.product.id,
       skuId: sku.id,
@@ -153,7 +149,7 @@ export const submitCloudBaseCustomerProductDetailOrder = async (params: {
     return {
       status: 'failed',
       order: null,
-      message: error instanceof Error ? error.message : '订单提交失败',
+      message: formatCloudBaseFailureMessage(error, '订单提交失败'),
     }
   }
 }

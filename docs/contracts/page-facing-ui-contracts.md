@@ -422,6 +422,240 @@ Later module boundaries:
 - Module E may run full verification and manual acceptance, but remains out of
   scope for Module A.
 
+## Customer Mine
+
+Governing PRD:
+
+- `docs/prd/2026-05-27-customer-mine-module-prd.md`
+
+Planned feature module:
+
+- `src/features/customer-mine/customer-mine.ts`
+
+Planned CloudBase facade:
+
+- `src/features/cloudbase-mall/customer-mine.ts`
+
+Planned UI entry point:
+
+- Existing `src/pages/customer/mine/index.vue`.
+
+Snapshot action:
+
+- `getCustomerMineSnapshot`
+
+Snapshot key:
+
+- `customer-mine:{customerId}:v1`
+
+Customer identity:
+
+- Required for private Mine data.
+- The server must derive customer identity from verified CloudBase identity or
+  a verified customer session.
+- Pages and clients must not pass openid, customerId, or phone number as
+  trusted ownership fields for Mine reads.
+
+Phone authorization:
+
+- Not required to enter Mine.
+- Not required to load `getCustomerMineSnapshot`.
+- Displayed as customer status only.
+- Any future phone-bind command under this PRD must reuse the existing
+  CloudBase WeChat phone-code path and must not accept raw phone numbers from
+  the page.
+
+UI may read from the Mine ViewModel:
+
+- `identity`
+- `identity.isSignedIn`
+- `identity.displayName`
+- `identity.authSource`: `'wechat'`
+- `identity.openidMasked`: display-safe identifier only.
+- `phone`
+- `phone.isBound`
+- `phone.maskedPhoneNumber`
+- `phone.statusLabel`
+- `recentOrders`
+- `recentOrders[].orderId`
+- `recentOrders[].status`
+- `recentOrders[].statusLabel`
+- `recentOrders[].totalAmount`
+- `recentOrders[].itemCount`
+- `recentOrders[].primaryProductName`
+- `recentOrders[].createdAt`
+- `recentOrders[].updatedAt`
+- `recentOrderTotalCount`
+- `utilities`
+- `utilities[].key`: `'favorites' | 'shoppingBag'`
+- `utilities[].label`
+- `utilities[].route`
+- `utilities[].count`
+- `utilities[].isEnabled`
+- `loadingState`: `'idle' | 'loading' | 'refreshing' | 'failed'`
+- `failureMessage`
+- `lastUpdatedAt`
+
+UI may pass to Mine commands:
+
+- `retry`: user intent to reload the Mine snapshot only.
+- Navigation intent to existing customer utility routes for favorites and
+  shopping bag.
+- No order id, SKU id, merchant id, raw phone number, customerId, openid, or
+  ownership field is accepted as a trusted Mine command parameter.
+
+Page-facing commands:
+
+- `loadCustomerMineSnapshot()`
+- `retryCustomerMineSnapshot()`
+
+Mine utility entries:
+
+- Favorites:
+  - `key`: `favorites`
+  - `label`: customer-facing Favorites label.
+  - `route`: `/pages/customer/favorites/index`
+  - `count`: favorite product total count if available in the Mine snapshot,
+    otherwise `0`.
+  - `isEnabled`: `true`
+- Shopping bag:
+  - `key`: `shoppingBag`
+  - `label`: customer-facing Shopping bag label.
+  - `route`: `/pages/customer/shopping-bag/index`
+  - `count`: shopping-bag total quantity if available in the Mine snapshot,
+    otherwise `0`.
+  - `isEnabled`: `true`
+
+Recent order summary contract:
+
+- Mine may display summaries only.
+- Recent order summaries must be filtered by resolved server-side `customerId`.
+- Summaries sort newest first and are limited to 3 recent orders.
+- Required summary fields are `orderId`, `status`, `statusLabel`,
+  `totalAmount`, `itemCount`, `primaryProductName`, `createdAt`, and
+  `updatedAt`.
+- Summaries must not expose merchant-only fields or enable order state
+  transitions.
+
+Write-after-refresh rules:
+
+- Module A defines no write command.
+- Future phone-bind under this PRD may invalidate only
+  `customer-mine:{customerId}:v1`.
+- Favorites writes keep their existing `customer-favorites:{customerId}:v1`
+  and `customer-product-detail:{productId}:v1` invalidation rules.
+- Shopping-bag writes keep their existing
+  `customer-shopping-bag:{customerId}:v1` invalidation rule.
+- Failed writes must not dirty or replace the last usable Mine snapshot.
+
+UI must not:
+
+- Use the customer Mine page as a merchant workbench, admin, owner, or staff
+  entry point.
+- Add merchant/admin/staff/workbench routes, cards, tabs, shortcuts, or
+  navigation from Mine.
+- Redesign bottom navigation or add new global entry points for Module A.
+- Treat favorite rows as shopping-bag rows.
+- Treat shopping-bag rows as orders.
+- Create orders directly from Mine.
+- Confirm, cancel, pay, refund, ship, track logistics, open customer-service
+  workflows, or apply coupons.
+- Reserve, decrement, restore, or clear stock.
+- Decide product publish eligibility, SKU availability, order transition
+  eligibility, or checkout eligibility in the page.
+- Read or write repositories, CloudBase collections, `mockDb`, order rows,
+  stock rows, auth rows, or hidden global state from pages.
+- Accept raw phone numbers from the page for phone binding.
+
+Target snapshot shape:
+
+```ts
+type CustomerMineSnapshot = {
+  customerId: string
+  identity: {
+    isSignedIn: boolean
+    displayName: string
+    authSource: 'wechat'
+    openidMasked: string
+  }
+  phone: {
+    isBound: boolean
+    maskedPhoneNumber: string
+    statusLabel: string
+  }
+  recentOrders: CustomerMineRecentOrderSummary[]
+  recentOrderTotalCount: number
+  utilities: CustomerMineUtilityEntry[]
+  serverTime: string
+}
+
+type CustomerMineRecentOrderSummary = {
+  orderId: string
+  status: string
+  statusLabel: string
+  totalAmount: number
+  itemCount: number
+  primaryProductName: string
+  createdAt: string
+  updatedAt: string
+}
+
+type CustomerMineUtilityEntry = {
+  key: 'favorites' | 'shoppingBag'
+  label: string
+  route: string
+  count: number
+  isEnabled: boolean
+}
+```
+
+Performance and loading contract:
+
+- First-screen remote business budget is O(1): one `getCustomerMineSnapshot`
+  action from the page perspective.
+- Retry must reload the Mine snapshot only.
+- Failure must not replace the last usable Mine snapshot.
+- Recent-order image or product-data failures, if any are introduced in later
+  modules, must not hide order status, total, item count, or created time.
+
+Test protection to add during later implementation modules:
+
+- CloudFunction core tests: customer scoping, missing identity behavior, phone
+  status, recent order filtering, no cross-customer reads, utility counts, and
+  no order/inventory mutation.
+- CloudBase client tests: `getCustomerMineSnapshot` action mapping and response
+  shape.
+- Facade tests: identity labels, phone status, recent order summaries, utility
+  entries, empty states, loading, failure, and retry behavior.
+- Page-state tests: request dedupe, cached return entry, unauth failure, phone
+  bound/unbound display, recent-order empty state, retry scope, and image
+  failure behavior if images are displayed.
+- Existing order tests remain the authority for merchant confirm/cancel, order
+  state transitions, stock reservation, and stock restoration.
+- Module A itself requires documentation diff review and targeted contract
+  inspection only. Module B, C, D, and E tests remain follow-up work.
+
+Later module boundaries:
+
+- Module B may touch `cloudfunctions/mallApi/mall-api-core.js`,
+  `cloudfunctions/mallApi/mall-api-core.test.js`,
+  `src/services/cloudbase/mall-api-client.ts`, and
+  `src/services/cloudbase/mall-api-client.test.ts` for the customer-scoped
+  snapshot action only.
+- Module C may touch `src/features/customer-mine/customer-mine.ts`,
+  `src/features/customer-mine/customer-mine.test.ts`,
+  `src/features/cloudbase-mall/customer-mine.ts`, and
+  `src/features/cloudbase-mall/customer-mine.test.ts` for the page-facing
+  facade and ViewModel only.
+- Module D may touch `src/pages/customer/mine/index.vue`,
+  `src/pages/customer/mine/index.test.ts`,
+  `src/pages/customer/mine/useCustomerMinePageState.ts`, and
+  `src/pages/customer/mine/useCustomerMinePageState.test.ts`; existing customer
+  bottom-nav files may be touched only to preserve already reserved customer
+  navigation behavior.
+- Module E may touch `.ai/CUSTOMER_MINE_MODULE_E_ACCEPTANCE.md` and the active
+  workflow report files for verification evidence only.
+
 ## Customer Product List
 
 Feature module:

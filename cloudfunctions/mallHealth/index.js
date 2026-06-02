@@ -1,4 +1,4 @@
-const REQUIRED_COLLECTIONS = 14
+const REQUIRED_COLLECTIONS = 16
 
 exports.main = async () => ({
   success: true,

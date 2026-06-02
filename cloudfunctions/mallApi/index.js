@@ -72,18 +72,39 @@ const getStore = () => {
   return cachedStore
 }
 
+const normalizeRuntimeIdentityContext = (context) => {
+  if (!context || typeof context !== 'object') return null
+  const openid = context.WX_OPENID || context.OPENID || context.openid || context.openId
+  if (!openid) return null
+  return {
+    openid,
+    appid: context.WX_APPID || context.APPID || context.appid || context.appId,
+    unionid: context.WX_UNIONID || context.UNIONID || context.unionid || context.unionId,
+    roles: ['customer'],
+  }
+}
+
+const readRuntimeIdentityFromCloudbase = (cloudbase) => {
+  if (!cloudbase || typeof cloudbase !== 'object') return null
+
+  for (const readerName of ['getCloudbaseContext', 'getWXContext']) {
+    const readContext = cloudbase[readerName]
+    if (typeof readContext !== 'function') continue
+    try {
+      const identity = normalizeRuntimeIdentityContext(readContext())
+      if (identity) return identity
+    } catch (_error) {
+      // Try the next runtime context reader before treating the call as anonymous.
+    }
+  }
+
+  return null
+}
+
 const readRuntimeIdentity = () => {
   try {
     const cloudbase = require('@cloudbase/node-sdk')
-    if (typeof cloudbase.getWXContext !== 'function') return null
-    const context = cloudbase.getWXContext()
-    if (!context || !context.OPENID) return null
-    return {
-      openid: context.OPENID,
-      appid: context.APPID,
-      unionid: context.UNIONID,
-      roles: ['customer'],
-    }
+    return readRuntimeIdentityFromCloudbase(cloudbase)
   } catch (_error) {
     return null
   }
@@ -91,6 +112,12 @@ const readRuntimeIdentity = () => {
 
 const shouldAllowTestIdentity = () =>
   process.env.MALL_API_ALLOW_TEST_IDENTITY === '1'
+
+const resolveTrustedIdentity = (event, runtimeIdentity, allowTestIdentity) => {
+  if (runtimeIdentity) return runtimeIdentity
+  if (allowTestIdentity) return event.identity || null
+  return null
+}
 
 let cachedAccessToken = null
 
@@ -166,10 +193,13 @@ const exchangePhoneCode = async (phoneCode) => {
 }
 
 exports.main = async (event = {}) => {
-  const identity = shouldAllowTestIdentity() ? event.identity || readRuntimeIdentity() : readRuntimeIdentity()
-  return createMallApiHandler(getStore(), { exchangePhoneCode, resolveImageUrl })({ ...event, ...(identity ? { identity } : {}) })
+  const identity = resolveTrustedIdentity(event, readRuntimeIdentity(), shouldAllowTestIdentity())
+  const { identity: _clientIdentity, ...trustedEvent } = event
+  return createMallApiHandler(getStore(), { exchangePhoneCode, resolveImageUrl })({ ...trustedEvent, ...(identity ? { identity } : {}) })
 }
 exports.__private__ = {
   createMallApiHandler,
   createMemoryDocumentStore,
+  readRuntimeIdentityFromCloudbase,
+  resolveTrustedIdentity,
 }

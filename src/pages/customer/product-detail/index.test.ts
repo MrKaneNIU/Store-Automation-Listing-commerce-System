@@ -76,8 +76,20 @@ describe('customer product detail real checkout authorization wiring', () => {
 
   it('requests a WeChat phone code before submitting the order', () => {
     expect(source).toContain('open-type="getPhoneNumber"')
-    expect(source).toContain('@getphonenumber="handlePhoneNumberAuthorization"')
-    expect(source).toContain('requestPhoneNumber: requestPhoneCode')
+    expect(source).toContain('@getphonenumber="submitOrderWithPhoneAuthorization"')
+    expect(source).toContain('requestPhoneNumber: () => Promise.resolve(phoneCode ?? null)')
+    expect(source).not.toContain('confirmLogin')
+    expect(source).not.toContain('confirmPhoneAuthorization')
+    expect(source).not.toContain('authPrompt')
+    expect(source).not.toContain('phoneCodeRequest')
+  })
+
+  it('uses direct order submit only after the customer session is phone-bound', () => {
+    expect(source).toContain('const hasBoundCustomerPhone = ref(false)')
+    expect(source).toContain('v-if="hasBoundCustomerPhone"')
+    expect(source).toContain('@tap="submitBoundOrder"')
+    expect(source).toContain('v-else')
+    expect(source).toContain('open-type="getPhoneNumber"')
   })
 
   it('lets sold-out SKU pills stay tappable so selected spec and stock labels can update', () => {
@@ -104,7 +116,7 @@ describe('customer product detail real checkout authorization wiring', () => {
     expect(source).toContain('const addToShoppingBag = async () => {')
     expect(source).toContain('@tap="addToShoppingBag"')
     expect(source).toContain('submitCloudBaseCustomerProductDetailOrder')
-    expect(source).toContain('confirmPhoneAuthorization')
+    expect(source).toContain('submitOrderWithPhoneAuthorization')
   })
 
   it('does not route favorites through checkout, stock, or shopping-bag commands', () => {
@@ -114,5 +126,14 @@ describe('customer product detail real checkout authorization wiring', () => {
     expect(toggleSource).not.toContain('addCloudBaseCustomerShoppingBagItem')
     expect(toggleSource).not.toContain('selectedStockLabel')
     expect(toggleSource).not.toContain('canSubmitOrder')
+  })
+
+  it('refreshes the detail gallery once after a product image load error', () => {
+    expect(source).toContain('@error="handleProductImageError"')
+    expect(source).toContain('hasRetriedProductImage')
+    expect(source).toContain('const handleProductImageError = () =>')
+    expect(source).toContain('void refreshView({ showLoading: false })')
+    expect(source).toContain('viewModel.product.imageStatus')
+    expect(source).toContain('viewModel.product.imageFallbackReason')
   })
 })

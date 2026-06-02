@@ -47,8 +47,18 @@
       <scroll-view class="detail-gallery" scroll-x enable-flex>
         <view class="gallery-inner">
           <view class="gallery-card">
-            <image v-if="viewModel.product.mainImageUrl" class="image" :src="viewModel.product.mainImageUrl" mode="aspectFill" />
-            <view v-else class="fashion-visual" :class="primaryVisualClass" />
+            <image
+              v-if="viewModel.product.mainImageUrl"
+              class="image"
+              :src="viewModel.product.mainImageUrl"
+              mode="aspectFill"
+              @error="handleProductImageError"
+            />
+            <view v-else class="fashion-visual" :class="primaryVisualClass">
+              <text v-if="viewModel.product.imageStatus !== 'ready' || viewModel.product.imageFallbackReason" class="image-fallback-label">
+                {{ viewModel.product.imageFallbackReason || '图片暂时无法显示' }}
+              </text>
+            </view>
           </view>
           <view class="gallery-card">
             <view class="fashion-visual runway" />
@@ -135,49 +145,29 @@
         >
           <text>{{ isAddingToBag ? '加入中' : '加入购物袋' }}</text>
         </button>
-        <button class="primary-button" :class="{ disabledButton: !viewModel.canSubmitOrder }" @tap="submitOrder">
-          <text>微信手机号下单</text>
+        <button
+          v-if="hasBoundCustomerPhone"
+          class="primary-button"
+          :class="{ disabledButton: !viewModel.canSubmitOrder }"
+          :disabled="!viewModel.canSubmitOrder"
+          @tap="submitBoundOrder"
+        >
+          <text>立即下单</text>
+          <text class="button-mark">↗</text>
+        </button>
+        <button
+          v-else
+          class="primary-button"
+          :class="{ disabledButton: !viewModel.canSubmitOrder }"
+          :disabled="!viewModel.canSubmitOrder"
+          open-type="getPhoneNumber"
+          @getphonenumber="submitOrderWithPhoneAuthorization"
+        >
+          <text>立即下单</text>
           <text class="button-mark">↗</text>
         </button>
       </view>
 
-      <view v-if="authPrompt" class="modal-layer">
-        <view class="modal-sheet">
-          <button class="modal-close" aria-label="关闭授权弹窗" @tap="resolveAuthPrompt(false)">
-            <text>×</text>
-          </button>
-          <text class="modal-kicker">ORDER ACCESS</text>
-          <text class="modal-title">下单前需要授权</text>
-          <text class="modal-copy">{{ authPrompt.content }}</text>
-          <view class="modal-actions">
-            <button class="secondary-action" @tap="resolveAuthPrompt(false)">暂不授权</button>
-            <button class="primary-button compact" @tap="resolveAuthPrompt(true)">
-              <text>授权</text>
-            </button>
-          </view>
-        </view>
-      </view>
-
-      <view v-if="phoneCodeRequest" class="modal-layer">
-        <view class="modal-sheet">
-          <button class="modal-close" aria-label="关闭手机号授权弹窗" @tap="resolvePhoneCode(null)">
-            <text>×</text>
-          </button>
-          <text class="modal-kicker">PHONE ACCESS</text>
-          <text class="modal-title">授权手机号</text>
-          <text class="modal-copy">微信会返回一次性手机号授权 code，后端会用它换取真实手机号并创建订单。</text>
-          <view class="modal-actions">
-            <button class="secondary-action" @tap="resolvePhoneCode(null)">暂不授权</button>
-            <button
-              class="primary-button compact"
-              open-type="getPhoneNumber"
-              @getphonenumber="handlePhoneNumberAuthorization"
-            >
-              <text>微信授权</text>
-            </button>
-          </view>
-        </view>
-      </view>
     </view>
 
     <view v-else class="empty-state">
@@ -223,15 +213,6 @@ import {
 import { addCloudBaseCustomerShoppingBagItem } from '../../../features/cloudbase-mall/customer-shopping-bag'
 import { createCloudBaseWechatAuthService } from '../../../services/auth/cloudbase-wechat-auth-service'
 
-type AuthPrompt = {
-  content: string
-  resolve: (value: boolean) => void
-}
-
-type PhoneCodeRequest = {
-  resolve: (value: string | null) => void
-}
-
 type PhoneNumberAuthorizationEvent = {
   detail?: {
     code?: string
@@ -243,12 +224,12 @@ const productId = ref('')
 const selectedSkuId = ref('')
 const message = ref('')
 const favoriteMessage = ref('')
-const authPrompt = ref<AuthPrompt | null>(null)
-const phoneCodeRequest = ref<PhoneCodeRequest | null>(null)
 const isDetailLoading = ref(true)
 const isBackNavigating = ref(false)
 const isAddingToBag = ref(false)
 const isFavoriteBusy = ref(false)
+const hasRetriedProductImage = ref(false)
+const hasBoundCustomerPhone = ref(false)
 const customerAuthService = createCloudBaseWechatAuthService()
 const viewModel = ref<CustomerProductDetailViewModel>({
   product: null,
@@ -326,6 +307,17 @@ const refreshView = async (options: RefreshOptions = { showLoading: true }) => {
   }
 }
 
+const handleProductImageError = () => {
+  if (hasRetriedProductImage.value) {
+    message.value = '商品图片暂时无法显示，请检查图片域名或稍后重试'
+    return
+  }
+
+  hasRetriedProductImage.value = true
+  message.value = '商品图片加载失败，已尝试刷新图片链接'
+  void refreshView({ showLoading: false })
+}
+
 const keepPreviousFavoritesOnFailure = (
   resultView: CustomerFavoriteProductsView,
   previousView: CustomerFavoriteProductsView,
@@ -350,6 +342,7 @@ const loadFavoriteState = async () => {
 
 const loadInitialView = async () => {
   await refreshView()
+  syncPhoneBindingState()
   void loadFavoriteState()
 }
 
@@ -389,37 +382,11 @@ const selectSku = (skuId: string) => {
   viewModel.value = result.view
 }
 
-const confirmModal = (content: string) =>
-  new Promise<boolean>((resolve) => {
-    authPrompt.value = {
-      content,
-      resolve,
-    }
-  })
-
-const resolveAuthPrompt = (value: boolean) => {
-  const prompt = authPrompt.value
-  authPrompt.value = null
-  prompt?.resolve(value)
+const syncPhoneBindingState = () => {
+  hasBoundCustomerPhone.value = Boolean(customerAuthService.getCurrentSession()?.phoneNumber)
 }
 
-const requestPhoneCode = () =>
-  new Promise<string | null>((resolve) => {
-    phoneCodeRequest.value = { resolve }
-  })
-
-const resolvePhoneCode = (code: string | null) => {
-  const request = phoneCodeRequest.value
-  phoneCodeRequest.value = null
-  request?.resolve(code)
-}
-
-const handlePhoneNumberAuthorization = (event: PhoneNumberAuthorizationEvent) => {
-  const code = event.detail?.code
-  resolvePhoneCode(code && code.trim() ? code : null)
-}
-
-const submitOrder = async () => {
+const submitOrder = async (phoneCode?: string | null) => {
   if (!viewModel.value.canSubmitOrder) {
     message.value = '请选择有库存的规格'
     return
@@ -430,12 +397,20 @@ const submitOrder = async () => {
     skuId: selectedSkuId.value,
     quantity: 1,
     authService: customerAuthService,
-    confirmLogin: () => confirmModal('浏览商品不需要登录。只有你确认下单时，真实小程序才会触发微信快捷登录。'),
-    confirmPhoneAuthorization: () => confirmModal('需要授权微信绑定手机号，用于商家确认订单。'),
-    requestPhoneNumber: requestPhoneCode,
+    requestPhoneNumber: () => Promise.resolve(phoneCode ?? null),
   })
   message.value = result.message
+  syncPhoneBindingState()
   await refreshView({ showLoading: false })
+}
+
+const submitBoundOrder = () => {
+  void submitOrder()
+}
+
+const submitOrderWithPhoneAuthorization = (event: PhoneNumberAuthorizationEvent) => {
+  const phoneCode = event.detail?.code?.trim() || null
+  void submitOrder(phoneCode)
 }
 
 const addToShoppingBag = async () => {
@@ -683,6 +658,21 @@ const showVisualOnlyToast = (title: string) => {
 .fashion-visual {
   width: 100%;
   height: 100%;
+}
+
+.image-fallback-label {
+  position: absolute;
+  right: 24rpx;
+  bottom: 24rpx;
+  left: 24rpx;
+  box-sizing: border-box;
+  padding: 14rpx 16rpx;
+  border-radius: 14rpx;
+  background: rgba(255, 255, 255, 0.9);
+  color: #5f5f5f;
+  font-size: 24rpx;
+  line-height: 1.3;
+  text-align: center;
 }
 
 .fashion-visual {

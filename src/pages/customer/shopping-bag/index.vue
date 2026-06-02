@@ -28,6 +28,12 @@
       <view class="skeleton-row narrow shimmer" />
     </view>
 
+    <view v-else-if="viewModel.loadingState === 'failed' && viewModel.items.length === 0" class="empty-state failure">
+      <text class="empty-title">{{ viewModel.failureMessage }}</text>
+      <text class="empty-copy">购物袋暂时无法同步，重试不会影响收藏、库存或订单。</text>
+      <button class="empty-action" hover-class="press-feedback" @tap="reload">重试</button>
+    </view>
+
     <view v-else-if="viewModel.items.length === 0" class="empty-state">
       <text class="empty-title">{{ viewModel.emptyMessage }}</text>
       <text class="empty-copy">从商品详情加入购物袋后，会在这里继续调整规格和数量。</text>
@@ -214,7 +220,7 @@ onShow(() => {
 })
 
 const reload = () => {
-  void shoppingBagState.loadSnapshot({ showLoading: true })
+  void shoppingBagState.loadSnapshot({ showLoading: true, source: 'retry' })
 }
 
 const increaseQuantity = (itemId: string, quantity: number) => {
@@ -480,6 +486,10 @@ const goMine = () => {
   border-radius: 32rpx;
   background: #ffffff;
   box-shadow: 0 18rpx 44rpx rgba(5, 5, 5, 0.05);
+}
+
+.empty-state.failure {
+  background: #fff3f1;
 }
 
 .empty-title {

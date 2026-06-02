@@ -8,6 +8,18 @@ const productImageUrlCacheTtlMs = 45 * 60 * 1000
 export type ProductImageFields = {
   mainImageUrl: string
   imageUrls: string[]
+  productName?: string
+}
+
+export type ProductImageStatus = 'ready' | 'missing' | 'refresh_failed'
+
+export type ProductImageViewModel = {
+  mainImageUrl: string
+  thumbnailUrl: string
+  durableMainImageUrl: string
+  imageStatus: ProductImageStatus
+  imageFallbackReason?: string
+  imageAlt: string
 }
 
 type ProductImageUrlCacheEntry = {
@@ -25,6 +37,15 @@ type ProductImageUrlResolveOptions = {
 const defaultProductImageUrlCache = new Map<string, ProductImageUrlCacheEntry>()
 
 export const createProductImageUrlCache = (): ProductImageUrlCache => new Map<string, ProductImageUrlCacheEntry>()
+
+export const clearProductImageUrlCache = (imageUrl?: string): void => {
+  if (imageUrl) {
+    defaultProductImageUrlCache.delete(imageUrl.trim())
+    return
+  }
+
+  defaultProductImageUrlCache.clear()
+}
 
 export const isCloudFileId = (imageUrl: string): boolean =>
   imageUrl.trim().startsWith(cloudFileIdPrefix)
@@ -97,20 +118,78 @@ export const resolveProductImageUrls = async (
   })
 }
 
+const hasImageSource = (imageUrls: string[]) =>
+  imageUrls.some((imageUrl) => Boolean(imageUrl.trim()))
+
+const createProductImageView = (
+  product: ProductImageFields,
+  resolvedMainImageUrl: string,
+): ProductImageViewModel => {
+  const durableMainImageUrl = product.mainImageUrl.trim()
+  const imageAlt = product.productName?.trim() || '商品图片'
+
+  if (resolvedMainImageUrl) {
+    return {
+      mainImageUrl: resolvedMainImageUrl,
+      thumbnailUrl: resolvedMainImageUrl,
+      durableMainImageUrl,
+      imageStatus: 'ready',
+      imageAlt,
+    }
+  }
+
+  if (!hasImageSource([product.mainImageUrl, ...product.imageUrls])) {
+    return {
+      mainImageUrl: '',
+      thumbnailUrl: '',
+      durableMainImageUrl,
+      imageStatus: 'missing',
+      imageFallbackReason: '未上传商品图片',
+      imageAlt,
+    }
+  }
+
+  return {
+    mainImageUrl: '',
+    thumbnailUrl: '',
+    durableMainImageUrl,
+    imageStatus: 'refresh_failed',
+    imageFallbackReason: '图片链接已过期，请刷新图片链接',
+    imageAlt,
+  }
+}
+
+export const resolveProductImageView = async <TProduct extends ProductImageFields>(
+  product: TProduct,
+  uploadService: Pick<UploadService, 'refreshAssetUrls'>,
+  options: ProductImageUrlResolveOptions = {},
+): Promise<ProductImageViewModel> => {
+  const [mainImageUrl] = await resolveProductImageUrls([product.mainImageUrl], uploadService, options)
+  return createProductImageView(product, mainImageUrl ?? '')
+}
+
+export const createStaticProductImageView = <TProduct extends ProductImageFields>(
+  product: TProduct,
+): ProductImageViewModel => {
+  const mainImageUrl = isRenderableProductImageUrl(product.mainImageUrl) ? product.mainImageUrl.trim() : ''
+  return createProductImageView(product, mainImageUrl)
+}
+
 export const resolveProductImageFields = async <TProduct extends ProductImageFields>(
   product: TProduct,
   uploadService: Pick<UploadService, 'refreshAssetUrls'>,
   options: ProductImageUrlResolveOptions = {},
-): Promise<TProduct> => {
+): Promise<TProduct & ProductImageViewModel> => {
   const [mainImageUrl, ...imageUrls] = await resolveProductImageUrls(
     [product.mainImageUrl, ...product.imageUrls],
     uploadService,
     options,
   )
+  const imageView = createProductImageView(product, mainImageUrl ?? '')
 
   return {
     ...product,
-    mainImageUrl,
+    ...imageView,
     imageUrls: imageUrls.filter(Boolean),
   }
 }

@@ -21,7 +21,17 @@ describe('owner account management page contract', () => {
 
     expect(source).not.toContain('class="hero"')
     expect(source).not.toContain('ACCOUNT ACCESS')
-    expect(source).not.toContain('注册账号与修改密码分开处理')
+  })
+
+  it('requires explicit initial password and confirmation when registering accounts', () => {
+    const source = accountManagementPageSource()
+
+    expect(source).toContain('registerPassword')
+    expect(source).toContain('registerConfirmPassword')
+    expect(source).toContain('初始密码')
+    expect(source).toContain('确认初始密码')
+    expect(source).toContain('setAdminWorkbenchInitialPassword')
+    expect(source).not.toContain('初始密码为 123456')
   })
 
   it('requires an account id before changing a password', () => {
@@ -39,18 +49,22 @@ describe('owner account management page contract', () => {
   it('requires login again directly after a successful password change', () => {
     const source = accountManagementPageSource()
 
-    expect(source).toContain("relaunchTo(routes.adminLogin)")
-    expect(source).not.toContain("redirectTo(routes.ownerDashboard)")
+    expect(source).toContain('relaunchTo(routes.adminLogin)')
+    expect(source).not.toContain('redirectTo(routes.ownerDashboard)')
   })
 
   it('clears sensitive password fields whenever the page is shown', () => {
     const source = accountManagementPageSource()
 
     expect(source).toContain('const clearPasswordFields = () =>')
+    expect(source).toContain('const clearRegisterFields = () =>')
     expect(source).toContain('clearPasswordFields()')
+    expect(source).toContain('clearRegisterFields()')
     expect(source).toContain('passwordAccountId.value =')
     expect(source).toContain('oldPassword.value =')
     expect(source).toContain('newPassword.value =')
     expect(source).toContain('confirmPassword.value =')
+    expect(source).toContain('registerPassword.value =')
+    expect(source).toContain('registerConfirmPassword.value =')
   })
 })

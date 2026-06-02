@@ -15,8 +15,7 @@ describe('customer favorites page UI integration', () => {
   })
 
   it('uses only the Module C page-facing favorites facade and ViewModel', () => {
-    expect(source).toContain("from '../../../features/cloudbase-mall/customer-favorites'")
-    expect(source).toContain("from '../../../features/customer-favorites/customer-favorites'")
+    expect(source).toContain("from './useCustomerFavoritesPageState'")
     expect(source).not.toContain('services/repositories')
     expect(source).not.toContain('mall-api-client')
     expect(source).not.toContain('collection(')
@@ -35,23 +34,28 @@ describe('customer favorites page UI integration', () => {
   })
 
   it('removes favorites through the favorites remove command without SKU or checkout wiring', () => {
-    expect(source).toContain('removeCloudBaseCustomerFavoriteProduct(productId')
-    expect(source).not.toContain('skuId')
-    expect(source).not.toContain('submitOrder')
-    expect(source).not.toContain('checkout')
-    expect(source).not.toContain('stock')
-    expect(source).not.toContain('getPhoneNumber')
+    const pageStateSource = readFileSync(path.resolve(__dirname, 'useCustomerFavoritesPageState.ts'), 'utf8')
+    const combinedSource = `${source}\n${pageStateSource}`
+
+    expect(source).toContain('removeFavorite(item.productId)')
+    expect(pageStateSource).toContain('removeCloudBaseCustomerFavoriteProduct(productId')
+    expect(combinedSource).not.toContain('skuId')
+    expect(combinedSource).not.toContain('submitOrder')
+    expect(combinedSource).not.toContain('checkout')
+    expect(combinedSource).not.toContain('stock')
+    expect(combinedSource).not.toContain('getPhoneNumber')
   })
 
   it('keeps previous favorite cards visible when refresh or retry fails', () => {
-    expect(source).toContain('const keepPreviousCardsOnFailure = (')
-    expect(source).toContain("nextView.loadingState === 'failed' && previousView.items.length > 0")
-    expect(source).toContain('...previousView')
-    expect(source).toContain("loadingState: 'failed'")
-    expect(source).toContain('failureMessage: nextView.failureMessage')
-    expect(source).toContain('const previousView = viewModel.value')
-    expect(source).toContain('viewModel.value = keepPreviousCardsOnFailure(nextView, previousView)')
-    expect(source).toContain('viewModel.value = keepPreviousCardsOnFailure(view, previousView)')
+    const pageStateSource = readFileSync(path.resolve(__dirname, 'useCustomerFavoritesPageState.ts'), 'utf8')
+
+    expect(pageStateSource).toContain('const keepPreviousCardsOnFailure = (')
+    expect(pageStateSource).toContain("nextView.loadingState === 'failed' && previousView.items.length > 0")
+    expect(pageStateSource).toContain('...previousView')
+    expect(pageStateSource).toContain("loadingState: 'failed'")
+    expect(pageStateSource).toContain('failureMessage: nextView.failureMessage')
+    expect(pageStateSource).toContain('const previousView = viewModel.value')
+    expect(pageStateSource).toContain('viewModel.value = keepPreviousCardsOnFailure(nextView, previousView)')
     expect(source).toContain('viewModel.loadingState === \'failed\'')
     expect(source).toContain('@tap="reload"')
   })
@@ -71,5 +75,16 @@ describe('customer favorites page UI integration', () => {
     expect(source).toContain('shouldIgnoreCustomerBottomNavTap')
     expect(source).toContain('class="tab active"')
     expect(source).toContain(':disabled="Boolean(navigatingRoute)"')
+  })
+
+  it('deduplicates and short-caches favorites snapshot loads', () => {
+    const pageStateSource = readFileSync(path.resolve(__dirname, 'useCustomerFavoritesPageState.ts'), 'utf8')
+
+    expect(pageStateSource).toContain('let pendingSnapshot: Promise<void> | null = null')
+    expect(pageStateSource).toContain('if (pendingSnapshot)')
+    expect(pageStateSource).toContain('cacheTtlMs: 3000')
+    expect(pageStateSource).toContain('deps.now() - lastLoadedAt < deps.cacheTtlMs')
+    expect(pageStateSource).toContain('hasLoadedSnapshot = true')
+    expect(pageStateSource).toContain('lastLoadedAt = deps.now()')
   })
 })

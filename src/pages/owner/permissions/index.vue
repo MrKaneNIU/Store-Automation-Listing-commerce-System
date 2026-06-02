@@ -76,7 +76,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { redirectTo } from '../../../app/navigation'
+import { navigateTo, redirectTo } from '../../../app/navigation'
 import { routes, type AppRoute } from '../../../app/routes'
 import { ensureAdminWorkbenchSession } from '../../../features/admin-workbench-auth/admin-workbench-guard'
 import { getAdminWorkbenchSession } from '../../../services/auth/admin-workbench-session'
@@ -123,10 +123,23 @@ const authorizeAccount = () => {
   if (!session) {
     return
   }
+  const nextTargetAccount = targetAccount.value.trim()
+  const existingAccount = viewModel.value.accounts.find((account) => account.account === nextTargetAccount)
+
+  if (!existingAccount) {
+    message.value = '请先在账号管理中注册账号并设置初始密码'
+    navigatingRoute.value = routes.ownerAccountManagement
+    navigateTo(routes.ownerAccountManagement, {
+      onComplete: () => {
+        navigatingRoute.value = ''
+      },
+    })
+    return
+  }
 
   const result = authorizeAdminAccount({
     operatorAccount: session.account,
-    targetAccount: targetAccount.value.trim(),
+    targetAccount: nextTargetAccount,
     role: selectedRole.value,
     permissions: selectedScopes.value,
   })

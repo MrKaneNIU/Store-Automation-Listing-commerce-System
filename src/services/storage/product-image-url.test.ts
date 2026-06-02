@@ -5,6 +5,7 @@ import {
   isCloudFileId,
   isRenderableProductImageUrl,
   isSignedCloudBaseTempUrl,
+  resolveProductImageView,
   resolveProductImageFields,
   resolveProductImageUrls,
   resolveProductImageUrl,
@@ -36,6 +37,26 @@ describe('product image url strategy', () => {
     }
 
     await expect(resolveProductImageUrl('cloud://asset-1', uploadService)).resolves.toBe('https://renderable.example.com/product.jpg')
+    expect(uploadService.refreshAssetUrls).toHaveBeenCalledWith(['cloud://asset-1'])
+  })
+
+  it('keeps fresh CloudBase signed temporary URLs returned by refreshAssetUrls as render URLs', async () => {
+    const uploadService = {
+      refreshAssetUrls: vi.fn(async () => [
+        {
+          assetId: 'cloud://asset-1',
+          url: signedTempUrl,
+          mimeType: 'image/jpeg',
+          size: 1024,
+          checksum: 'cloud://asset-1',
+          status: 'uploaded' as const,
+        },
+      ]),
+    }
+
+    await expect(resolveProductImageUrl('cloud://asset-1', uploadService, {
+      cache: createProductImageUrlCache(),
+    })).resolves.toBe(signedTempUrl)
     expect(uploadService.refreshAssetUrls).toHaveBeenCalledWith(['cloud://asset-1'])
   })
 
@@ -102,11 +123,17 @@ describe('product image url strategy', () => {
 
     await expect(resolveProductImageFields({
       id: 'product-1',
+      productName: 'Cotton Shirt',
       mainImageUrl: 'cloud://asset-main',
       imageUrls: ['cloud://asset-main', 'cloud://asset-detail', signedTempUrl, '/static/logo.png'],
     }, uploadService)).resolves.toEqual({
       id: 'product-1',
+      productName: 'Cotton Shirt',
       mainImageUrl: 'https://renderable.example.com/cloud%3A%2F%2Fasset-main.jpg',
+      durableMainImageUrl: 'cloud://asset-main',
+      thumbnailUrl: 'https://renderable.example.com/cloud%3A%2F%2Fasset-main.jpg',
+      imageStatus: 'ready',
+      imageAlt: 'Cotton Shirt',
       imageUrls: [
         'https://renderable.example.com/cloud%3A%2F%2Fasset-main.jpg',
         'https://renderable.example.com/cloud%3A%2F%2Fasset-detail.jpg',
@@ -115,5 +142,45 @@ describe('product image url strategy', () => {
     })
     expect(uploadService.refreshAssetUrls).toHaveBeenCalledTimes(1)
     expect(uploadService.refreshAssetUrls).toHaveBeenCalledWith(['cloud://asset-main', 'cloud://asset-detail'])
+  })
+
+  it('marks a signed temporary URL as refresh failed instead of no-image missing', async () => {
+    const uploadService = {
+      refreshAssetUrls: vi.fn(),
+    }
+
+    await expect(resolveProductImageView({
+      id: 'product-temp',
+      productName: 'Signed URL Product',
+      mainImageUrl: signedTempUrl,
+      imageUrls: [signedTempUrl],
+    }, uploadService)).resolves.toMatchObject({
+      mainImageUrl: '',
+      thumbnailUrl: '',
+      durableMainImageUrl: signedTempUrl,
+      imageStatus: 'refresh_failed',
+      imageFallbackReason: '图片链接已过期，请刷新图片链接',
+      imageAlt: 'Signed URL Product',
+    })
+  })
+
+  it('keeps image state as missing only when no durable source exists', async () => {
+    const uploadService = {
+      refreshAssetUrls: vi.fn(),
+    }
+
+    await expect(resolveProductImageView({
+      id: 'product-empty',
+      productName: 'Empty Product',
+      mainImageUrl: '',
+      imageUrls: [],
+    }, uploadService)).resolves.toMatchObject({
+      mainImageUrl: '',
+      thumbnailUrl: '',
+      durableMainImageUrl: '',
+      imageStatus: 'missing',
+      imageFallbackReason: '未上传商品图片',
+      imageAlt: 'Empty Product',
+    })
   })
 })

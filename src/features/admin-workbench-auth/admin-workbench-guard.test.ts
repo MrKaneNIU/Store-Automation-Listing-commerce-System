@@ -7,7 +7,7 @@ import {
   disableAdminAccount,
   resetAdminPermissionsForTests,
 } from '../admin-permissions/admin-permissions'
-import { submitAdminWorkbenchAuth } from './admin-workbench-auth'
+import { setAdminWorkbenchInitialPassword, submitAdminWorkbenchAuth } from './admin-workbench-auth'
 
 describe('adminWorkbenchGuard', () => {
   beforeEach(() => {
@@ -43,7 +43,8 @@ describe('adminWorkbenchGuard', () => {
       role: 'staff',
       permissions: ['workbenchAccess'],
     })
-    submitAdminWorkbenchAuth({ account: 'staff-01', password: '123456' })
+    setAdminWorkbenchInitialPassword({ account: 'staff-01', password: 'staff-pass', confirmPassword: 'staff-pass' })
+    submitAdminWorkbenchAuth({ account: 'staff-01', password: 'staff-pass' })
 
     expect(ensureAdminWorkbenchSession('productManagement')).toBe(false)
     expect(showToast).toHaveBeenCalledWith(expect.objectContaining({ title: '无权限访问该模块' }))
@@ -60,7 +61,8 @@ describe('adminWorkbenchGuard', () => {
       role: 'staff',
       permissions: ['workbenchAccess'],
     })
-    submitAdminWorkbenchAuth({ account: 'staff-01', password: '123456' })
+    setAdminWorkbenchInitialPassword({ account: 'staff-01', password: 'staff-pass', confirmPassword: 'staff-pass' })
+    submitAdminWorkbenchAuth({ account: 'staff-01', password: 'staff-pass' })
     disableAdminAccount({ operatorAccount: 'admin', targetAccount: 'staff-01' })
 
     expect(ensureAdminWorkbenchSession('workbenchAccess')).toBe(false)
@@ -76,7 +78,8 @@ describe('adminWorkbenchGuard', () => {
       role: 'staff',
       permissions: ['workbenchAccess'],
     })
-    submitAdminWorkbenchAuth({ account: 'staff-01', password: '123456' })
+    setAdminWorkbenchInitialPassword({ account: 'staff-01', password: 'staff-pass', confirmPassword: 'staff-pass' })
+    submitAdminWorkbenchAuth({ account: 'staff-01', password: 'staff-pass' })
     logoutAdminWorkbench()
 
     expect(ensureAdminWorkbenchSession()).toBe(false)

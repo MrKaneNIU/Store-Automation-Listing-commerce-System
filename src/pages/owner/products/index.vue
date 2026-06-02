@@ -51,15 +51,18 @@
 
     <view v-if="viewModel.products.length > 0" class="product-list">
       <view v-for="product in viewModel.products" :key="product.id" class="product-card">
-        <view class="image-shell">
+        <view class="image-shell" :class="{ failed: failedImageProductIds.includes(product.id) }">
           <image
-            v-if="isRenderableOwnerProductImageUrl(product.mainImageUrl)"
+            v-if="product.mainImageUrl"
             class="thumb"
             :src="product.mainImageUrl"
             mode="aspectFill"
+            @error="handleProductImageError(product.id)"
           />
           <view v-else class="image-placeholder">
-            <text class="placeholder-text">NO IMAGE</text>
+            <text class="placeholder-text">
+              {{ product.imageStatus === 'missing' ? 'NO IMAGE' : product.imageFallbackReason || 'IMAGE ERROR' }}
+            </text>
           </view>
           <text class="status-badge">{{ product.statusLabel }}</text>
         </view>
@@ -76,11 +79,8 @@
           <view class="product-foot">
             <text class="sku-count">SKU {{ product.skuCount }} 个</text>
             <view class="product-actions">
-              <button class="description-button" hover-class="press-feedback" @tap="openDescriptionEditor(product.id, product.description || '')">
-                编辑简介
-              </button>
-              <button class="sku-button" hover-class="press-feedback" @tap="openSkuInventory(product.id)">
-                规格库存
+              <button class="edit-button" hover-class="press-feedback" @tap="openProductEditor(product)">
+                编辑
               </button>
               <button
                 v-if="product.canPublish"
@@ -126,42 +126,51 @@
     <view v-if="message" class="result">{{ message }}</view>
 
     <view v-if="editingProductId" class="modal-layer">
-      <view class="modal-sheet">
-        <view class="modal-head">
-          <view class="modal-title-group">
-            <text class="modal-kicker">PRODUCT COPY</text>
-            <text class="modal-title">编辑简介</text>
-          </view>
-          <button class="modal-close" aria-label="关闭简介编辑" @tap="closeDescriptionEditor">
-            <text>×</text>
-          </button>
-        </view>
-        <textarea
-          v-model="descriptionDraft"
-          class="description-input"
-          maxlength="120"
-          auto-height
-          placeholder="请输入商品简介"
-        />
-        <view class="modal-foot">
-          <text class="count-text">{{ descriptionDraft.length }}/120</text>
-          <button class="save-button" :disabled="isSavingDescription" hover-class="press-feedback" @tap="saveDescription">
-            {{ isSavingDescription ? '保存中...' : '保存' }}
-          </button>
-        </view>
-      </view>
-    </view>
-
-    <view v-if="inventoryProductId" class="modal-layer">
       <view class="modal-sheet inventory-sheet">
         <view class="modal-head">
           <view class="modal-title-group">
-            <text class="modal-kicker">SKU INVENTORY</text>
-            <text class="modal-title">规格库存</text>
+            <text class="modal-kicker">PRODUCT EDIT</text>
+            <text class="modal-title">编辑商品</text>
           </view>
-          <button class="modal-close" aria-label="关闭规格库存" @tap="closeSkuInventory">
+          <button class="modal-close" aria-label="关闭商品编辑" @tap="closeProductEditor">
             <text>×</text>
           </button>
+        </view>
+
+        <view class="editor-section">
+          <text class="editor-section-title">基础信息</text>
+          <view class="field-block">
+            <text class="field-label">商品名称</text>
+            <input v-model="productNameDraft" class="inventory-input" maxlength="40" />
+          </view>
+          <view class="field-block">
+            <text class="field-label">货号</text>
+            <input v-model="productCodeReadonly" class="inventory-input readonly-input" disabled />
+            <text class="field-hint">货号是 SPU/SKU 关联标识，本轮只读，不随编辑保存。</text>
+          </view>
+          <view class="field-block">
+            <text class="field-label">商品简介</text>
+            <textarea
+              v-model="descriptionDraft"
+              class="description-input"
+              maxlength="120"
+              auto-height
+              placeholder="请输入商品简介"
+            />
+          </view>
+          <view class="modal-foot">
+            <text class="count-text">{{ descriptionDraft.length }}/120</text>
+            <button class="save-button" :disabled="isSavingProductBasics" hover-class="press-feedback" @tap="saveProductBasics">
+              {{ isSavingProductBasics ? '保存中...' : '保存基础信息' }}
+            </button>
+          </view>
+        </view>
+
+        <view class="editor-section">
+          <text class="editor-section-title">图片状态</text>
+          <view class="image-status-row">
+            <text>{{ skuInventoryView.product?.imageStatus === 'ready' ? '图片可显示' : skuInventoryView.product?.imageFallbackReason || '暂无可显示图片' }}</text>
+          </view>
         </view>
 
         <view class="inventory-summary">
@@ -265,29 +274,29 @@ const {
   lifecycleProductId,
   isBatchPublishing,
   editingProductId,
+  productNameDraft,
+  productCodeReadonly,
   descriptionDraft,
-  isSavingDescription,
-  inventoryProductId,
+  isSavingProductBasics,
   isLoadingSkuInventory,
   isSavingSkuInventory,
   restockQuantityText,
   inventoryReason,
   descriptionFallbackText,
-  isRenderableOwnerProductImageUrl,
+  failedImageProductIds,
   viewModel,
   skuInventoryView,
   skuDrafts,
   stayProducts,
   goAdminTab,
-  openDescriptionEditor,
-  closeDescriptionEditor,
-  openSkuInventory,
-  closeSkuInventory,
+  handleProductImageError,
+  openProductEditor,
+  closeProductEditor,
   getSkuPreview,
   saveSkuDraft,
   restockSkus,
   clearSkuStock,
-  saveDescription,
+  saveProductBasics,
   publish,
   unpublishProduct,
   deleteProduct,
@@ -336,8 +345,7 @@ const {
 
 .filter-pill::after,
 .primary::after,
-.description-button::after,
-.sku-button::after,
+.edit-button::after,
 .publish-button::after,
 .restock-button::after,
 .clear-button::after,
@@ -653,8 +661,7 @@ const {
   max-width: 360rpx;
 }
 
-.description-button,
-.sku-button,
+.edit-button,
 .publish-button,
 .unpublish-button,
 .delete-button {
@@ -672,16 +679,10 @@ const {
   transition: opacity 120ms ease, transform 120ms ease;
 }
 
-.description-button {
+.edit-button {
   min-width: 132rpx;
   background: #f4f4f4;
   color: #202020;
-}
-
-.sku-button {
-  min-width: 132rpx;
-  background: #f1efe9;
-  color: #3f3a32;
 }
 
 .unpublish-button {
@@ -808,13 +809,50 @@ const {
   box-sizing: border-box;
   width: 100%;
   min-height: 190rpx;
-  margin-top: 28rpx;
   padding: 24rpx;
   border-radius: 26rpx;
   background: #f8f8f8;
   color: #202020;
   font-size: 28rpx;
   line-height: 1.5;
+}
+
+.editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+  margin-top: 28rpx;
+  padding: 24rpx;
+  border-radius: 24rpx;
+  background: #ffffff;
+  border: 1rpx solid #eeeeee;
+}
+
+.editor-section-title {
+  color: #202020;
+  font-size: 28rpx;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.readonly-input {
+  color: #747474;
+}
+
+.field-hint {
+  color: #8a8a8a;
+  font-size: 22rpx;
+  line-height: 1.4;
+}
+
+.image-status-row {
+  box-sizing: border-box;
+  padding: 18rpx;
+  border-radius: 18rpx;
+  background: #f8f8f8;
+  color: #5f5f5f;
+  font-size: 24rpx;
+  line-height: 1.4;
 }
 
 .inventory-summary {

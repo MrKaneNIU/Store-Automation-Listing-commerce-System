@@ -18,6 +18,7 @@ const createHandler = (options = {}) =>
     })(),
     now: () => '2026-05-11T00:00:00.000Z',
     allowTestIdentityRoles: true,
+    allowMockCustomerOrder: true,
     exchangePhoneCode: async (phoneCode) => {
       if (phoneCode !== 'phone-code-ok') throw new Error('Invalid phone code')
       return '13800000000'
@@ -27,10 +28,28 @@ const createHandler = (options = {}) =>
 
 const createStore = () => createMemoryDocumentStore()
 
+const createStoreWithMissingCollection = (collectionName) => {
+  const store = createStore()
+  return {
+    ...store,
+    async list(name, query) {
+      if (name === collectionName) {
+        const error = new Error(
+          'DATABASE_COLLECTION_NOT_EXIST: Db or Table not exist. See https://cloud.tencent.com/document/api/876/34822',
+        )
+        error.code = 'DATABASE_COLLECTION_NOT_EXIST'
+        throw error
+      }
+      return store.list(name, query)
+    },
+  }
+}
+
 const createTracedStore = () => {
   const store = createStore()
   const listCalls = []
   const insertCalls = []
+  const replaceCalls = []
   const upsertCalls = []
   return {
     store: {
@@ -38,6 +57,10 @@ const createTracedStore = () => {
       async insert(name, document) {
         insertCalls.push({ name, document })
         return store.insert(name, document)
+      },
+      async replace(name, document) {
+        replaceCalls.push({ name, document })
+        return store.replace(name, document)
       },
       async upsert(name, document) {
         upsertCalls.push({ name, document })
@@ -50,6 +73,7 @@ const createTracedStore = () => {
     },
     listCalls,
     insertCalls,
+    replaceCalls,
     upsertCalls,
   }
 }
@@ -62,15 +86,21 @@ const createTracedHandler = (tracedStore) =>
     })(),
     now: () => '2026-05-11T00:00:00.000Z',
     allowTestIdentityRoles: true,
+    allowMockCustomerOrder: true,
+    exchangePhoneCode: async (phoneCode) => {
+      if (phoneCode !== 'phone-code-ok') throw new Error('Invalid phone code')
+      return '13800000000'
+    },
   })
 
-const createProductionRoleHandler = (store = createStore()) =>
+const createProductionRoleHandler = (store = createStore(), options = {}) =>
   createMallApiHandler(store, {
     createId: (() => {
       let index = 0
       return (prefix) => `${prefix}-${++index}`
     })(),
     now: () => '2026-05-11T00:00:00.000Z',
+    ...options,
   })
 
 const ownerIdentity = {
@@ -87,6 +117,12 @@ const staffIdentity = {
 
 const customerIdentity = {
   openid: 'customer-openid',
+  appid: 'wxa63c53796488d4d4',
+  roles: ['customer'],
+}
+
+const otherCustomerIdentity = {
+  openid: 'other-customer-openid',
   appid: 'wxa63c53796488d4d4',
   roles: ['customer'],
 }
@@ -288,6 +324,37 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     })
   })
 
+  it('reuses the same customer document for repeated verified WeChat identity resolution', async () => {
+    const tracedStore = createTracedStore()
+    const handler = createTracedHandler(tracedStore)
+
+    const first = await handler({
+      action: 'getCurrentCustomer',
+      identity: customerIdentity,
+    })
+    const second = await handler({
+      action: 'getCurrentCustomer',
+      identity: {
+        ...customerIdentity,
+        unionid: 'updated-unionid',
+      },
+    })
+
+    expect(first.success).toBe(true)
+    expect(second).toMatchObject({
+      success: true,
+      data: {
+        customer: {
+          id: first.data.customer.id,
+          openid: customerIdentity.openid,
+          unionid: 'updated-unionid',
+        },
+      },
+    })
+    expect(tracedStore.insertCalls.filter((call) => call.name === 'customers')).toHaveLength(1)
+    expect(tracedStore.replaceCalls.filter((call) => call.name === 'customers')).toHaveLength(1)
+  })
+
   it('rejects customer identity actions without verified runtime identity', async () => {
     const handler = createHandler()
 
@@ -299,6 +366,138 @@ describe('mallApi Phase 4 auth and role permissions', () => {
         code: 'UNAUTHORIZED',
       },
     })
+  })
+
+  it('binds the WeChat phone code to the existing customer document', async () => {
+    const tracedStore = createTracedStore()
+    const handler = createTracedHandler(tracedStore)
+    const current = await handler({
+      action: 'getCurrentCustomer',
+      identity: customerIdentity,
+    })
+
+    const bound = await handler({
+      action: 'bindCustomerPhone',
+      identity: customerIdentity,
+      payload: { phoneCode: 'phone-code-ok' },
+    })
+
+    expect(bound).toMatchObject({
+      success: true,
+      data: {
+        customer: {
+          id: current.data.customer.id,
+          openid: customerIdentity.openid,
+          phoneNumber: '13800000000',
+        },
+      },
+    })
+    expect(tracedStore.insertCalls.filter((call) => call.name === 'customers')).toHaveLength(1)
+    expect(tracedStore.replaceCalls.filter((call) => call.name === 'customers')).toHaveLength(2)
+  })
+
+  it('rejects WeChat order creation without a bound backend phone before stock reservation', async () => {
+    const tracedStore = createTracedStore()
+    const handler = createTracedHandler(tracedStore)
+    const { product, sku } = await createProductFixture(handler)
+    const detailBefore = await handler({
+      action: 'getPublishedProductDetail',
+      identity: customerIdentity,
+      params: { productId: product.id },
+    })
+    tracedStore.insertCalls.length = 0
+    tracedStore.replaceCalls.length = 0
+    tracedStore.upsertCalls.length = 0
+
+    const result = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: {
+          customerId: 'client-forged-customer',
+          phoneNumber: '13999999999',
+          authSource: 'wechat',
+        },
+      },
+    })
+    const detailAfter = await handler({
+      action: 'getPublishedProductDetail',
+      identity: customerIdentity,
+      params: { productId: product.id },
+    })
+    const orders = await handler({
+      action: 'listMerchantOrders',
+      identity: ownerIdentity,
+    })
+
+    expect(result).toMatchObject({
+      success: false,
+      error: {
+        code: 'UNAUTHORIZED',
+      },
+    })
+    expect(detailAfter.data.skus[0].stock).toBe(detailBefore.data.skus[0].stock)
+    expect(orders.data.orders).toEqual([])
+    expect(tracedStore.replaceCalls.filter((call) => call.name === 'skus')).toEqual([])
+    expect(tracedStore.insertCalls.filter((call) => call.name === 'orders' || call.name === 'inventory_ledger')).toEqual([])
+  })
+
+  it('rejects mock customer order sessions in the default production handler', async () => {
+    const store = createStore()
+    const setupHandler = createMallApiHandler(store, {
+      createId: (() => {
+        let index = 0
+        return (prefix) => `${prefix}-${++index}`
+      })(),
+      now: () => '2026-05-11T00:00:00.000Z',
+      allowTestIdentityRoles: true,
+    })
+    const { product, sku } = await createProductFixture(setupHandler)
+    const detailBefore = await setupHandler({
+      action: 'getPublishedProductDetail',
+      identity: customerIdentity,
+      params: { productId: product.id },
+    })
+    const handler = createProductionRoleHandler(store)
+
+    const result = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: {
+          customerId: 'client-forged-customer',
+          phoneNumber: '13999999999',
+          authSource: 'mock_wechat',
+        },
+      },
+    })
+    const [orders, ledger, detailAfter] = await Promise.all([
+      store.list('orders'),
+      store.list('inventory_ledger'),
+      handler({
+        action: 'getPublishedProductDetail',
+        identity: customerIdentity,
+        params: { productId: product.id },
+      }),
+    ])
+
+    expect(result).toMatchObject({
+      success: false,
+      error: {
+        code: 'UNAUTHORIZED',
+      },
+    })
+    expect(orders).toEqual([])
+    expect(ledger).toEqual([])
+    expect(detailAfter.data.skus.find((item) => item.id === sku.id)?.stock).toBe(
+      detailBefore.data.skus.find((item) => item.id === sku.id)?.stock,
+    )
   })
 
   it('does not trust client supplied customer identity for real WeChat orders', async () => {
@@ -332,6 +531,54 @@ describe('mallApi Phase 4 auth and role permissions', () => {
       customerPhone: '13800000000',
       customerAuthSource: 'wechat',
     })
+  })
+
+  it('rejects direct mallApi overselling before creating an order or ledger entry', async () => {
+    const traced = createTracedStore()
+    const handler = createTracedHandler(traced)
+    const { product, sku } = await createProductFixture(handler)
+    await handler({
+      action: 'bindCustomerPhone',
+      identity: customerIdentity,
+      payload: { phoneCode: 'phone-code-ok' },
+    })
+    const detailBefore = await handler({
+      action: 'getPublishedProductDetail',
+      params: { productId: product.id },
+    })
+
+    const result = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: sku.stock + 1,
+        session: {
+          authSource: 'wechat',
+        },
+      },
+    })
+    const [orders, ledger, detailAfter] = await Promise.all([
+      traced.store.list('orders'),
+      traced.store.list('inventory_ledger'),
+      handler({
+        action: 'getPublishedProductDetail',
+        params: { productId: product.id },
+      }),
+    ])
+
+    expect(result).toMatchObject({
+      success: false,
+      error: {
+        code: 'CONFLICT',
+      },
+    })
+    expect(orders).toEqual([])
+    expect(ledger).toEqual([])
+    expect(detailAfter.data.skus.find((item) => item.id === sku.id)?.stock).toBe(
+      detailBefore.data.skus.find((item) => item.id === sku.id)?.stock,
+    )
   })
 
   it('writes inventory ledger entries and returns the same order for repeated idempotent requests', async () => {
@@ -386,6 +633,57 @@ describe('mallApi Phase 4 auth and role permissions', () => {
         orders: [first.data.order],
       },
     })
+  })
+
+  it('releases reserved SKU stock and writes a release ledger entry when canceling a pending order', async () => {
+    const traced = createTracedStore()
+    const handler = createTracedHandler(traced)
+    const { product, sku } = await createProductFixture(handler)
+    await handler({
+      action: 'bindCustomerPhone',
+      identity: customerIdentity,
+      payload: { phoneCode: 'phone-code-ok' },
+    })
+    const detailBefore = await handler({
+      action: 'getPublishedProductDetail',
+      params: { productId: product.id },
+    })
+    const created = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: {
+          authSource: 'wechat',
+        },
+      },
+    })
+
+    const canceled = await handler({
+      action: 'cancelMerchantOrder',
+      identity: ownerIdentity,
+      params: { orderId: created.data.order.id },
+    })
+    const [ledger, detailAfter] = await Promise.all([
+      traced.store.list('inventory_ledger'),
+      handler({
+        action: 'getPublishedProductDetail',
+        params: { productId: product.id },
+      }),
+    ])
+
+    expect(canceled).toMatchObject({
+      success: true,
+      data: {
+        order: { id: created.data.order.id, status: 'canceled' },
+      },
+    })
+    expect(ledger.map((entry) => entry.action)).toEqual(['reserve', 'release'])
+    expect(detailAfter.data.skus.find((item) => item.id === sku.id)?.stock).toBe(
+      detailBefore.data.skus.find((item) => item.id === sku.id)?.stock,
+    )
   })
 
   it('rejects direct client phone binding without a WeChat phone code', async () => {
@@ -463,6 +761,42 @@ describe('mallApi Phase 4 auth and role permissions', () => {
             status: 'published',
           },
         ],
+      },
+    })
+  })
+
+  it('allows anonymous clients to browse published product summaries and detail', async () => {
+    const handler = createHandler()
+    const { product, sku } = await createProductFixture(handler)
+
+    const summaries = await handler({
+      action: 'listPublishedProductSummaries',
+    })
+    const detail = await handler({
+      action: 'getPublishedProductDetail',
+      params: { productId: product.id },
+    })
+
+    expect(summaries).toMatchObject({
+      success: true,
+      data: {
+        products: [
+          {
+            id: product.id,
+            productCode: product.productCode,
+            status: 'published',
+          },
+        ],
+      },
+    })
+    expect(detail).toMatchObject({
+      success: true,
+      data: {
+        product: {
+          id: product.id,
+          status: 'published',
+        },
+        skus: [{ id: sku.id, productId: product.id }],
       },
     })
   })
@@ -769,6 +1103,46 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     })
     expect(traced.listCalls.filter((call) => call.name === 'ocr_batches')).toHaveLength(1)
     expect(traced.listCalls.filter((call) => call.name === 'product_drafts')).toHaveLength(1)
+  })
+
+  it('removes confirmed drafts from the latest draft review snapshot after confirmation', async () => {
+    const handler = createHandler()
+    const created = await handler({
+      action: 'createOcrBatch',
+      identity: ownerIdentity,
+      payload: {
+        imageUrls: ['cloud://page-1.png'],
+        drafts: [
+          {
+            productCode: 'A1023',
+            productName: 'Cotton Shirt',
+            salePrice: 129,
+            spec: 'Black/M',
+            stock: 2,
+            confidence: 0.96,
+            sourceImageUrl: 'cloud://page-1.png',
+          },
+        ],
+      },
+    })
+
+    await handler({
+      action: 'confirmBatch',
+      identity: ownerIdentity,
+      params: { batchId: created.data.batch.id },
+    })
+    const snapshot = await handler({
+      action: 'getLatestDraftReviewSnapshot',
+      identity: ownerIdentity,
+    })
+
+    expect(snapshot).toMatchObject({
+      success: true,
+      data: {
+        batch: { id: created.data.batch.id },
+        drafts: [],
+      },
+    })
   })
 
   it('returns one owner order snapshot with one orders read', async () => {
@@ -1327,8 +1701,18 @@ describe('mallApi Phase 4 auth and role permissions', () => {
       created_at: '2026-05-11T00:00:00.000Z',
       updated_at: '2026-05-11T00:00:00.000Z',
     })
-    const handler = createProductionRoleHandler(store)
+    const handler = createProductionRoleHandler(store, {
+      exchangePhoneCode: async (phoneCode) => {
+        if (phoneCode !== 'phone-code-ok') throw new Error('Invalid phone code')
+        return '13800000000'
+      },
+    })
     const { product, sku } = await createProductFixture(handler)
+    await handler({
+      action: 'bindCustomerPhone',
+      identity: customerIdentity,
+      payload: { phoneCode: 'phone-code-ok' },
+    })
     const created = await handler({
       action: 'createCustomerOrder',
       identity: customerIdentity,
@@ -1337,10 +1721,7 @@ describe('mallApi Phase 4 auth and role permissions', () => {
         skuId: sku.id,
         quantity: 1,
         session: {
-          customerId: 'client-customer',
-          openid: 'client-openid',
-          phoneNumber: '13800000000',
-          authSource: 'mock_wechat',
+          authSource: 'wechat',
         },
       },
     })
@@ -1421,6 +1802,56 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     ])
   })
 
+  it('updates product basics without mutating core productCode or SKU productCode', async () => {
+    const store = createStore()
+    const handler = createMallApiHandler(store, {
+      now: () => '2026-05-11T00:00:00.000Z',
+      allowTestIdentityRoles: true,
+    })
+    const { product, sku } = await createProductFixture(handler)
+
+    const updated = await handler({
+      action: 'updateProductBasics',
+      identity: ownerIdentity,
+      params: { productId: product.id },
+      payload: {
+        productName: 'Updated Cotton Shirt',
+        productCode: 'SHOULD-NOT-CHANGE',
+        description: '进口羊毛混纺，适合通勤叠穿。',
+      },
+    })
+    const skus = await handler({
+      action: 'listSkus',
+      identity: ownerIdentity,
+      params: { productId: product.id },
+    })
+    const detail = await handler({
+      action: 'getPublishedProductDetail',
+      params: { productId: product.id },
+    })
+
+    expect(updated).toMatchObject({
+      success: true,
+      data: {
+        product: {
+          id: product.id,
+          productCode: product.productCode,
+          productName: 'Updated Cotton Shirt',
+          description: '进口羊毛混纺，适合通勤叠穿。',
+        },
+      },
+    })
+    expect(skus.data.skus[0]).toMatchObject({
+      id: sku.id,
+      productCode: sku.productCode,
+    })
+    expect(detail.data.product).toMatchObject({
+      id: product.id,
+      productName: 'Updated Cotton Shirt',
+      description: '进口羊毛混纺，适合通勤叠穿。',
+    })
+  })
+
   it('allows staff image supplementation but denies staff publishing', async () => {
     const handler = createHandler()
     const { product } = await createProductFixture(handler)
@@ -1450,7 +1881,338 @@ describe('mallApi Phase 4 auth and role permissions', () => {
   })
 })
 
+describe('mallApi customer mine actions', () => {
+  it('advertises the mine snapshot action through listContracts', async () => {
+    const handler = createHandler()
+
+    const result = await handler({ action: 'listContracts' })
+
+    expect(result.data.actions).toEqual(expect.arrayContaining([
+      'getCustomerMineSnapshot',
+    ]))
+  })
+
+  it('returns a customer-scoped mine snapshot with identity, phone, orders, utilities, and meta key', async () => {
+    const handler = createHandler()
+    const { product, sku } = await createProductFixture(handler)
+
+    const bound = await handler({
+      action: 'bindCustomerPhone',
+      identity: customerIdentity,
+      payload: { phoneCode: 'phone-code-ok' },
+    })
+    await handler({
+      action: 'addCustomerShoppingBagItem',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 2,
+      },
+    })
+    await handler({
+      action: 'favoriteCustomerProduct',
+      identity: customerIdentity,
+      payload: { productId: product.id },
+    })
+    const ownOrder = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: {
+          customerId: 'forged-customer',
+          openid: 'forged-openid',
+          authSource: 'wechat',
+        },
+      },
+    })
+    await handler({
+      action: 'bindCustomerPhone',
+      identity: otherCustomerIdentity,
+      payload: { phoneCode: 'phone-code-ok' },
+    })
+    const otherOrder = await handler({
+      action: 'createCustomerOrder',
+      identity: otherCustomerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: {
+          customerId: 'other-forged-customer',
+          openid: 'other-forged-openid',
+          authSource: 'wechat',
+        },
+      },
+    })
+
+    const result = await handler({
+      action: 'getCustomerMineSnapshot',
+      identity: customerIdentity,
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      meta: {
+        snapshotKey: `customer-mine:${bound.data.customer.id}:v1`,
+      },
+      data: {
+        customerId: bound.data.customer.id,
+        identity: {
+          isSignedIn: true,
+          displayName: '138****0000',
+          authSource: 'wechat',
+          openidMasked: 'cust...enid',
+        },
+        phone: {
+          isBound: true,
+          maskedPhoneNumber: '138****0000',
+          statusLabel: 'Phone bound',
+        },
+        recentOrderTotalCount: 1,
+        utilities: [
+          {
+            key: 'favorites',
+            route: '/pages/customer/favorites/index',
+            count: 1,
+            isEnabled: true,
+          },
+          {
+            key: 'shoppingBag',
+            route: '/pages/customer/shopping-bag/index',
+            count: 2,
+            isEnabled: true,
+          },
+        ],
+        serverTime: '2026-05-11T00:00:00.000Z',
+      },
+    })
+    expect(result.data.recentOrders).toEqual([
+      {
+        orderId: ownOrder.data.order.id,
+        status: 'pending_merchant_confirm',
+        statusLabel: 'Pending merchant confirmation',
+        totalAmount: sku.salePrice,
+        itemCount: 1,
+        primaryProductName: product.productName,
+        createdAt: '2026-05-11T00:00:00.000Z',
+        updatedAt: '2026-05-11T00:00:00.000Z',
+      },
+    ])
+    expect(result.data.recentOrders.map((order) => order.orderId)).not.toContain(otherOrder.data.order.id)
+  })
+
+  it('does not leak another customer order or private utility data', async () => {
+    const handler = createHandler()
+    const { product, sku } = await createProductFixture(handler)
+    await handler({
+      action: 'bindCustomerPhone',
+      identity: otherCustomerIdentity,
+      payload: { phoneCode: 'phone-code-ok' },
+    })
+    const otherOrder = await handler({
+      action: 'createCustomerOrder',
+      identity: otherCustomerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: {
+          customerId: 'other-forged-customer',
+          openid: 'other-forged-openid',
+          authSource: 'wechat',
+        },
+      },
+    })
+    await handler({
+      action: 'addCustomerShoppingBagItem',
+      identity: otherCustomerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+      },
+    })
+    await handler({
+      action: 'favoriteCustomerProduct',
+      identity: otherCustomerIdentity,
+      payload: { productId: product.id },
+    })
+
+    const result = await handler({
+      action: 'getCustomerMineSnapshot',
+      identity: customerIdentity,
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.data.recentOrders).toEqual([])
+    expect(result.data.recentOrderTotalCount).toBe(0)
+    expect(result.data.utilities).toEqual([
+      expect.objectContaining({ key: 'favorites', count: 0 }),
+      expect.objectContaining({ key: 'shoppingBag', count: 0 }),
+    ])
+    expect(result.data.recentOrders.map((order) => order.orderId)).not.toContain(otherOrder.data.order.id)
+  })
+
+  it('rejects missing identity and ignores raw phone number payloads', async () => {
+    const handler = createHandler()
+
+    const unauthenticated = await handler({ action: 'getCustomerMineSnapshot' })
+    const forgedPhone = await handler({
+      action: 'getCustomerMineSnapshot',
+      identity: customerIdentity,
+      payload: {
+        phoneNumber: '13999999999',
+      },
+    })
+
+    expect(unauthenticated).toMatchObject({
+      success: false,
+      data: null,
+      error: {
+        code: 'UNAUTHORIZED',
+      },
+    })
+    expect(forgedPhone).toMatchObject({
+      success: true,
+      data: {
+        phone: {
+          isBound: false,
+          maskedPhoneNumber: '',
+          statusLabel: 'Phone not bound',
+        },
+      },
+    })
+  })
+
+  it('does not modify order status or inventory while reading the mine snapshot', async () => {
+    const tracedStore = createTracedStore()
+    const handler = createTracedHandler(tracedStore)
+    const { product, sku } = await createProductFixture(handler)
+    await handler({
+      action: 'bindCustomerPhone',
+      identity: customerIdentity,
+      payload: { phoneCode: 'phone-code-ok' },
+    })
+    await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: {
+          customerId: 'forged-customer',
+          openid: 'forged-openid',
+          authSource: 'wechat',
+        },
+      },
+    })
+    const ordersBefore = await handler({
+      action: 'listMerchantOrders',
+      identity: ownerIdentity,
+    })
+    const detailBefore = await handler({
+      action: 'getPublishedProductDetail',
+      identity: customerIdentity,
+      params: { productId: product.id },
+    })
+    tracedStore.insertCalls.length = 0
+    tracedStore.replaceCalls.length = 0
+    tracedStore.upsertCalls.length = 0
+
+    const snapshot = await handler({
+      action: 'getCustomerMineSnapshot',
+      identity: customerIdentity,
+    })
+    const ordersAfter = await handler({
+      action: 'listMerchantOrders',
+      identity: ownerIdentity,
+    })
+    const detailAfter = await handler({
+      action: 'getPublishedProductDetail',
+      identity: customerIdentity,
+      params: { productId: product.id },
+    })
+
+    expect(snapshot.success).toBe(true)
+    expect(ordersAfter.data.orders).toEqual(ordersBefore.data.orders)
+    expect(detailAfter.data.skus[0].stock).toBe(detailBefore.data.skus[0].stock)
+    expect(tracedStore.replaceCalls.filter((call) => call.name === 'orders' || call.name === 'skus')).toEqual([])
+    expect(tracedStore.insertCalls.filter((call) => call.name === 'inventory_ledger')).toEqual([])
+  })
+
+  it('keeps mine identity and zero utility counts when non-critical utility queries fail', async () => {
+    const handler = createMallApiHandler(createStoreWithMissingCollection('shopping_bag_items'), {
+      createId: (() => {
+        let index = 0
+        return (prefix) => `${prefix}-${++index}`
+      })(),
+      now: () => '2026-05-11T00:00:00.000Z',
+      allowTestIdentityRoles: true,
+    })
+
+    const result = await handler({
+      action: 'getCustomerMineSnapshot',
+      identity: customerIdentity,
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        identity: {
+          isSignedIn: true,
+          openidMasked: 'cust...enid',
+        },
+        phone: {
+          isBound: false,
+        },
+        recentOrders: [],
+        recentOrderTotalCount: 0,
+        utilities: [
+          expect.objectContaining({ key: 'favorites', count: 0 }),
+          expect.objectContaining({ key: 'shoppingBag', count: 0 }),
+        ],
+      },
+    })
+  })
+})
+
 describe('mallApi customer shopping bag actions', () => {
+  it.each([
+    ['getCustomerShoppingBagSnapshot', 'shopping_bag_items'],
+    ['getCustomerFavoriteProductsSnapshot', 'customer_favorites'],
+  ])('maps missing CloudBase collection for %s to a safe infrastructure error', async (action, collectionName) => {
+    const handler = createMallApiHandler(createStoreWithMissingCollection(collectionName), {
+      createId: (() => {
+        let index = 0
+        return (prefix) => `${prefix}-${++index}`
+      })(),
+      now: () => '2026-05-11T00:00:00.000Z',
+      allowTestIdentityRoles: true,
+    })
+
+    const result = await handler({
+      action,
+      identity: customerIdentity,
+    })
+    const serialized = JSON.stringify(result)
+
+    expect(result).toMatchObject({
+      success: false,
+      error: {
+        code: 'INFRA_SCHEMA_MISSING',
+        message: 'Customer data storage is not ready',
+      },
+    })
+    expect(serialized).not.toContain('DATABASE_COLLECTION_NOT_EXIST')
+    expect(serialized).not.toContain('Db or Table not exist')
+    expect(serialized).not.toContain('cloud.tencent.com/document')
+  })
+
   it('returns an empty customer-scoped snapshot without phone authorization', async () => {
     const handler = createHandler()
 

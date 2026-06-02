@@ -102,6 +102,14 @@ export const mallWorkflow = {
   updateProductDescription(product: Product, description: string) {
     return mallRepository.updateProduct({ ...product, description, updatedAt: nowIso() })
   },
+  updateProductBasics(product: Product, patch: { productName: string; description: string }) {
+    return mallRepository.updateProduct({
+      ...product,
+      productName: patch.productName,
+      description: patch.description,
+      updatedAt: nowIso(),
+    })
+  },
   updateSkuOperationsData(
     sku: Sku,
     patch: {

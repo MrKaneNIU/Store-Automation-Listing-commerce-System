@@ -118,4 +118,13 @@ describe('customer product list shopping bag entry', () => {
     expect(source).not.toContain('isShoppingBagNavigating')
     expect(source).not.toContain('isFavoritesNavigating')
   })
+
+  it('refreshes a product image once after the mini program image component reports a load error', () => {
+    expect(source).toContain('@error="handleProductImageError(product.id)"')
+    expect(source).toContain('failedImageProductIds')
+    expect(source).toContain('const handleProductImageError = (productId: string) =>')
+    expect(source).toContain('void refreshView({ showLoading: false })')
+    expect(source).toContain('product.imageStatus')
+    expect(source).toContain('product.imageFallbackReason')
+  })
 })

@@ -31,15 +31,17 @@ const preparePendingProducts = async () => {
 }
 
 describe('staff image tasks facade', () => {
-  it('builds pending-image task lists and batch options', async () => {
+  it('builds pending-image task lists and readable batch options', async () => {
     const { batch, products } = await preparePendingProducts()
 
     const view = getStaffImageTasksView({ keyword: '', selectedBatchId: '' })
 
-    expect(view.batchOptions).toEqual([
-      { label: '全部批次', value: '' },
-      { label: batch.id, value: batch.id },
-    ])
+    expect(view.batchOptions[0]).toEqual({ label: '全部批次', value: '' })
+    expect(view.batchOptions[1]).toMatchObject({ value: batch.id })
+    expect(view.batchOptions[1].label).toContain('批次')
+    expect(view.batchOptions[1].label).toContain('已确认')
+    expect(view.batchOptions[1].label).toContain(`待补图 ${products.length} 件`)
+    expect(view.batchOptions[1].label).toContain('上传 1 张')
     expect(view.selectedBatchLabel).toBe('全部批次')
     expect(view.products).toHaveLength(products.length)
     expect(view.products[0].statusLabel).toBe('待补图')
@@ -52,6 +54,8 @@ describe('staff image tasks facade', () => {
     const matched = getStaffImageTasksView({ keyword: target.productCode, selectedBatchId: batch.id })
     const missed = getStaffImageTasksView({ keyword: 'not-a-code', selectedBatchId: batch.id })
 
+    expect(matched.selectedBatchLabel).toContain('批次')
+    expect(matched.selectedBatchLabel).toContain('待补图')
     expect(matched.products.map((product) => product.id)).toContain(target.id)
     expect(missed.products).toEqual([])
   })

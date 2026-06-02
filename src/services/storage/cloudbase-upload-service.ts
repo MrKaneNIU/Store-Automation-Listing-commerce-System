@@ -70,17 +70,36 @@ const inferMimeType = (filePath: string): string => {
   if (lower.endsWith('.png')) return 'image/png'
   if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
   if (lower.endsWith('.webp')) return 'image/webp'
-  return 'application/octet-stream'
+  return 'image/jpeg'
 }
 
 const fileNameFromPath = (filePath: string, index: number): string => {
   const trimmed = filePath.split('?')[0]
-  return trimmed.split('/').pop() || `upload-${index + 1}.png`
+  const fallbackName = `upload-${index + 1}.jpg`
+  const fileName = trimmed.split('/').pop() || fallbackName
+  const lower = fileName.toLowerCase()
+  if (supportedExtensions.some((extension) => lower.endsWith(extension))) {
+    return fileName
+  }
+  return `${fileName}.jpg`
 }
 
-const hasSupportedExtension = (filePath: string): boolean => {
-  const lower = filePath.toLowerCase()
-  return supportedExtensions.some((extension) => lower.endsWith(extension))
+const extensionFromPath = (filePath: string): string => {
+  const fileName = filePath.split('?')[0].split('/').pop() || ''
+  const dotIndex = fileName.lastIndexOf('.')
+  return dotIndex > -1 ? fileName.slice(dotIndex).toLowerCase() : ''
+}
+
+const isWechatTempPath = (filePath: string): boolean =>
+  filePath.startsWith('wxfile://') || filePath.startsWith('http://tmp/') || filePath.startsWith('https://tmp/')
+
+const hasUnsupportedExplicitExtension = (filePath: string): boolean => {
+  if (isWechatTempPath(filePath)) {
+    return false
+  }
+
+  const extension = extensionFromPath(filePath)
+  return extension !== '' && !supportedExtensions.includes(extension)
 }
 
 const withFailureCode = (error: unknown, failureCode: UploadFailureCode): Error =>
@@ -95,7 +114,7 @@ const resolveTempUrl = async (fileID: string): Promise<string> => {
   return resolved
 }
 
-const chooseImagePayload = async (): Promise<{ filePaths: string[]; sizes: number[] }> => {
+const chooseImagePayload = async (context?: UploadContext): Promise<{ filePaths: string[]; sizes: number[] }> => {
   if (typeof uni === 'undefined' || typeof uni.chooseImage !== 'function') {
     throw new Error('Image selection is only available inside WeChat Mini Program')
   }
@@ -107,7 +126,7 @@ const chooseImagePayload = async (): Promise<{ filePaths: string[]; sizes: numbe
 
   return new Promise((resolve, reject) => {
     chooseImage({
-      count: 9,
+      count: context?.count ?? 9,
       success: (result) => {
         const tempFilePaths = Array.isArray(result.tempFilePaths) ? result.tempFilePaths : [result.tempFilePaths]
         const sizes = result.tempFiles?.map((item) => item.size) ?? tempFilePaths.map(() => 0)
@@ -120,20 +139,24 @@ const chooseImagePayload = async (): Promise<{ filePaths: string[]; sizes: numbe
 
 const compressIfPossible = async (filePath: string): Promise<string> => {
   if (typeof uni !== 'undefined' && typeof uni.compressImage === 'function') {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       uni.compressImage?.({
         src: filePath,
         quality: 75,
         success: (result) => resolve(result.tempFilePath),
-        fail: reject,
+        fail: () => resolve(filePath),
       })
     })
   }
 
   if (typeof ensureRuntime().compressImage === 'function') {
-    const result = await ensureRuntime().compressImage?.({ src: filePath, quality: 75 })
-    if (result?.tempFilePath) {
-      return result.tempFilePath
+    try {
+      const result = await ensureRuntime().compressImage?.({ src: filePath, quality: 75 })
+      if (result?.tempFilePath) {
+        return result.tempFilePath
+      }
+    } catch {
+      return filePath
     }
   }
 
@@ -162,17 +185,18 @@ const readImageSize = async (filePath: string): Promise<number> => {
 const shouldPersistCloudFileIds = (context: UploadContext): boolean =>
   context.businessType === 'product_main_image' || context.businessType === 'product_detail_image'
 
-const uploadFiles = async (filePaths: string[], context: UploadContext): Promise<UploadResult> => {
+const uploadFiles = async (filePaths: string[], context: UploadContext, selectedSizes: number[] = []): Promise<UploadResult> => {
   const runtime = ensureRuntime()
   const assets: UploadedAsset[] = []
 
   for (const [index, originalPath] of filePaths.entries()) {
-    if (!hasSupportedExtension(originalPath)) {
+    if (hasUnsupportedExplicitExtension(originalPath)) {
       throw withFailureCode(new Error(`Unsupported image format: ${originalPath}`), 'unsupported_format')
     }
 
     const compressedPath = await compressIfPossible(originalPath)
-    const size = await readImageSize(compressedPath)
+    const selectedSize = selectedSizes[index] ?? 0
+    const size = selectedSize > 0 ? selectedSize : await readImageSize(compressedPath)
     if (size > maxFileSizeBytes) {
       throw withFailureCode(new Error(`Image too large: ${compressedPath}`), 'file_too_large')
     }
@@ -241,12 +265,12 @@ const refreshAssetUrls = async (assetIds: string[]): Promise<UploadedAsset[]> =>
 
 export const cloudbaseUploadService: UploadService = {
   async chooseImages(context?: UploadContext): Promise<UploadedImage[]> {
-    const { filePaths } = await chooseImagePayload()
+    const { filePaths, sizes } = await chooseImagePayload(context)
     const uploaded = await uploadFiles(filePaths, context ?? {
       businessType: 'ocr_screenshot',
       sourceRole: 'owner',
       entityType: 'ocr_batch',
-    })
+    }, sizes)
 
     return uploaded.imageUrls.map((url) => ({
       id: createId('image'),
@@ -256,8 +280,8 @@ export const cloudbaseUploadService: UploadService = {
     }))
   },
   async chooseAndUploadImages(context: UploadContext) {
-    const { filePaths } = await chooseImagePayload()
-    return uploadFiles(filePaths, context)
+    const { filePaths, sizes } = await chooseImagePayload(context)
+    return uploadFiles(filePaths, context, sizes)
   },
   async uploadImages(filePaths: string[], context: UploadContext) {
     return uploadFiles(filePaths, context)

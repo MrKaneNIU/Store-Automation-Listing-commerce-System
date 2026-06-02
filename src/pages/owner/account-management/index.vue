@@ -29,7 +29,7 @@
       <view class="panel-head">
         <view class="section-copy">
           <text class="section-title">账号注册</text>
-          <text class="section-desc">新增工作台账号，并分配进入范围。</text>
+          <text class="section-desc">新增工作台账号，设置初始密码，并分配进入范围。</text>
         </view>
         <text class="section-meta">{{ permissionView.canGrantOwner ? '老板 / 员工' : '仅员工' }}</text>
       </view>
@@ -37,6 +37,16 @@
       <label class="field">
         <text class="field-label">账号ID</text>
         <input v-model="registerAccountId" class="input" placeholder="输入新账号ID" />
+      </label>
+
+      <label class="field">
+        <text class="field-label">初始密码</text>
+        <input v-model="registerPassword" class="input" password placeholder="至少 6 位" />
+      </label>
+
+      <label class="field">
+        <text class="field-label">确认初始密码</text>
+        <input v-model="registerConfirmPassword" class="input" password placeholder="再次输入初始密码" />
       </label>
 
       <view class="role-row">
@@ -70,7 +80,7 @@
         </button>
       </view>
 
-      <text class="form-note">注册后的初始密码为 123456，请让账号首次登录后立即修改密码。</text>
+      <text class="form-note">请为新账号设置初始密码，账号首次登录后仍可在此页面修改密码。</text>
       <button class="primary" :disabled="isSubmitting" @tap="submitAccountRegistration">注册账号</button>
     </view>
 
@@ -119,6 +129,7 @@ import { redirectTo, relaunchTo } from '../../../app/navigation'
 import { routes, type AppRoute } from '../../../app/routes'
 import {
   changeAdminWorkbenchPassword,
+  setAdminWorkbenchInitialPassword,
 } from '../../../features/admin-workbench-auth/admin-workbench-auth'
 import { ensureAdminWorkbenchSession } from '../../../features/admin-workbench-auth/admin-workbench-guard'
 import {
@@ -132,6 +143,8 @@ const navigatingRoute = ref<AppRoute | ''>('')
 const currentAccount = ref('')
 const activeMode = ref<'register' | 'password'>('register')
 const registerAccountId = ref('')
+const registerPassword = ref('')
+const registerConfirmPassword = ref('')
 const registerRole = ref<'owner' | 'staff'>('staff')
 const registerScopes = ref<AdminPermissionScope[]>(['workbenchAccess'])
 const passwordAccountId = ref('')
@@ -142,6 +155,12 @@ const message = ref('')
 const resultStatus = ref<'success' | 'failed' | ''>('')
 const isSubmitting = ref(false)
 const permissionView = ref(getAdminPermissionView('admin'))
+
+const clearRegisterFields = () => {
+  registerAccountId.value = ''
+  registerPassword.value = ''
+  registerConfirmPassword.value = ''
+}
 
 const clearPasswordFields = () => {
   passwordAccountId.value = ''
@@ -165,6 +184,9 @@ const setMode = (mode: 'register' | 'password') => {
   message.value = ''
   resultStatus.value = ''
 
+  if (mode === 'register') {
+    clearRegisterFields()
+  }
   if (mode === 'password') {
     clearPasswordFields()
   }
@@ -176,6 +198,7 @@ onShow(() => {
   }
 
   refreshPermissionView()
+  clearRegisterFields()
   clearPasswordFields()
   navigatingRoute.value = ''
   message.value = ''
@@ -189,30 +212,51 @@ const toggleRegisterScope = (scope: AdminPermissionScope) => {
     : [...registerScopes.value, scope]
 }
 
+const showResult = (nextMessage: string, nextStatus: 'success' | 'failed') => {
+  message.value = nextMessage
+  resultStatus.value = nextStatus
+  uni.showToast({
+    title: nextMessage,
+    icon: 'none',
+    duration: 1600,
+  })
+}
+
 const submitAccountRegistration = () => {
   if (isSubmitting.value || !currentAccount.value) {
+    return
+  }
+
+  const targetAccount = registerAccountId.value.trim()
+  const nextPassword = registerPassword.value.trim()
+  const nextConfirmPassword = registerConfirmPassword.value.trim()
+  if (nextPassword.length < 6 || nextPassword !== nextConfirmPassword) {
+    showResult(nextPassword.length < 6 ? '新密码至少 6 位' : '两次输入的新密码不一致', 'failed')
     return
   }
 
   isSubmitting.value = true
   const result = authorizeAdminAccount({
     operatorAccount: currentAccount.value,
-    targetAccount: registerAccountId.value.trim(),
+    targetAccount,
     role: registerRole.value,
     permissions: registerScopes.value,
   })
+  const passwordResult = result.status === 'success'
+    ? setAdminWorkbenchInitialPassword({
+      account: targetAccount,
+      password: nextPassword,
+      confirmPassword: nextConfirmPassword,
+    })
+    : null
+  const finalMessage = passwordResult?.status === 'success' ? result.message : passwordResult?.message ?? result.message
+  const finalStatus = passwordResult?.status ?? result.status
 
-  message.value = result.message
-  resultStatus.value = result.status
   isSubmitting.value = false
-  uni.showToast({
-    title: result.message,
-    icon: 'none',
-    duration: 1600,
-  })
+  showResult(finalMessage, finalStatus)
 
-  if (result.status === 'success') {
-    registerAccountId.value = ''
+  if (finalStatus === 'success') {
+    clearRegisterFields()
     refreshPermissionView()
   }
 }
@@ -230,14 +274,8 @@ const submitPasswordChange = () => {
     confirmPassword: confirmPassword.value,
   })
 
-  message.value = result.message
-  resultStatus.value = result.status
   isSubmitting.value = false
-  uni.showToast({
-    title: result.message,
-    icon: 'none',
-    duration: 1600,
-  })
+  showResult(result.message, result.status)
 
   if (result.status === 'success') {
     clearPasswordFields()
@@ -280,10 +318,11 @@ const goMore = () => {
   margin-bottom: 34rpx;
 }
 
-.brand {
+.brand,
+.section-copy {
   display: flex;
   flex-direction: column;
-  gap: 10rpx;
+  gap: 8rpx;
 }
 
 .kicker {
@@ -325,19 +364,13 @@ const goMore = () => {
   line-height: 60rpx;
 }
 
-.mode-switch,
-.form-panel,
-.result {
-  box-sizing: border-box;
-  border-radius: 30rpx;
-}
-
 .mode-switch {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12rpx;
   margin-bottom: 20rpx;
   padding: 12rpx;
+  border-radius: 30rpx;
   background: #ffffff;
   box-shadow: 0 18rpx 44rpx rgba(22, 22, 22, 0.05);
 }
@@ -353,7 +386,6 @@ const goMore = () => {
   font-size: 28rpx;
   font-weight: 600;
   line-height: 1.2;
-  transition: opacity 160ms ease, transform 160ms ease;
 }
 
 .mode-button.active,
@@ -366,8 +398,10 @@ const goMore = () => {
 
 .form-panel,
 .result {
+  box-sizing: border-box;
   margin-bottom: 22rpx;
   padding: 32rpx 28rpx 30rpx;
+  border-radius: 30rpx;
   background: #ffffff;
   box-shadow: 0 24rpx 58rpx rgba(22, 22, 22, 0.06);
 }
@@ -377,10 +411,7 @@ const goMore = () => {
 }
 
 .section-copy {
-  display: flex;
   flex: 1 1 auto;
-  flex-direction: column;
-  gap: 8rpx;
   min-width: 0;
 }
 
@@ -461,7 +492,6 @@ const goMore = () => {
   color: #505050;
   font-size: 24rpx;
   line-height: 72rpx;
-  transition: opacity 160ms ease, transform 160ms ease;
 }
 
 .choice-pill {
@@ -503,7 +533,6 @@ const goMore = () => {
   border-radius: 24rpx;
   font-size: 28rpx;
   font-weight: 600;
-  transition: opacity 160ms ease, transform 160ms ease;
 }
 
 .mode-button:active,

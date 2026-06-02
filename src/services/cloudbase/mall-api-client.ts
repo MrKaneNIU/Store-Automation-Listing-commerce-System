@@ -51,6 +51,11 @@ type UpdateProductDescriptionInput = {
   description: string
 }
 
+type UpdateProductBasicsInput = {
+  productName: string
+  description: string
+}
+
 type UpdateSkuInput = {
   spec: string
   salePrice: number
@@ -225,6 +230,44 @@ export type CustomerFavoriteProductsSnapshot = {
   serverTime: string
 }
 
+export type CustomerMineRecentOrderSummary = {
+  orderId: string
+  status: Order['status']
+  statusLabel: string
+  totalAmount: number
+  itemCount: number
+  primaryProductName: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type CustomerMineUtilityEntry = {
+  key: 'favorites' | 'shoppingBag'
+  label: string
+  route: string
+  count: number
+  isEnabled: boolean
+}
+
+export type CustomerMineSnapshot = {
+  customerId: string
+  identity: {
+    isSignedIn: boolean
+    displayName: string
+    authSource: 'wechat'
+    openidMasked: string
+  }
+  phone: {
+    isBound: boolean
+    maskedPhoneNumber: string
+    statusLabel: string
+  }
+  recentOrders: CustomerMineRecentOrderSummary[]
+  recentOrderTotalCount: number
+  utilities: CustomerMineUtilityEntry[]
+  serverTime: string
+}
+
 type CustomerFavoriteProductRecord = {
   id: string
   customerId: string
@@ -270,6 +313,7 @@ export type CloudBaseMallApiClient = {
   listPublishedProducts: () => Promise<{ products: Product[] }>
   listPublishedProductSummaries: () => Promise<{ products: PublishedProductSummary[] }>
   getPublishedProductDetail: (productId: string) => Promise<PublishedProductDetail>
+  updateProductBasics: (productId: string, input: UpdateProductBasicsInput) => Promise<{ product: Product }>
   updateProductDescription: (productId: string, input: UpdateProductDescriptionInput) => Promise<{ product: Product }>
   updateSku: (productId: string, skuId: string, input: UpdateSkuInput) => Promise<{ sku: Sku }>
   restockSkus: (productId: string, input: RestockSkusInput) => Promise<{ skus: Sku[] }>
@@ -285,6 +329,7 @@ export type CloudBaseMallApiClient = {
   getCustomerOrder: (orderId: string) => Promise<{ order: Order }>
   getOwnerOrderSnapshot: () => Promise<OwnerOrderSnapshot>
   getOwnerDashboardSnapshot: () => Promise<OwnerDashboardSnapshot>
+  getCustomerMineSnapshot?: () => Promise<CustomerMineSnapshot>
   getCustomerShoppingBagSnapshot: () => Promise<CustomerShoppingBagSnapshot>
   addCustomerShoppingBagItem: (input: AddCustomerShoppingBagItemInput) => Promise<CustomerShoppingBagCommandResult>
   updateCustomerShoppingBagItemQuantity: (
@@ -389,6 +434,9 @@ export const createCloudBaseMallApiClient = (
   getPublishedProductDetail(productId) {
     return callMallApi(functionClient, { action: 'getPublishedProductDetail', params: { productId } })
   },
+  updateProductBasics(productId, input) {
+    return callMallApi(functionClient, { action: 'updateProductBasics', params: { productId }, payload: input })
+  },
   updateProductDescription(productId, input) {
     return callMallApi(functionClient, { action: 'updateProductDescription', params: { productId }, payload: input })
   },
@@ -433,6 +481,9 @@ export const createCloudBaseMallApiClient = (
   },
   getOwnerDashboardSnapshot() {
     return callMallApi(functionClient, { action: 'getOwnerDashboardSnapshot' })
+  },
+  getCustomerMineSnapshot() {
+    return callMallApi(functionClient, { action: 'getCustomerMineSnapshot' })
   },
   getCustomerShoppingBagSnapshot() {
     return callMallApi(functionClient, { action: 'getCustomerShoppingBagSnapshot' })

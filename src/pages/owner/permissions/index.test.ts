@@ -16,4 +16,14 @@ describe('owner permissions page contract', () => {
     expect(source).not.toContain('account.permissions.join')
     expect(source).not.toContain('{{ log.action }}')
   })
+
+  it('routes new account creation to account management so initial password is required', () => {
+    const source = permissionsPageSource()
+
+    expect(source).toContain("import { navigateTo, redirectTo } from '../../../app/navigation'")
+    expect(source).toContain('请先在账号管理中注册账号并设置初始密码')
+    expect(source).toContain('routes.ownerAccountManagement')
+    expect(source).toContain('navigateTo(routes.ownerAccountManagement')
+    expect(source).toContain('const existingAccount = viewModel.value.accounts.find')
+  })
 })

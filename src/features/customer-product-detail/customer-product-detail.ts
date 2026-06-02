@@ -2,6 +2,7 @@ import type { Product, Sku } from '../../domain/catalog/types'
 import type { Order } from '../../domain/order/types'
 import { mockWechatAuthService } from '../../services/auth/mock-wechat-auth-service'
 import type { WechatAuthService } from '../../services/auth/wechat-auth-service'
+import { createStaticProductImageView, type ProductImageViewModel } from '../../services/storage/product-image-url'
 import { submitCustomerWechatOrder } from '../customer-order/customer-order'
 import { mallAccess } from '../mall-workflow/mall-access'
 
@@ -15,7 +16,7 @@ export type CustomerProductDetailSkuView = {
 }
 
 export type CustomerProductDetailViewModel = {
-  product: Product | null
+  product: (Product & ProductImageViewModel) | null
   descriptionText: string
   skus: CustomerProductDetailSkuView[]
   isPublished: boolean
@@ -65,7 +66,7 @@ export const getCustomerProductDetailView = (
   const selectedSku = skus.find((sku) => sku.id === selectedSkuId)
 
   return {
-    product,
+    product: product ? { ...product, ...createStaticProductImageView(product) } : null,
     descriptionText: product?.description.trim() ? product.description : productDescriptionFallbackText,
     skus,
     isPublished,

@@ -1,24 +1,84 @@
 <template>
   <view class="page">
     <view class="mine-header">
-      <text class="eyebrow">CUSTOMER</text>
-      <text class="title">我的</text>
-      <text class="copy">客户中心暂未开放</text>
+      <view class="mine-nav">
+        <view class="nav-spacer" />
+        <view class="title-cluster">
+          <text class="nav-title">我的</text>
+          <text class="mine-count">共 {{ viewModel.recentOrderTotalCount }} 笔订单</text>
+        </view>
+        <button class="icon-button plain" aria-label="重新加载我的" hover-class="press-feedback" @tap="retry">
+          <text class="refresh-mark" />
+        </button>
+      </view>
     </view>
 
-    <view class="entry-list" aria-label="客户入口">
-      <button class="entry primary" :disabled="Boolean(navigatingRoute)" hover-class="press-feedback" @tap="goHome">
-        <text>返回首页</text>
-      </button>
-      <button class="entry" :disabled="Boolean(navigatingRoute)" hover-class="press-feedback" @tap="goCatalog">
-        <text>继续逛商品</text>
-      </button>
-      <button class="entry" :disabled="Boolean(navigatingRoute)" hover-class="press-feedback" @tap="goFavorites">
-        <text>查看收藏</text>
-      </button>
-      <button class="entry" :disabled="Boolean(navigatingRoute)" hover-class="press-feedback" @tap="goShoppingBag">
-        <text>查看购物袋</text>
-      </button>
+    <view v-if="viewModel.loadingState === 'loading'" class="mine-feedback">
+      <view class="skeleton-card shimmer" />
+      <view class="skeleton-row shimmer" />
+      <view class="skeleton-row narrow shimmer" />
+    </view>
+
+    <view v-else class="mine-content">
+      <view v-if="viewModel.loadingState === 'failed'" class="inline-error">
+        <text>{{ viewModel.failureMessage }}</text>
+        <button hover-class="press-feedback" @tap="retry">重试</button>
+      </view>
+
+      <view v-if="viewModel.loadingState === 'refreshing'" class="inline-status">
+        <text>正在同步我的数据</text>
+      </view>
+
+      <view class="identity-panel">
+        <view class="identity-copy">
+          <text class="identity-label">{{ viewModel.identityLabel }}</text>
+          <text class="identity-name">{{ viewModel.identityDisplayName }}</text>
+          <text v-if="viewModel.identityOpenidLabel" class="identity-meta">{{ viewModel.identityOpenidLabel }}</text>
+        </view>
+        <view class="phone-pill">
+          <text>{{ viewModel.phoneLabel }}</text>
+          <text>{{ viewModel.phoneDisplayText }}</text>
+        </view>
+      </view>
+
+      <view class="utility-grid" aria-label="我的功能">
+        <button
+          v-for="entry in viewModel.utilities"
+          :key="entry.key"
+          class="utility-entry"
+          :disabled="!entry.isEnabled || Boolean(navigatingRoute)"
+          hover-class="press-feedback"
+          @tap="navigateUtility(entry.route)"
+        >
+          <text class="utility-count">{{ entry.countLabel }}</text>
+          <text class="utility-label">{{ entry.label }}</text>
+        </button>
+      </view>
+
+      <view class="section-heading">
+        <text>近期订单</text>
+        <text>共 {{ viewModel.recentOrderTotalCount }} 笔</text>
+      </view>
+
+      <view v-if="viewModel.recentOrders.length === 0" class="empty-state">
+        <text class="empty-title">{{ viewModel.recentOrdersEmptyMessage }}</text>
+        <text class="empty-copy">当前账号下单后，订单摘要会显示在这里。</text>
+        <button class="empty-action" hover-class="press-feedback" @tap="goCatalog">去逛商品</button>
+      </view>
+
+      <view v-else class="order-list">
+        <view v-for="order in viewModel.recentOrders" :key="order.orderId" class="order-card">
+          <view class="order-topline">
+            <text class="order-name">{{ order.primaryProductName }}</text>
+            <text class="order-status">{{ order.statusLabel }}</text>
+          </view>
+          <view class="order-meta">
+            <text>{{ order.itemCountLabel }}</text>
+            <text>{{ order.totalAmountText }}</text>
+          </view>
+          <text class="order-time">{{ order.createdAt }}</text>
+        </view>
+      </view>
     </view>
 
     <view class="customer-nav">
@@ -71,12 +131,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import { ref } from 'vue'
 import { redirectTo } from '../../../app/navigation'
 import type { AppRoute } from '../../../app/routes'
 import { customerBottomNavRoutes, shouldIgnoreCustomerBottomNavTap } from '../customer-bottom-nav'
+import { useCustomerMinePageState } from './useCustomerMinePageState'
 
+const mineState = useCustomerMinePageState()
+const viewModel = mineState.viewModel
 const navigatingRoute = ref<AppRoute | ''>('')
 let navigationFallbackTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -89,7 +152,22 @@ const clearNavigationLock = () => {
   }
 }
 
-onShow(clearNavigationLock)
+const scheduleNavigationFallback = () => {
+  navigationFallbackTimer = setTimeout(clearNavigationLock, 900)
+}
+
+const loadMineSnapshot = () => {
+  void mineState.loadSnapshot({ showLoading: viewModel.value.customerId === '' })
+}
+
+const retry = () => {
+  void mineState.retry()
+}
+
+onShow(() => {
+  clearNavigationLock()
+  loadMineSnapshot()
+})
 
 const goCustomerBottomNav = (targetRoute: AppRoute) => {
   if (
@@ -103,10 +181,21 @@ const goCustomerBottomNav = (targetRoute: AppRoute) => {
   }
 
   navigatingRoute.value = targetRoute
-  navigationFallbackTimer = setTimeout(clearNavigationLock, 900)
+  scheduleNavigationFallback()
   redirectTo(targetRoute, {
     onComplete: clearNavigationLock,
   })
+}
+
+const navigateUtility = (route: string) => {
+  if (route === customerBottomNavRoutes.favorites) {
+    goFavorites()
+    return
+  }
+
+  if (route === customerBottomNavRoutes.shoppingBag) {
+    goShoppingBag()
+  }
 }
 
 const goHome = () => {
@@ -134,108 +223,442 @@ const goMine = () => {
 .page {
   min-height: 100vh;
   box-sizing: border-box;
-  padding: calc(env(safe-area-inset-top) + 64rpx) 32rpx calc(190rpx + env(safe-area-inset-bottom));
+  padding-bottom: calc(190rpx + env(safe-area-inset-bottom));
   overflow-x: hidden;
   background: #f8f8f8;
   color: #222222;
 }
 
 .mine-header {
-  display: flex;
-  flex-direction: column;
-  gap: 18rpx;
-  padding: 36rpx 0 48rpx;
+  padding: calc(env(safe-area-inset-top) + 28rpx) 32rpx 0;
 }
 
-.eyebrow {
-  color: #777777;
-  font-size: 22rpx;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-
-.title {
-  color: #111111;
-  font-size: 56rpx;
-  font-weight: 800;
-  letter-spacing: 0;
-}
-
-.copy {
-  color: #555555;
-  font-size: 28rpx;
-  line-height: 1.6;
-}
-
-.entry-list {
-  display: grid;
-  gap: 18rpx;
-}
-
-.entry {
+.mine-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 96rpx;
-  border: 1rpx solid #e6e6e6;
-  border-radius: 8rpx;
+  gap: 16rpx;
+  min-height: 92rpx;
+}
+
+.nav-spacer {
+  width: 76rpx;
+  min-width: 76rpx;
+  height: 76rpx;
+}
+
+.title-cluster {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.nav-title {
+  color: #222222;
+  font-size: 42rpx;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.mine-count {
+  color: #9a9a9a;
+  font-size: 24rpx;
+  line-height: 1.2;
+}
+
+.icon-button,
+.utility-entry,
+.empty-action,
+.inline-error button,
+.tab {
+  margin: 0;
+  border: 0;
+  transition: opacity 160ms ease, transform 160ms ease, background-color 160ms ease;
+}
+
+.icon-button::after,
+.utility-entry::after,
+.empty-action::after,
+.inline-error button::after,
+.tab::after {
+  border: 0;
+}
+
+.icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 76rpx;
+  min-width: 76rpx;
+  height: 76rpx;
+  padding: 0;
+  border-radius: 999rpx;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: 0 0 0 1rpx #e8e8e8 inset;
+}
+
+.refresh-mark {
+  position: relative;
+  width: 34rpx;
+  height: 34rpx;
+  border: 3rpx solid #050505;
+  border-left-color: transparent;
+  border-radius: 999rpx;
+}
+
+.refresh-mark::after {
+  position: absolute;
+  top: 0;
+  right: -4rpx;
+  width: 12rpx;
+  height: 12rpx;
+  border-top: 3rpx solid #050505;
+  border-right: 3rpx solid #050505;
+  content: "";
+  transform: rotate(18deg);
+}
+
+.press-feedback {
+  opacity: 0.76;
+  transform: scale(0.97);
+}
+
+.busy {
+  opacity: 0.58;
+}
+
+.mine-feedback,
+.mine-content {
+  display: flex;
+  flex-direction: column;
+  gap: 22rpx;
+  margin: 38rpx 32rpx 0;
+}
+
+.skeleton-card,
+.skeleton-row {
+  border-radius: 32rpx;
+  background: #ffffff;
+}
+
+.skeleton-card {
+  height: 280rpx;
+}
+
+.skeleton-row {
+  height: 34rpx;
+}
+
+.skeleton-row.narrow {
+  width: 62%;
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -45%;
+  width: 45%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent);
+  content: "";
+  transform: translateX(0);
+  animation: shimmer-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes shimmer-slide {
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+.inline-status,
+.inline-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  min-height: 82rpx;
+  box-sizing: border-box;
+  padding: 0 24rpx;
+  border-radius: 24rpx;
+  background: #ffffff;
+  color: #666666;
+  font-size: 26rpx;
+}
+
+.inline-error {
+  background: #fff3f1;
+  color: #9f2b1f;
+}
+
+.inline-error button {
+  flex: 0 0 auto;
+  min-height: 58rpx;
+  padding: 0 24rpx;
+  border-radius: 999rpx;
+  background: #050505;
+  color: #ffffff;
+  font-size: 24rpx;
+  line-height: 58rpx;
+}
+
+.identity-panel,
+.empty-state,
+.order-card {
+  box-sizing: border-box;
+  border-radius: 30rpx;
+  background: #ffffff;
+  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.06);
+}
+
+.identity-panel {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 22rpx;
+  padding: 34rpx;
+}
+
+.identity-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.identity-label,
+.identity-meta,
+.phone-pill text:first-child,
+.section-heading text:last-child,
+.order-meta,
+.order-time {
+  color: #777777;
+  font-size: 24rpx;
+  line-height: 1.35;
+}
+
+.identity-name {
+  color: #111111;
+  font-size: 40rpx;
+  font-weight: 700;
+  line-height: 1.22;
+  overflow-wrap: anywhere;
+}
+
+.phone-pill {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 6rpx;
+  max-width: 240rpx;
+  padding: 16rpx 20rpx;
+  border-radius: 24rpx;
+  background: #f4f4f4;
+  text-align: right;
+}
+
+.phone-pill text:last-child {
+  color: #222222;
+  font-size: 26rpx;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.utility-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18rpx;
+}
+
+.utility-entry {
+  display: flex;
+  min-height: 156rpx;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 10rpx;
+  padding: 0 28rpx;
+  border-radius: 30rpx;
   background: #ffffff;
   color: #222222;
-  font-size: 28rpx;
-  font-weight: 700;
   text-align: left;
+  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.06);
 }
 
-.entry.primary {
-  border-color: #222222;
-  background: #222222;
+.utility-entry[disabled] {
+  opacity: 0.56;
+}
+
+.utility-count {
+  color: #050505;
+  font-size: 42rpx;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.utility-label {
+  color: #666666;
+  font-size: 26rpx;
+  line-height: 1.35;
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-top: 8rpx;
+}
+
+.section-heading text:first-child {
+  color: #111111;
+  font-size: 34rpx;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+  min-height: 320rpx;
+  padding: 44rpx 36rpx;
+}
+
+.empty-title {
+  color: #222222;
+  font-size: 34rpx;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.empty-copy {
+  color: #666666;
+  font-size: 28rpx;
+  line-height: 1.5;
+}
+
+.empty-action {
+  align-self: flex-start;
+  min-height: 76rpx;
+  margin-top: 10rpx;
+  padding: 0 34rpx;
+  border-radius: 999rpx;
+  background: #050505;
   color: #ffffff;
+  font-size: 28rpx;
+  line-height: 76rpx;
 }
 
-.entry[disabled] {
-  opacity: 0.55;
+.order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.order-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+  padding: 28rpx;
+}
+
+.order-topline,
+.order-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18rpx;
+}
+
+.order-name {
+  min-width: 0;
+  color: #222222;
+  font-size: 30rpx;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.order-status {
+  flex: 0 0 auto;
+  max-width: 240rpx;
+  color: #050505;
+  font-size: 24rpx;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .customer-nav {
   position: fixed;
-  right: 24rpx;
-  bottom: calc(24rpx + env(safe-area-inset-bottom));
-  left: 24rpx;
-  z-index: 10;
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 4rpx;
-  padding: 14rpx 10rpx;
-  border: 1rpx solid rgba(0, 0, 0, 0.08);
-  border-radius: 8rpx;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 18rpx 50rpx rgba(0, 0, 0, 0.12);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 8;
+  display: flex;
+  justify-content: space-around;
+  box-sizing: border-box;
+  min-height: 152rpx;
+  padding: 18rpx 18rpx calc(18rpx + env(safe-area-inset-bottom));
+  border-top-left-radius: 38rpx;
+  border-top-right-radius: 38rpx;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 -12rpx 32rpx rgba(0, 0, 0, 0.06);
 }
 
 .tab {
   display: flex;
   min-width: 0;
-  min-height: 76rpx;
+  min-height: 104rpx;
+  flex: 1 1 0;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4rpx;
-  border-radius: 8rpx;
-  color: #777777;
-  font-size: 20rpx;
+  gap: 8rpx;
+  padding: 0;
+  border-radius: 28rpx;
+  background: transparent;
+  color: #9a9a9a;
+  font-size: 22rpx;
+  line-height: 1.2;
 }
 
 .tab.active {
-  background: #222222;
-  color: #ffffff;
+  color: #050505;
 }
 
-.tab.busy {
-  opacity: 0.65;
+.tab-pressed {
+  opacity: 0.7;
+  transform: scale(0.96);
 }
 
 .tab-icon {
-  font-size: 28rpx;
+  font-size: 30rpx;
   line-height: 1;
+}
+
+@media (max-width: 390px) {
+  .identity-panel {
+    flex-direction: column;
+  }
+
+  .phone-pill {
+    width: 100%;
+    max-width: none;
+    text-align: left;
+  }
 }
 </style>

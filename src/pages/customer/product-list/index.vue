@@ -93,9 +93,19 @@
         hover-stay-time="90"
         @tap="openDetail(product.id)"
       >
-        <view class="catalog-media">
-          <image v-if="product.mainImageUrl" class="image" :src="product.mainImageUrl" mode="aspectFill" />
-          <view v-else class="fashion-visual" :class="getVisualClass(product.productCode)" />
+        <view class="catalog-media" :class="{ failed: failedImageProductIds.includes(product.id) }">
+          <image
+            v-if="product.mainImageUrl"
+            class="image"
+            :src="product.mainImageUrl"
+            mode="aspectFill"
+            @error="handleProductImageError(product.id)"
+          />
+          <view v-else class="fashion-visual" :class="getVisualClass(product.productCode)">
+            <text v-if="product.imageStatus !== 'ready' || product.imageFallbackReason" class="image-fallback-label">
+              {{ product.imageFallbackReason || '图片暂时无法显示' }}
+            </text>
+          </view>
           <button
             class="favorite-button"
             :class="{ active: isFavoriteProduct(product.id), busy: favoriteBusyProductId === product.id }"
@@ -195,6 +205,7 @@ const navigatingRoute = ref<AppRoute | ''>('')
 const navigatingProductId = ref('')
 const favoriteBusyProductId = ref('')
 const favoriteProductsView = ref<CustomerFavoriteProductsView>(createCustomerFavoriteProductsLoadingView())
+const failedImageProductIds = ref<string[]>([])
 const DEFAULT_HEADER_TOP_PADDING = 'calc(env(safe-area-inset-top) + 28rpx)'
 const HEADER_TOP_OFFSET_RPX = -8
 const STATUS_BAR_FALLBACK_GAP_RPX = 44
@@ -268,6 +279,17 @@ const refreshView = (options: RefreshOptions): Promise<void> => {
 
 const reloadView = () => {
   void refreshView({ showLoading: true })
+}
+
+const handleProductImageError = (productId: string) => {
+  if (failedImageProductIds.value.includes(productId)) {
+    favoriteMessage.value = '商品图片暂时无法显示，请检查图片域名或稍后重试'
+    return
+  }
+
+  failedImageProductIds.value = [...failedImageProductIds.value, productId]
+  favoriteMessage.value = '商品图片加载失败，已尝试刷新图片链接'
+  void refreshView({ showLoading: false })
 }
 
 const keepPreviousFavoritesOnFailure = (
@@ -842,6 +864,21 @@ const getVisualClass = (productCode: string) => {
 .fashion-visual {
   width: 100%;
   height: 100%;
+}
+
+.image-fallback-label {
+  position: absolute;
+  right: 18rpx;
+  bottom: 18rpx;
+  left: 18rpx;
+  box-sizing: border-box;
+  padding: 12rpx 14rpx;
+  border-radius: 12rpx;
+  background: rgba(255, 255, 255, 0.88);
+  color: #5f5f5f;
+  font-size: 22rpx;
+  line-height: 1.25;
+  text-align: center;
 }
 
 .fashion-visual {

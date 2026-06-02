@@ -1,5 +1,6 @@
 import type { Product, ProductStatus, Sku } from '../../domain/catalog/types'
 import { validateProductForPublish } from '../../domain/catalog/rules'
+import { createStaticProductImageView, type ProductImageViewModel } from '../../services/storage/product-image-url'
 import { mallAccess } from '../mall-workflow/mall-access'
 import { mallWorkflow } from '../mall-workflow/mall-workflow'
 
@@ -10,7 +11,7 @@ export type OwnerProductStatusOption = {
   value: OwnerProductStatusFilter
 }
 
-export type OwnerProductListItem = Product & {
+export type OwnerProductListItem = Product & ProductImageViewModel & {
   statusLabel: string
   skuCount: number
   canPublish: boolean
@@ -48,6 +49,11 @@ export type OwnerProductSkuUpdateInput = {
   reason: string
 }
 
+export type OwnerProductBasicsUpdateInput = {
+  productName: string
+  description: string
+}
+
 export const productDescriptionMaxLength = 120
 
 export const ownerInventoryReasonOptions = ['补货入库', '盘点修正', '人工纠错', '盘点清零']
@@ -71,6 +77,7 @@ const toListItem = (product: Product): OwnerProductListItem => {
 
   return {
     ...product,
+    ...createStaticProductImageView(product),
     statusLabel: statusLabels[product.status],
     skuCount: skus.length,
     canPublish: product.status === 'ready_to_publish' && validation.canPublish,
@@ -189,6 +196,28 @@ export const updateOwnerProductDescription = (
 
   mallWorkflow.updateProductDescription(product, normalizedDescription)
   return { message: '商品简介已保存' }
+}
+
+export const updateOwnerProductBasics = (
+  productId: string,
+  input: OwnerProductBasicsUpdateInput,
+): OwnerProductCommandResult => {
+  const product = mallAccess.getProduct(productId)
+  if (!product) {
+    return { message: '商品不存在' }
+  }
+
+  const productName = input.productName.trim()
+  const description = input.description.trim()
+  if (!productName) {
+    return { message: '商品名称不能为空' }
+  }
+  if (description.length > productDescriptionMaxLength) {
+    return { message: `商品简介不能超过 ${productDescriptionMaxLength} 字` }
+  }
+
+  mallWorkflow.updateProductBasics(product, { productName, description })
+  return { message: '商品基础信息已保存' }
 }
 
 export const getOwnerProductSkuInventoryView = (productId: string): OwnerProductSkuInventoryViewModel => {

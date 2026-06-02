@@ -1,6 +1,50 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CloudBaseMallApiClient } from '../../services/cloudbase/mall-api-client'
 import type { CustomerSession } from '../../services/auth/customer-session'
+
+const uploadServiceMock = vi.hoisted(() => ({
+  chooseAndUploadImages: vi.fn(),
+  refreshAssetUrls: vi.fn(),
+}))
+
+vi.mock('../../services/storage/runtime-upload-service', () => ({
+  uploadService: {
+    chooseAndUploadImages: uploadServiceMock.chooseAndUploadImages,
+    refreshAssetUrls: uploadServiceMock.refreshAssetUrls,
+  },
+}))
+
+beforeEach(() => {
+  uploadServiceMock.chooseAndUploadImages.mockReset()
+  uploadServiceMock.chooseAndUploadImages.mockImplementation(async (context: { entityId?: string; businessType: string }) => {
+    const seed = context.entityId ?? context.businessType
+    const url = `/static/logo.png?asset=${encodeURIComponent(seed)}`
+
+    return {
+      mainImageUrl: url,
+      imageUrls: [url],
+      assets: [{
+        assetId: `asset-${seed}`,
+        cloudPath: `mock/${seed}/1.png`,
+        url,
+        mimeType: 'image/png',
+        size: 1024,
+        checksum: seed,
+        status: 'uploaded' as const,
+      }],
+    }
+  })
+  uploadServiceMock.refreshAssetUrls.mockReset()
+  uploadServiceMock.refreshAssetUrls.mockImplementation(async (assetIds: string[]) => assetIds.map((assetId) => ({
+    assetId,
+    cloudPath: assetId,
+    url: `/static/logo.png?asset=${encodeURIComponent(assetId)}&refresh=1`,
+    mimeType: 'image/png',
+    size: 1024,
+    checksum: assetId,
+    status: 'uploaded' as const,
+  })))
+})
 import {
   retryCloudBaseOwnerScreenshotRecognitionJob,
   startCloudBaseOwnerScreenshotRecognition,
@@ -12,6 +56,7 @@ import {
   getCloudBaseOwnerProductSkuInventoryView,
   restockCloudBaseOwnerProductSkus,
   unpublishCloudBaseOwnerProduct,
+  updateCloudBaseOwnerProductBasics,
   updateCloudBaseOwnerProductDescription,
   updateCloudBaseOwnerProductSku,
 } from './owner-products'
@@ -67,8 +112,9 @@ const createClient = (overrides: Partial<CloudBaseMallApiClient>): CloudBaseMall
     listPublishedProductSummaries: missing,
     getPublishedProductDetail: missing,
     listOwnerProductCards: missing,
-    updateProductDescription: missing,
-    updateSku: missing,
+  updateProductDescription: missing,
+  updateProductBasics: missing,
+  updateSku: missing,
     restockSkus: missing,
     clearSkuStock: missing,
     publishProduct: missing,
@@ -98,6 +144,9 @@ const createClient = (overrides: Partial<CloudBaseMallApiClient>): CloudBaseMall
     ...overrides,
   }
 }
+
+const signedCloudBaseRenderUrl =
+  'https://636c-cloud1-d7gifjyzl7721b383-1429982088.tcb.qcloud.la/uploads/product_main_image/staff/product/product-1/main.jpg?sign=abc&t=1779673154'
 
 const product = {
   id: 'product-1',
@@ -326,6 +375,29 @@ describe('CloudBase mall facades', () => {
     })
   })
 
+  it('updates product basics through mallApi without exposing productCode mutation', async () => {
+    const updateProductBasics = vi.fn(async () => ({
+      product: {
+        ...product,
+        productName: 'Updated Cotton Shirt',
+        description: '进口羊毛混纺，适合通勤叠穿。',
+      },
+    }))
+    const client = createClient({ updateProductBasics })
+
+    await expect(updateCloudBaseOwnerProductBasics(product.id, {
+      productName: '  Updated Cotton Shirt  ',
+      description: '  进口羊毛混纺，适合通勤叠穿。  ',
+    }, client)).resolves.toEqual({
+      message: '商品基础信息已保存',
+    })
+    expect(updateProductBasics).toHaveBeenCalledWith('product-1', {
+      productName: 'Updated Cotton Shirt',
+      description: '进口羊毛混纺，适合通勤叠穿。',
+    })
+    expect(JSON.stringify(updateProductBasics.mock.calls)).not.toContain('productCode')
+  })
+
   it('loads and updates owner SKU inventory through mallApi', async () => {
     const client = createClient({
       listProducts: vi.fn(async () => ({ products: [product] })),
@@ -411,6 +483,28 @@ describe('CloudBase mall facades', () => {
     })
     expect(client.getLatestDraftReviewSnapshot).toHaveBeenCalledTimes(1)
     expect(client.getLatestDrafts).not.toHaveBeenCalled()
+  })
+
+  it('hides confirmed cloud drafts from the draft review ViewModel', async () => {
+    const client = createClient({
+      getLatestDraftReviewSnapshot: vi.fn(async () => ({
+        batch,
+        drafts: [
+          { ...draft, id: 'confirmed-draft', status: 'confirmed' as const },
+          { ...draft, id: 'deleted-draft', status: 'deleted' as const },
+        ],
+        serverTime: '2026-05-27T00:00:00.000Z',
+      })),
+    })
+
+    await expect(getCloudBaseOwnerDraftReviewView(client)).resolves.toMatchObject({
+      latestBatchId: 'batch-1',
+      groups: [],
+      needsCompletionCount: 0,
+      lowConfidenceCount: 0,
+      priceConflictCount: 0,
+      canConfirm: false,
+    })
   })
 
   it('loads customer product list from a single published summary mallApi call', async () => {
@@ -524,6 +618,51 @@ describe('CloudBase mall facades', () => {
     })
   })
 
+  it('keeps fresh signed CloudBase render URLs resolved from cloud file IDs in customer and owner ViewModels', async () => {
+    uploadServiceMock.refreshAssetUrls.mockImplementation(async (assetIds: string[]) => assetIds.map((assetId) => ({
+      assetId,
+      cloudPath: assetId,
+      url: signedCloudBaseRenderUrl,
+      mimeType: 'image/jpeg',
+      size: 1024,
+      checksum: assetId,
+      status: 'uploaded' as const,
+    })))
+    const cloudImageProduct = {
+      ...product,
+      mainImageUrl: 'cloud://asset-signed-main',
+      imageUrls: ['cloud://asset-signed-main'],
+    }
+    const client = createClient({
+      listPublishedProductSummaries: vi.fn(async () => ({ products: [{ ...cloudImageProduct, minPrice: 129 }] })),
+      getPublishedProductDetail: vi.fn(async () => ({ product: cloudImageProduct, skus: [sku], serverTime: '2026-05-27T00:00:00.000Z' })),
+      listOwnerProductCards: vi.fn(async () => ({
+        products: [{
+          ...cloudImageProduct,
+          statusLabel: 'published',
+          skuCount: 1,
+          canPublish: false,
+          publishBlockReasons: [],
+        }],
+        readyProductCount: 0,
+        serverTime: '2026-05-27T00:00:00.000Z',
+      })),
+    })
+
+    await expect(getCloudBaseCustomerProductListView(client)).resolves.toMatchObject({
+      products: [{ mainImageUrl: signedCloudBaseRenderUrl }],
+    })
+    await expect(getCloudBaseCustomerProductDetailView(product.id, '', client)).resolves.toMatchObject({
+      product: {
+        mainImageUrl: signedCloudBaseRenderUrl,
+        imageUrls: [signedCloudBaseRenderUrl],
+      },
+    })
+    await expect(getCloudBaseOwnerProductsView('all', client)).resolves.toMatchObject({
+      products: [{ mainImageUrl: signedCloudBaseRenderUrl }],
+    })
+  })
+
   it('drops signed CloudBase temporary product image URLs from page-facing ViewModels', async () => {
     const signedTempUrl = 'https://636c-cloud1-d7gifjyzl7721b383-1429982088.tcb.qcloud.la/uploads/product.jpg?sign=abc&t=1779673154'
     const signedImageProduct = {
@@ -612,9 +751,15 @@ describe('CloudBase mall facades', () => {
       supplementProductImages: vi.fn(async () => ({ product: readyProduct })),
     })
 
-    await expect(getCloudBaseStaffImageTasksView({ keyword: 'A1023', selectedBatchId: 'batch-1' }, client)).resolves.toMatchObject({
+    const view = await getCloudBaseStaffImageTasksView({ keyword: 'A1023', selectedBatchId: 'batch-1' }, client)
+
+    expect(view).toMatchObject({
       products: [{ id: 'product-1' }],
     })
+    expect(view.batchOptions[1]).toMatchObject({ value: 'batch-1' })
+    expect(view.batchOptions[1].label).toContain('批次')
+    expect(view.batchOptions[1].label).toContain('待补图 1 件')
+    expect(view.selectedBatchLabel).toBe(view.batchOptions[1].label)
     expect(client.getStaffImageTaskSnapshot).toHaveBeenCalledTimes(1)
     expect(client.listOcrBatches).not.toHaveBeenCalled()
     expect(client.listPendingImageTasks).not.toHaveBeenCalled()
@@ -672,6 +817,7 @@ describe('CloudBase mall facades', () => {
       authService,
       confirmLogin: async () => true,
       confirmPhoneAuthorization: async () => true,
+      requestPhoneNumber: async () => '13800000000',
       client: createClient({
         getPublishedProductDetail: vi.fn(async () => ({ product, skus: [sku], serverTime: '2026-05-27T00:00:00.000Z' })),
         createCustomerOrder,
@@ -684,6 +830,201 @@ describe('CloudBase mall facades', () => {
       skuId: 'sku-1',
       session: authorizedSession,
     }))
+  })
+
+  it('submits customer orders only after real WeChat phone binding returns a phone-bound session', async () => {
+    const session: CustomerSession = {
+      customerId: 'customer-1',
+      openid: 'openid-1',
+      nickname: 'Wechat Customer',
+      authSource: 'wechat',
+      loggedInAt: '2026-05-09T00:00:00.000Z',
+    }
+    const authorizedSession = {
+      ...session,
+      phoneNumber: '13800000000',
+      phoneAuthorizedAt: '2026-05-09T00:01:00.000Z',
+    }
+    const createCustomerOrder = vi.fn(async () => ({ order: { ...order, customerAuthSource: 'wechat' as const } }))
+    const requestPhoneNumber = vi.fn(async () => 'phone-code-ok')
+    const authService = {
+      getCurrentSession: () => null,
+      login: vi.fn(async () => session),
+      authorizePhoneNumber: vi.fn(async (phoneCode?: string) => {
+        expect(phoneCode).toBe('phone-code-ok')
+        expect(createCustomerOrder).not.toHaveBeenCalled()
+        return authorizedSession
+      }),
+      logout: vi.fn(),
+    }
+
+    const result = await submitCloudBaseCustomerProductDetailOrder({
+      productId: product.id,
+      skuId: sku.id,
+      quantity: 1,
+      authService,
+      confirmLogin: async () => true,
+      confirmPhoneAuthorization: async () => true,
+      requestPhoneNumber,
+      client: createClient({
+        getPublishedProductDetail: vi.fn(async () => ({ product, skus: [sku], serverTime: '2026-05-27T00:00:00.000Z' })),
+        createCustomerOrder,
+      }),
+    })
+
+    expect(result.status).toBe('created')
+    expect(requestPhoneNumber).toHaveBeenCalledTimes(1)
+    expect(authService.authorizePhoneNumber).toHaveBeenCalledWith('phone-code-ok')
+    expect(createCustomerOrder).toHaveBeenCalledWith(expect.objectContaining({
+      productId: 'product-1',
+      skuId: 'sku-1',
+      session: authorizedSession,
+    }))
+  })
+
+  it('cancels checkout without creating an order when native phone authorization returns no code', async () => {
+    const session: CustomerSession = {
+      customerId: 'customer-1',
+      openid: 'openid-1',
+      nickname: 'Wechat Customer',
+      authSource: 'wechat',
+      loggedInAt: '2026-05-09T00:00:00.000Z',
+    }
+    const createCustomerOrder = vi.fn(async () => ({ order }))
+    const requestPhoneNumber = vi.fn(async () => null)
+    const authService = {
+      getCurrentSession: () => null,
+      login: vi.fn(async () => session),
+      authorizePhoneNumber: vi.fn(),
+      logout: vi.fn(),
+    }
+
+    const result = await submitCloudBaseCustomerProductDetailOrder({
+      productId: product.id,
+      skuId: sku.id,
+      quantity: 1,
+      authService,
+      requestPhoneNumber,
+      client: createClient({
+        getPublishedProductDetail: vi.fn(async () => ({ product, skus: [sku], serverTime: '2026-05-27T00:00:00.000Z' })),
+        createCustomerOrder,
+      }),
+    })
+
+    expect(result.status).toBe('canceled')
+    expect(requestPhoneNumber).toHaveBeenCalledTimes(1)
+    expect(authService.authorizePhoneNumber).not.toHaveBeenCalled()
+    expect(createCustomerOrder).not.toHaveBeenCalled()
+  })
+
+  it('submits customer orders directly for phone-bound sessions without requesting another phone code', async () => {
+    const boundSession: CustomerSession = {
+      customerId: 'customer-1',
+      openid: 'openid-1',
+      nickname: 'Wechat Customer',
+      authSource: 'wechat',
+      phoneNumber: '13800000000',
+      phoneAuthorizedAt: '2026-05-09T00:01:00.000Z',
+      loggedInAt: '2026-05-09T00:00:00.000Z',
+    }
+    const createCustomerOrder = vi.fn(async () => ({ order: { ...order, customerAuthSource: 'wechat' as const } }))
+    const requestPhoneNumber = vi.fn(async () => 'phone-code-should-not-be-used')
+    const authService = {
+      getCurrentSession: vi.fn(() => boundSession),
+      login: vi.fn(),
+      authorizePhoneNumber: vi.fn(),
+      logout: vi.fn(),
+    }
+
+    const result = await submitCloudBaseCustomerProductDetailOrder({
+      productId: product.id,
+      skuId: sku.id,
+      quantity: 1,
+      authService,
+      requestPhoneNumber,
+      client: createClient({
+        getPublishedProductDetail: vi.fn(async () => ({ product, skus: [sku], serverTime: '2026-05-27T00:00:00.000Z' })),
+        createCustomerOrder,
+      }),
+    })
+
+    expect(result.status).toBe('created')
+    expect(authService.login).not.toHaveBeenCalled()
+    expect(requestPhoneNumber).not.toHaveBeenCalled()
+    expect(authService.authorizePhoneNumber).not.toHaveBeenCalled()
+    expect(createCustomerOrder).toHaveBeenCalledWith(expect.objectContaining({
+      productId: 'product-1',
+      skuId: 'sku-1',
+      session: boundSession,
+    }))
+  })
+
+  it('returns a failed checkout result when WeChat identity login is rejected', async () => {
+    const createCustomerOrder = vi.fn(async () => ({ order }))
+    const authService = {
+      getCurrentSession: () => null,
+      login: vi.fn(async () => {
+        throw new Error('UNAUTHORIZED: Verified WeChat identity is required')
+      }),
+      authorizePhoneNumber: vi.fn(),
+      logout: vi.fn(),
+    }
+
+    await expect(submitCloudBaseCustomerProductDetailOrder({
+      productId: product.id,
+      skuId: sku.id,
+      quantity: 1,
+      authService,
+      confirmLogin: async () => true,
+      confirmPhoneAuthorization: async () => true,
+      client: createClient({
+        getPublishedProductDetail: vi.fn(async () => ({ product, skus: [sku], serverTime: '2026-05-27T00:00:00.000Z' })),
+        createCustomerOrder,
+      }),
+    })).resolves.toMatchObject({
+      status: 'failed',
+      order: null,
+      message: '请重试验证微信身份',
+    })
+    expect(createCustomerOrder).not.toHaveBeenCalled()
+  })
+
+  it('returns a failed checkout result when WeChat phone binding is rejected', async () => {
+    const session: CustomerSession = {
+      customerId: 'customer-1',
+      openid: 'openid-1',
+      nickname: 'Wechat Customer',
+      authSource: 'wechat',
+      loggedInAt: '2026-05-09T00:00:00.000Z',
+    }
+    const createCustomerOrder = vi.fn(async () => ({ order }))
+    const authService = {
+      getCurrentSession: () => session,
+      login: vi.fn(),
+      authorizePhoneNumber: vi.fn(async () => {
+        throw new Error('UNAUTHORIZED: Verified WeChat identity is required')
+      }),
+      logout: vi.fn(),
+    }
+
+    await expect(submitCloudBaseCustomerProductDetailOrder({
+      productId: product.id,
+      skuId: sku.id,
+      quantity: 1,
+      authService,
+      confirmLogin: async () => true,
+      confirmPhoneAuthorization: async () => true,
+      requestPhoneNumber: async () => 'phone-code-1',
+      client: createClient({
+        getPublishedProductDetail: vi.fn(async () => ({ product, skus: [sku], serverTime: '2026-05-27T00:00:00.000Z' })),
+        createCustomerOrder,
+      }),
+    })).resolves.toMatchObject({
+      status: 'failed',
+      order: null,
+      message: '请重试验证微信身份',
+    })
+    expect(createCustomerOrder).not.toHaveBeenCalled()
   })
 
   it('keeps out-of-stock SKU selection visible while blocking checkout through mallApi', async () => {

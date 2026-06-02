@@ -7,6 +7,7 @@ import { routes } from '../../../app/routes'
 import { ensureAdminWorkbenchSession } from '../../../features/admin-workbench-auth/admin-workbench-guard'
 import type {
   OwnerProductStatusFilter,
+  OwnerProductListItem,
   OwnerProductSkuInventoryViewModel,
   OwnerProductsViewModel,
 } from '../../../features/owner-products/owner-products'
@@ -19,10 +20,9 @@ import {
   publishReadyCloudBaseOwnerProducts,
   restockCloudBaseOwnerProductSkus,
   unpublishCloudBaseOwnerProduct,
+  updateCloudBaseOwnerProductBasics,
   updateCloudBaseOwnerProductSku,
-  updateCloudBaseOwnerProductDescription,
 } from '../../../features/cloudbase-mall/owner-products'
-import { isRenderableProductImageUrl } from '../../../services/storage/product-image-url'
 
 type SkuDraft = {
   id: string
@@ -33,8 +33,6 @@ type SkuDraft = {
 
 const DEFAULT_PAGE_TOP_PADDING = 'calc(env(safe-area-inset-top) + 12rpx)'
 const TOP_CONTENT_GAP_RPX = 12
-
-export const isRenderableOwnerProductImageUrl = isRenderableProductImageUrl
 
 const getActionErrorDetail = (error: unknown) => {
   if (error instanceof Error && error.message.trim()) {
@@ -96,8 +94,10 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
   const lifecycleProductId = ref('')
   const isBatchPublishing = ref(false)
   const editingProductId = ref('')
+  const productNameDraft = ref('')
+  const productCodeReadonly = ref('')
   const descriptionDraft = ref('')
-  const isSavingDescription = ref(false)
+  const isSavingProductBasics = ref(false)
   const inventoryProductId = ref('')
   const isLoadingSkuInventory = ref(false)
   const isSavingSkuInventory = ref(false)
@@ -108,6 +108,7 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
   const viewModel = ref<OwnerProductsViewModel>(createEmptyProductsView())
   const skuInventoryView = ref<OwnerProductSkuInventoryViewModel>(createEmptySkuInventoryView())
   const skuDrafts = ref<SkuDraft[]>([])
+  const failedImageProductIds = ref<string[]>([])
 
   const stayProducts = () => {
     uni.pageScrollTo({ scrollTop: 0, duration: 180 })
@@ -162,8 +163,24 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
     }
   }
 
+  const handleProductImageError = async (productId: string) => {
+    if (failedImageProductIds.value.includes(productId)) {
+      message.value = '商品图片暂时无法显示，请检查图片域名或稍后重试'
+      return
+    }
+
+    failedImageProductIds.value = [...failedImageProductIds.value, productId]
+    message.value = '商品图片加载失败，已尝试刷新图片链接'
+    await refreshView()
+    if (!message.value) {
+      message.value = '商品图片加载失败，已尝试刷新图片链接'
+    }
+  }
+
   const resetDescriptionEditor = () => {
     editingProductId.value = ''
+    productNameDraft.value = ''
+    productCodeReadonly.value = ''
     descriptionDraft.value = ''
   }
 
@@ -192,22 +209,40 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
     skuDrafts.value = []
   }
 
-  const openDescriptionEditor = (productId: string, description = '') => {
-    resetSkuInventory()
-    editingProductId.value = productId
-    descriptionDraft.value = description || ''
+  const openProductEditor = (product: OwnerProductListItem) => {
+    editingProductId.value = product.id
+    productNameDraft.value = product.productName
+    productCodeReadonly.value = product.productCode
+    descriptionDraft.value = product.description || ''
+    inventoryProductId.value = product.id
+    void loadSkuInventory(product.id)
   }
 
-  const closeDescriptionEditor = () => {
-    if (isSavingDescription.value) {
+  const closeProductEditor = () => {
+    if (isSavingProductBasics.value || isSavingSkuInventory.value) {
       return
     }
 
     resetDescriptionEditor()
+    resetSkuInventory()
   }
 
+  const openDescriptionEditor = (productId: string, description = '') => {
+    const product = allProductsView.value.products.find((item) => item.id === productId)
+    if (product) {
+      openProductEditor(product)
+      return
+    }
+    editingProductId.value = productId
+    descriptionDraft.value = description || ''
+  }
+
+  const closeDescriptionEditor = closeProductEditor
+
   const openSkuInventory = (productId: string) => {
-    resetDescriptionEditor()
+    if (!editingProductId.value) {
+      resetDescriptionEditor()
+    }
     inventoryProductId.value = productId
     void loadSkuInventory(productId)
   }
@@ -289,26 +324,31 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
     }
   }
 
-  const saveDescription = async () => {
-    if (!editingProductId.value || isSavingDescription.value) {
+  const saveProductBasics = async () => {
+    if (!editingProductId.value || isSavingProductBasics.value) {
       return
     }
 
-    isSavingDescription.value = true
+    isSavingProductBasics.value = true
 
     try {
-      const result = await updateCloudBaseOwnerProductDescription(editingProductId.value, descriptionDraft.value)
+      const result = await updateCloudBaseOwnerProductBasics(editingProductId.value, {
+        productName: productNameDraft.value,
+        description: descriptionDraft.value,
+      })
       message.value = result.message
-      if (result.message === '商品简介已保存') {
-        resetDescriptionEditor()
+      if (result.message === '商品基础信息已保存') {
         await refreshView()
+        await loadSkuInventory(editingProductId.value)
       }
     } catch (error) {
-      message.value = formatActionFailureMessage('保存商品简介', error)
+      message.value = formatActionFailureMessage('保存商品基础信息', error)
     } finally {
-      isSavingDescription.value = false
+      isSavingProductBasics.value = false
     }
   }
+
+  const saveDescription = saveProductBasics
 
   const publish = async (productId: string) => {
     if (publishingProductId.value || lifecycleProductId.value || isBatchPublishing.value) {
@@ -435,21 +475,26 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
     lifecycleProductId,
     isBatchPublishing,
     editingProductId,
+    productNameDraft,
+    productCodeReadonly,
     descriptionDraft,
-    isSavingDescription,
+    isSavingProductBasics,
     inventoryProductId,
     isLoadingSkuInventory,
     isSavingSkuInventory,
     restockQuantityText,
     inventoryReason,
     descriptionFallbackText,
-    isRenderableOwnerProductImageUrl,
+    failedImageProductIds,
     viewModel,
     skuInventoryView,
     skuDrafts,
     stayProducts,
     goAdminTab,
     refreshView,
+    handleProductImageError,
+    openProductEditor,
+    closeProductEditor,
     openDescriptionEditor,
     resetDescriptionEditor,
     closeDescriptionEditor,
@@ -460,6 +505,7 @@ export const useOwnerProductsPageState = (options: { registerLifecycle?: boolean
     saveSkuDraft,
     restockSkus,
     clearSkuStock,
+    saveProductBasics,
     saveDescription,
     publish,
     unpublishProduct,

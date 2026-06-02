@@ -13,7 +13,7 @@ if (envelope.data?.service !== 'cloudbase') {
   throw new Error('mallHealth service marker is invalid')
 }
 
-if (envelope.data?.requiredCollections !== 14) {
+if (envelope.data?.requiredCollections !== 16) {
   throw new Error(`mallHealth requiredCollections mismatch: ${envelope.data?.requiredCollections}`)
 }
 

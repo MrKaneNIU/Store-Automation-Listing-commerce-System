@@ -5,6 +5,7 @@ import { createCustomerShoppingBagView, type CustomerShoppingBagViewModel } from
 import type { CloudBaseCustomerShoppingBagCommandResult } from '../../../features/cloudbase-mall/customer-shopping-bag'
 import type { CustomerShoppingBagSnapshot } from '../../../services/cloudbase/mall-api-client'
 import { createCustomerShoppingBagPageState } from './useCustomerShoppingBagPageState'
+import type { CustomerRuntimeRequestLogEntry } from '../../../services/performance/customer-runtime-request-log'
 
 const pageSource = readFileSync(path.resolve(__dirname, 'index.vue'), 'utf8')
 const legacyVisualEntryCopy = '视觉' + '入口'
@@ -47,16 +48,35 @@ const createCommandResult = (view: CustomerShoppingBagViewModel): CloudBaseCusto
 describe('customer shopping bag page state', () => {
   it('deduplicates concurrent snapshot loads', async () => {
     const loader = vi.fn(async () => createCustomerShoppingBagView(createSnapshot(1)))
-    const state = createCustomerShoppingBagPageState({ loadView: loader })
+    const logs: CustomerRuntimeRequestLogEntry[] = []
+    const state = createCustomerShoppingBagPageState({
+      loadView: loader,
+      requestLogger: (entry) => logs.push(entry),
+    })
 
     await Promise.all([state.loadSnapshot({ showLoading: true }), state.loadSnapshot({ showLoading: true })])
 
     expect(loader).toHaveBeenCalledTimes(1)
     expect(state.viewModel.value.totalQuantity).toBe(1)
     expect(state.viewModel.value.loadingState).toBe('idle')
+    expect(logs).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        action: 'getCustomerShoppingBagSnapshot',
+        source: 'onShow',
+        status: 'success',
+        deduped: true,
+      }),
+      expect.objectContaining({
+        action: 'getCustomerShoppingBagSnapshot',
+        source: 'onShow',
+        status: 'success',
+        deduped: false,
+      }),
+    ]))
   })
 
   it('keeps the cached view visible while refreshing on return entry', async () => {
+    let currentTime = 1000
     let resolveRefresh: (view: CustomerShoppingBagViewModel) => void = () => {}
     const firstView = createCustomerShoppingBagView(createSnapshot(1))
     const refreshedView = createCustomerShoppingBagView(createSnapshot(2))
@@ -66,9 +86,14 @@ describe('customer shopping bag page state', () => {
       .mockImplementationOnce(() => new Promise<CustomerShoppingBagViewModel>((resolve) => {
         resolveRefresh = resolve
       }))
-    const state = createCustomerShoppingBagPageState({ loadView: loader })
+    const state = createCustomerShoppingBagPageState({
+      loadView: loader,
+      now: () => currentTime,
+      cacheTtlMs: 3000,
+    })
 
     await state.handlePageShow()
+    currentTime += 3001
     const refreshPromise = state.handlePageShow()
 
     expect(state.viewModel.value.items).toEqual(firstView.items)
@@ -80,15 +105,56 @@ describe('customer shopping bag page state', () => {
     expect(state.viewModel.value.totalQuantity).toBe(2)
   })
 
+  it('skips quick tab-return reloads while the snapshot is still fresh', async () => {
+    let currentTime = 1000
+    const loader = vi.fn(async () => createCustomerShoppingBagView(createSnapshot(1)))
+    const state = createCustomerShoppingBagPageState({
+      loadView: loader,
+      now: () => currentTime,
+      cacheTtlMs: 3000,
+    })
+
+    await state.handlePageShow()
+    currentTime += 500
+    await state.handlePageShow()
+
+    expect(loader).toHaveBeenCalledTimes(1)
+  })
+
+  it('prevents stale snapshot responses from overwriting a newer write command view', async () => {
+    let resolveLoad: (view: CustomerShoppingBagViewModel) => void = () => {}
+    const commandView = createCustomerShoppingBagView(createSnapshot(2))
+    const staleView = createCustomerShoppingBagView(createSnapshot(1))
+    const state = createCustomerShoppingBagPageState({
+      loadView: () => new Promise<CustomerShoppingBagViewModel>((resolve) => {
+        resolveLoad = resolve
+      }),
+      updateQuantity: vi.fn(async () => createCommandResult(commandView)),
+    })
+
+    const load = state.loadSnapshot({ showLoading: true })
+    await state.updateQuantity('bag-item-1', 2)
+    resolveLoad(staleView)
+    await load
+
+    expect(state.viewModel.value.totalQuantity).toBe(2)
+  })
+
   it('keeps the previous usable view when a return refresh fails', async () => {
+    let currentTime = 1000
     const firstView = createCustomerShoppingBagView(createSnapshot(1))
     const loader = vi
       .fn()
       .mockResolvedValueOnce(firstView)
       .mockRejectedValueOnce(new Error('network timeout'))
-    const state = createCustomerShoppingBagPageState({ loadView: loader })
+    const state = createCustomerShoppingBagPageState({
+      loadView: loader,
+      now: () => currentTime,
+      cacheTtlMs: 3000,
+    })
 
     await state.handlePageShow()
+    currentTime += 3001
     await state.handlePageShow()
 
     expect(state.viewModel.value.items).toEqual(firstView.items)
@@ -123,6 +189,17 @@ describe('customer shopping bag page state', () => {
     expect(pageSource).not.toContain(legacyFavoritesSeparatePrdCopy)
     expect(pageSource).not.toContain(legacyVisualEntryCopy)
     expect(pageSource).not.toContain(legacySeparatePrdCopy)
+  })
+
+  it('shows a retryable identity failure before the empty shopping-bag state', () => {
+    const failureStateIndex = pageSource.indexOf('viewModel.loadingState === \'failed\' && viewModel.items.length === 0')
+    const emptyStateIndex = pageSource.indexOf('v-else-if="viewModel.items.length === 0"')
+
+    expect(failureStateIndex).toBeGreaterThanOrEqual(0)
+    expect(emptyStateIndex).toBeGreaterThanOrEqual(0)
+    expect(failureStateIndex).toBeLessThan(emptyStateIndex)
+    expect(pageSource.slice(failureStateIndex, emptyStateIndex)).toContain('viewModel.failureMessage')
+    expect(pageSource.slice(failureStateIndex, emptyStateIndex)).toContain('@tap="reload"')
   })
 
   it('blocks rapid bottom-nav switching with one shared pending route guard', () => {

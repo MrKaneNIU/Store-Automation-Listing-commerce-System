@@ -101,4 +101,22 @@ describe('customer favorites ViewModel', () => {
       failureMessage: 'retry failed',
     })
   })
+
+  it('sanitizes raw CloudBase storage errors before rendering failure text', () => {
+    const failedView = createCustomerFavoriteProductsFailureView(
+      new Error('DATABASE_COLLECTION_NOT_EXIST: Db or Table not exist. https://cloud.tencent.com/document/api/876/34822'),
+    )
+
+    expect(failedView.failureMessage).toBe('系统数据初始化中，请稍后重试')
+  })
+
+  it('sanitizes mp runtime module loader errors before rendering failure text', () => {
+    const failedView = createCustomerFavoriteProductsFailureView(
+      new Error("module 'services/performance/url.js' is not defined, require args is 'url'"),
+    )
+
+    expect(failedView.failureMessage).toBe('系统数据初始化中，请稍后重试')
+    expect(failedView.failureMessage).not.toContain('services/performance/url.js')
+    expect(failedView.failureMessage).not.toContain('require args')
+  })
 })

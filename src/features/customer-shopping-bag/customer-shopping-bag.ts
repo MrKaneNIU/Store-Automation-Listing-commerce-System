@@ -2,6 +2,7 @@ import type {
   CustomerShoppingBagItem,
   CustomerShoppingBagSnapshot,
 } from '../../services/cloudbase/mall-api-client'
+import { formatCloudBaseFailureMessage } from '../../services/cloudbase/cloudbase-function-client'
 
 export type CustomerShoppingBagLoadingState = 'idle' | 'loading' | 'refreshing' | 'failed'
 
@@ -65,15 +66,7 @@ const createEmptySnapshot = (): CustomerShoppingBagSnapshot => ({
 const formatMoney = (value: number): string => `¥${value.toFixed(2)}`
 
 const toFailureMessage = (error: unknown): string => {
-  if (error instanceof Error && error.message.trim()) {
-    return error.message
-  }
-
-  if (typeof error === 'string' && error.trim()) {
-    return error
-  }
-
-  return 'Shopping bag is unavailable'
+  return formatCloudBaseFailureMessage(error, 'Shopping bag is unavailable')
 }
 
 const toViewItem = (item: CustomerShoppingBagItem): CustomerShoppingBagViewItem => ({

@@ -170,22 +170,15 @@ import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { navigateTo, redirectTo } from '../../../app/navigation'
 import { routes, type AppRoute } from '../../../app/routes'
-import {
-  getCloudBaseCustomerFavoriteProductsView,
-  removeCloudBaseCustomerFavoriteProduct,
-  retryCloudBaseCustomerFavoriteProductsSnapshot,
-} from '../../../features/cloudbase-mall/customer-favorites'
-import {
-  createCustomerFavoriteProductsLoadingView,
-  type CustomerFavoriteProductViewItem,
-  type CustomerFavoriteProductsView,
-} from '../../../features/customer-favorites/customer-favorites'
+import { type CustomerFavoriteProductViewItem } from '../../../features/customer-favorites/customer-favorites'
 import { customerBottomNavRoutes, shouldIgnoreCustomerBottomNavTap } from '../customer-bottom-nav'
+import { createCustomerFavoritesPageState } from './useCustomerFavoritesPageState'
 
-const viewModel = ref<CustomerFavoriteProductsView>(createCustomerFavoriteProductsLoadingView())
+const favoritesState = createCustomerFavoritesPageState()
+const viewModel = favoritesState.viewModel
+const removingProductIds = favoritesState.removingProductIds
+const message = favoritesState.message
 const failedImageIds = ref<string[]>([])
-const removingProductIds = ref<string[]>([])
-const message = ref('')
 const navigatingRoute = ref<AppRoute | ''>('')
 let navigationFallbackTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -202,65 +195,17 @@ const scheduleNavigationFallback = () => {
   navigationFallbackTimer = setTimeout(clearNavigationLocks, 900)
 }
 
-type LoadOptions = {
-  showLoading: boolean
-}
-
-const keepPreviousCardsOnFailure = (
-  nextView: CustomerFavoriteProductsView,
-  previousView: CustomerFavoriteProductsView,
-): CustomerFavoriteProductsView => {
-  if (nextView.loadingState === 'failed' && previousView.items.length > 0) {
-    return {
-      ...previousView,
-      loadingState: 'failed',
-      failureMessage: nextView.failureMessage,
-    }
-  }
-
-  return nextView
-}
-
-const loadSnapshot = async (options: LoadOptions) => {
-  const previousView = viewModel.value
-
-  if (options.showLoading) {
-    viewModel.value = createCustomerFavoriteProductsLoadingView(previousView.items.length ? previousView : undefined)
-  }
-
-  message.value = ''
-  const nextView = await getCloudBaseCustomerFavoriteProductsView()
-  viewModel.value = keepPreviousCardsOnFailure(nextView, previousView)
-}
-
-const reload = () => {
-  const previousView = viewModel.value
-
-  viewModel.value = createCustomerFavoriteProductsLoadingView(previousView)
-  void retryCloudBaseCustomerFavoriteProductsSnapshot().then((view) => {
-    viewModel.value = keepPreviousCardsOnFailure(view, previousView)
-  })
-}
-
 onShow(() => {
   clearNavigationLocks()
-  void loadSnapshot({ showLoading: viewModel.value.items.length === 0 })
+  void favoritesState.loadSnapshot({ showLoading: viewModel.value.items.length === 0, source: 'onShow' })
 })
 
-const removeFavorite = async (productId: string) => {
-  if (removingProductIds.value.includes(productId)) {
-    return
-  }
+const reload = () => {
+  void favoritesState.reload()
+}
 
-  removingProductIds.value = [...removingProductIds.value, productId]
-
-  try {
-    const result = await removeCloudBaseCustomerFavoriteProduct(productId, undefined, viewModel.value)
-    viewModel.value = result.view
-    message.value = result.message
-  } finally {
-    removingProductIds.value = removingProductIds.value.filter((id) => id !== productId)
-  }
+const removeFavorite = (productId: string) => {
+  void favoritesState.removeFavorite(productId)
 }
 
 const openDetail = (item: CustomerFavoriteProductViewItem) => {

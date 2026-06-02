@@ -17,6 +17,7 @@ const SUPPORTED_ACTIONS = [
   'listPublishedProducts',
   'listPublishedProductSummaries',
   'getPublishedProductDetail',
+  'updateProductBasics',
   'updateProductDescription',
   'updateSku',
   'restockSkus',
@@ -32,6 +33,7 @@ const SUPPORTED_ACTIONS = [
   'getCustomerOrder',
   'getOwnerOrderSnapshot',
   'getOwnerDashboardSnapshot',
+  'getCustomerMineSnapshot',
   'getCustomerShoppingBagSnapshot',
   'addCustomerShoppingBagItem',
   'updateCustomerShoppingBagItemQuantity',
@@ -90,6 +92,15 @@ const createErrorEnvelope = (code, message, meta = {}) => ({
 
 const isRecord = (value) => typeof value === 'object' && value !== null && !Array.isArray(value)
 
+const createHandlerResult = (data, meta = {}) => ({
+  __mallApiHandlerResult: true,
+  data,
+  meta,
+})
+
+const isHandlerResult = (value) =>
+  isRecord(value) && value.__mallApiHandlerResult === true && isRecord(value.meta)
+
 const readAction = (event) => {
   if (!isRecord(event)) {
     throw validationError('Request event must be a JSON object')
@@ -106,6 +117,42 @@ const conflictError = (message) => Object.assign(new Error(message), { code: 'CO
 const unauthorizedError = (message) => Object.assign(new Error(message), { code: 'UNAUTHORIZED' })
 const forbiddenError = (message) => Object.assign(new Error(message), { code: 'FORBIDDEN' })
 const externalServiceError = (message) => Object.assign(new Error(message), { code: 'EXTERNAL_SERVICE_ERROR' })
+
+const rawCloudBaseSchemaErrorPattern =
+  /DATABASE_COLLECTION_NOT_EXIST|Db or Table not exist|ResourceNotFound|collection.*not exist|table.*not exist|cloud\.tencent\.com\/document/i
+
+const isCloudBaseSchemaMissingError = (error) => {
+  if (!error) return false
+  return rawCloudBaseSchemaErrorPattern.test([
+    error.code,
+    error.name,
+    error.message,
+    error.stack,
+  ].filter(Boolean).join('\n'))
+}
+
+const normalizeMallApiError = (error) => {
+  if (isCloudBaseSchemaMissingError(error)) {
+    return {
+      code: 'INFRA_SCHEMA_MISSING',
+      message: 'Customer data storage is not ready',
+    }
+  }
+
+  if (error?.code) {
+    return {
+      code: error.code,
+      message: rawCloudBaseSchemaErrorPattern.test(error.message || '')
+        ? 'Request failed'
+        : error.message,
+    }
+  }
+
+  return {
+    code: 'INTERNAL_ERROR',
+    message: 'Internal server error',
+  }
+}
 
 const createHealthData = () => ({
   service: 'mall-api',
@@ -241,6 +288,17 @@ const parseProductDescriptionInput = (value) => {
   if (description === null) throw validationError('description must be a string')
   if (description.length > 120) throw validationError('description must be 120 characters or fewer')
   return { description }
+}
+
+const parseProductBasicsInput = (value) => {
+  const descriptionInput = parseProductDescriptionInput(value)
+  const productName = typeof value.productName === 'string' ? value.productName.trim() : null
+  if (productName === null) throw validationError('productName must be a string')
+  if (!productName) throw validationError('productName is required')
+  return {
+    productName,
+    description: descriptionInput.description,
+  }
 }
 
 const parseSkuUpdateInput = (value) => {
@@ -818,6 +876,83 @@ const getFavoriteAvailability = (product, skus) => {
   return 'available'
 }
 
+const orderStatusLabels = {
+  pending_merchant_confirm: 'Pending merchant confirmation',
+  confirmed: 'Confirmed',
+  canceled: 'Canceled',
+}
+
+const maskOpenid = (openid) => {
+  if (typeof openid !== 'string' || openid.length <= 8) return openid || ''
+  return `${openid.slice(0, 4)}...${openid.slice(-4)}`
+}
+
+const maskPhoneNumber = (phoneNumber) => {
+  if (typeof phoneNumber !== 'string' || phoneNumber.length < 7) return ''
+  return phoneNumber.replace(/^(\d{3})\d+(\d{4})$/, '$1****$2')
+}
+
+const createCustomerMineRecentOrderSummary = (order) => ({
+  orderId: order.id,
+  status: order.status,
+  statusLabel: orderStatusLabels[order.status] || order.status,
+  totalAmount: order.totalAmount,
+  itemCount: order.items.reduce((sum, item) => sum + item.quantity, 0),
+  primaryProductName: order.items[0]?.productName || '',
+  createdAt: order.createdAt,
+  updatedAt: order.updatedAt,
+})
+
+const settleCustomerMineList = async (readList) => {
+  const result = await Promise.allSettled([readList()])
+  return result[0].status === 'fulfilled' && Array.isArray(result[0].value) ? result[0].value : []
+}
+
+const createCustomerMineSnapshot = async (customer, context) => {
+  const [orders, shoppingBagItems, favorites] = await Promise.all([
+    settleCustomerMineList(() => context.repository.listOrders()),
+    settleCustomerMineList(() => context.repository.listShoppingBagItems(customer.id)),
+    settleCustomerMineList(() => context.repository.listCustomerFavorites(customer.id)),
+  ])
+  const recentOrders = orders
+    .filter((order) => order.customerId === customer.id)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+
+  return {
+    customerId: customer.id,
+    identity: {
+      isSignedIn: true,
+      displayName: customer.phoneNumber ? maskPhoneNumber(customer.phoneNumber) : 'Wechat Customer',
+      authSource: customer.authSource,
+      openidMasked: maskOpenid(customer.openid),
+    },
+    phone: {
+      isBound: Boolean(customer.phoneNumber),
+      maskedPhoneNumber: maskPhoneNumber(customer.phoneNumber),
+      statusLabel: customer.phoneNumber ? 'Phone bound' : 'Phone not bound',
+    },
+    recentOrders: recentOrders.slice(0, 3).map(createCustomerMineRecentOrderSummary),
+    recentOrderTotalCount: recentOrders.length,
+    utilities: [
+      {
+        key: 'favorites',
+        label: 'Favorites',
+        route: '/pages/customer/favorites/index',
+        count: favorites.length,
+        isEnabled: true,
+      },
+      {
+        key: 'shoppingBag',
+        label: 'Shopping bag',
+        route: '/pages/customer/shopping-bag/index',
+        count: shoppingBagItems.reduce((sum, item) => sum + item.quantity, 0),
+        isEnabled: true,
+      },
+    ],
+    serverTime: context.now(),
+  }
+}
+
 const createShoppingBagSnapshot = async (customerId, context) => {
   const [items, products, skus] = await Promise.all([
     context.repository.listShoppingBagItems(customerId),
@@ -1092,6 +1227,7 @@ const validateDraftForConfirmation = (draft) => {
 }
 
 const findLatestBatch = async (repository) => (await repository.listBatches()).at(-1)
+const isReviewableDraft = (draft) => draft.status !== 'deleted' && draft.status !== 'confirmed'
 
 const findOcrJob = async (repository, jobId) => {
   const job = (await repository.listOcrJobs()).find((item) => item.id === jobId)
@@ -1171,6 +1307,11 @@ const resolveShoppingBagCustomer = async (event, context) => {
 }
 
 const resolveFavoriteCustomer = async (event, context) => {
+  const identity = await requireResolvedIdentity(event, context)
+  return upsertCustomerFromIdentity(context.repository, identity, context)
+}
+
+const resolveMineCustomer = async (event, context) => {
   const identity = await requireResolvedIdentity(event, context)
   return upsertCustomerFromIdentity(context.repository, identity, context)
 }
@@ -1278,6 +1419,13 @@ const apiHandlers = {
   async getCustomerShoppingBagSnapshot(event, context) {
     const customer = await resolveShoppingBagCustomer(event, context)
     return createShoppingBagSnapshot(customer.id, context)
+  },
+  async getCustomerMineSnapshot(event, context) {
+    const customer = await resolveMineCustomer(event, context)
+    const snapshot = await createCustomerMineSnapshot(customer, context)
+    return createHandlerResult(snapshot, {
+      snapshotKey: `customer-mine:${customer.id}:v1`,
+    })
   },
   async addCustomerShoppingBagItem(event, context) {
     const customer = await resolveShoppingBagCustomer(event, context)
@@ -1536,9 +1684,10 @@ const apiHandlers = {
   async getLatestDraftReviewSnapshot(event, context) {
     await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
     const batch = await findLatestBatch(context.repository)
+    const drafts = batch ? await context.repository.listDrafts(batch.id) : []
     return {
       batch: batch || null,
-      drafts: batch ? await context.repository.listDrafts(batch.id) : [],
+      drafts: drafts.filter(isReviewableDraft),
       serverTime: context.now(),
     }
   },
@@ -1667,6 +1816,19 @@ const apiHandlers = {
       }),
     }
   },
+  async updateProductBasics(event, context) {
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
+    const input = parseProductBasicsInput(event.payload)
+    const product = await findProduct(context.repository, readString(event.params || {}, 'productId'))
+    return {
+      product: await context.repository.updateProduct({
+        ...product,
+        productName: input.productName,
+        description: input.description,
+        updatedAt: context.now(),
+      }),
+    }
+  },
   async publishProduct(event, context) {
     await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
     const product = await findProduct(context.repository, readString(event.params || {}, 'productId'))
@@ -1772,10 +1934,13 @@ const apiHandlers = {
   },
   async createCustomerOrder(event, context) {
     const input = parseCustomerOrderInput(event.payload)
+    if (input.session.authSource !== 'wechat' && !context.allowMockCustomerOrder) {
+      throw unauthorizedError('Verified WeChat identity is required before ordering')
+    }
     const customer = input.session.authSource === 'wechat'
       ? await resolveWechatCustomerForOrder(event, context)
       : null
-    const phoneNumber = customer?.phoneNumber || input.session.phoneNumber
+    const phoneNumber = customer ? customer.phoneNumber : input.session.phoneNumber
     if (!phoneNumber) throw unauthorizedError('Wechat phone authorization is required before ordering')
     const product = await findProduct(context.repository, input.productId)
     const sku = (await context.repository.listSkus(product.id)).find((item) => item.id === input.skuId)
@@ -1894,6 +2059,7 @@ const createMallApiHandler = (store, options = {}) => {
     createId: options.createId || createIdFactory(),
     now: options.now || (() => new Date().toISOString()),
     allowTestIdentityRoles: options.allowTestIdentityRoles === true,
+    allowMockCustomerOrder: options.allowMockCustomerOrder === true,
     exchangePhoneCode: options.exchangePhoneCode,
     ocrProvider: options.ocrProvider || createHttpOcrProviderFromEnv(process.env, fetch, { resolveImageUrl: options.resolveImageUrl }),
   }
@@ -1907,10 +2073,12 @@ const createMallApiHandler = (store, options = {}) => {
         return createErrorEnvelope('NOT_FOUND', `Unsupported mallApi action: ${action}`)
       }
       const handler = apiHandlers[action]
-      const data = await handler(event, context)
-      return createSuccessEnvelope(data)
+      const result = await handler(event, context)
+      if (isHandlerResult(result)) return createSuccessEnvelope(result.data, result.meta)
+      return createSuccessEnvelope(result)
     } catch (error) {
-      return createErrorEnvelope(error.code || 'INTERNAL_ERROR', error.code ? error.message : 'Internal server error')
+      const safeError = normalizeMallApiError(error)
+      return createErrorEnvelope(safeError.code, safeError.message)
     }
   }
 }

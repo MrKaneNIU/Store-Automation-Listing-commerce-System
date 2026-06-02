@@ -1,0 +1,435 @@
+.agents/skills/cloudbase/SKILL.md
+.agents/skills/cloudbase/references/activation-map.yaml
+.agents/skills/cloudbase/references/ai-model-nodejs/SKILL.md
+.agents/skills/cloudbase/references/ai-model-web/SKILL.md
+.agents/skills/cloudbase/references/ai-model-wechat/SKILL.md
+.agents/skills/cloudbase/references/auth-nodejs/SKILL.md
+.agents/skills/cloudbase/references/auth-tool/SKILL.md
+.agents/skills/cloudbase/references/auth-tool/checklist.md
+.agents/skills/cloudbase/references/auth-web/SKILL.md
+.agents/skills/cloudbase/references/auth-wechat/SKILL.md
+.agents/skills/cloudbase/references/cloud-functions/SKILL.md
+.agents/skills/cloudbase/references/cloud-functions/checklist.md
+.agents/skills/cloudbase/references/cloud-functions/references.md
+.agents/skills/cloudbase/references/cloud-functions/references/event-functions.md
+.agents/skills/cloudbase/references/cloud-functions/references/http-functions.md
+.agents/skills/cloudbase/references/cloud-functions/references/operations-and-config.md
+.agents/skills/cloudbase/references/cloud-storage-web/SKILL.md
+.agents/skills/cloudbase/references/cloudbase-agent/SKILL.md
+.agents/skills/cloudbase/references/cloudbase-agent/py/adapter-coze.md
+.agents/skills/cloudbase/references/cloudbase-agent/py/adapter-development.md
+.agents/skills/cloudbase/references/cloudbase-agent/py/adapter-langgraph.md
+.agents/skills/cloudbase/references/cloudbase-agent/py/agent-deployment.md
+.agents/skills/cloudbase/references/cloudbase-agent/py/authentication.md
+.agents/skills/cloudbase/references/cloudbase-agent/py/references/observability.md
+.agents/skills/cloudbase/references/cloudbase-agent/py/references/recipes.md
+.agents/skills/cloudbase/references/cloudbase-agent/py/references/server.md
+.agents/skills/cloudbase/references/cloudbase-agent/py/references/storage.md
+.agents/skills/cloudbase/references/cloudbase-agent/py/references/tools.md
+.agents/skills/cloudbase/references/cloudbase-agent/py/server-quickstart.md
+.agents/skills/cloudbase/references/cloudbase-agent/py/skill.md
+.agents/skills/cloudbase/references/cloudbase-agent/ts/adapter-development.md
+.agents/skills/cloudbase/references/cloudbase-agent/ts/adapter-langchain.md
+.agents/skills/cloudbase/references/cloudbase-agent/ts/adapter-langgraph.md
+.agents/skills/cloudbase/references/cloudbase-agent/ts/agent-deployment.md
+.agents/skills/cloudbase/references/cloudbase-agent/ts/agui-protocol.md
+.agents/skills/cloudbase/references/cloudbase-agent/ts/server-quickstart.md
+.agents/skills/cloudbase/references/cloudbase-agent/ts/skill.md
+.agents/skills/cloudbase/references/cloudbase-agent/ts/ui-clients.md
+.agents/skills/cloudbase/references/cloudbase-agent/ts/ui-miniprogram.md
+.agents/skills/cloudbase/references/cloudbase-cli/SKILL.md
+.agents/skills/cloudbase/references/cloudbase-cli/references/access.md
+.agents/skills/cloudbase/references/cloudbase-cli/references/app.md
+.agents/skills/cloudbase/references/cloudbase-cli/references/cloudrun.md
+.agents/skills/cloudbase/references/cloudbase-cli/references/core.md
+.agents/skills/cloudbase/references/cloudbase-cli/references/functions.md
+.agents/skills/cloudbase/references/cloudbase-cli/references/hosting.md
+.agents/skills/cloudbase/references/cloudbase-cli/references/mysql.md
+.agents/skills/cloudbase/references/cloudbase-cli/references/nosql.md
+.agents/skills/cloudbase/references/cloudbase-cli/references/permission.md
+.agents/skills/cloudbase/references/cloudbase-cli/references/storage.md
+.agents/skills/cloudbase/references/cloudbase-platform/SKILL.md
+.agents/skills/cloudbase/references/cloudrun-development/SKILL.md
+.agents/skills/cloudbase/references/data-model-creation/SKILL.md
+.agents/skills/cloudbase/references/http-api/SKILL.md
+.agents/skills/cloudbase/references/http-api/checklist.md
+.agents/skills/cloudbase/references/mcp-setup.md
+.agents/skills/cloudbase/references/miniprogram-development/SKILL.md
+.agents/skills/cloudbase/references/miniprogram-development/references/cloudbase-integration.md
+.agents/skills/cloudbase/references/no-sql-web-sdk/SKILL.md
+.agents/skills/cloudbase/references/no-sql-web-sdk/aggregation.md
+.agents/skills/cloudbase/references/no-sql-web-sdk/complex-queries.md
+.agents/skills/cloudbase/references/no-sql-web-sdk/crud-operations.md
+.agents/skills/cloudbase/references/no-sql-web-sdk/geolocation.md
+.agents/skills/cloudbase/references/no-sql-web-sdk/pagination.md
+.agents/skills/cloudbase/references/no-sql-web-sdk/realtime.md
+.agents/skills/cloudbase/references/no-sql-web-sdk/security-rules.md
+.agents/skills/cloudbase/references/no-sql-wx-mp-sdk/SKILL.md
+.agents/skills/cloudbase/references/no-sql-wx-mp-sdk/aggregation.md
+.agents/skills/cloudbase/references/no-sql-wx-mp-sdk/complex-queries.md
+.agents/skills/cloudbase/references/no-sql-wx-mp-sdk/crud-operations.md
+.agents/skills/cloudbase/references/no-sql-wx-mp-sdk/geolocation.md
+.agents/skills/cloudbase/references/no-sql-wx-mp-sdk/pagination.md
+.agents/skills/cloudbase/references/no-sql-wx-mp-sdk/security-rules.md
+.agents/skills/cloudbase/references/ops-inspector/SKILL.md
+.agents/skills/cloudbase/references/relational-database-tool/SKILL.md
+.agents/skills/cloudbase/references/relational-database-web/SKILL.md
+.agents/skills/cloudbase/references/spec-workflow/SKILL.md
+.agents/skills/cloudbase/references/ui-design/SKILL.md
+.agents/skills/cloudbase/references/ui-design/checklist.md
+.agents/skills/cloudbase/references/web-development/SKILL.md
+.agents/skills/cloudbase/references/web-development/browser-testing.md
+.agents/skills/cloudbase/references/web-development/frameworks.md
+.ai/FAVORITES_MODULE_E_ACCEPTANCE.md
+.ai/TASK_STATE.md
+.codex/agents/agents.prd_debugger.toml
+.codex/agents/agents.prd_implementer.toml
+.codex/agents/agents.prd_planner.toml
+.codex/agents/agents.prd_reporter.toml
+.codex/agents/agents.prd_reviewer.toml
+.codex/config.toml
+[CI] .github/workflows/ci.yml
+.gitignore
+AGENTS.md
+README.md
+[backend] backend/.env.example
+[backend] backend/README.md
+[backend] backend/src/api/api-contract.test.ts
+[backend] backend/src/api/errors.ts
+[backend] backend/src/api/handlers/mall-api.ts
+[backend] backend/src/api/routes.ts
+[backend] backend/src/api/schemas.ts
+[backend] backend/src/cloudbase/cloudbase-data-model.test.ts
+[backend] backend/src/cloudbase/cloudbase-data-model.ts
+[backend] backend/src/cloudbase/cloudbase-env.test.ts
+[backend] backend/src/cloudbase/cloudbase-env.ts
+[backend] backend/src/cloudbase/cloudbase-health.test.ts
+[backend] backend/src/cloudbase/cloudbase-health.ts
+[backend] backend/src/cloudbase/cloudbase-mall-repository.test.ts
+[backend] backend/src/cloudbase/cloudbase-mall-repository.ts
+[backend] backend/src/cloudbase/memory-cloudbase-document-store.ts
+[backend] backend/src/config/env.test.ts
+[backend] backend/src/config/env.ts
+[backend] backend/src/db/client.ts
+[backend] backend/src/db/migrate.ts
+[backend] backend/src/db/migration.test.ts
+[backend] backend/src/db/migrations/202605090001_initial_phase_2_schema.ts
+[backend] backend/src/db/migrations/index.ts
+[backend] backend/src/http/errors.ts
+[backend] backend/src/http/response.test.ts
+[backend] backend/src/http/response.ts
+[backend] backend/src/main.test.ts
+[backend] backend/src/main.ts
+[backend] backend/src/operations/staging-restore-rehearsal.test.ts
+[backend] backend/src/operations/staging-restore-rehearsal.ts
+[backend] backend/src/repositories/database-mall-repository.test.ts
+[backend] backend/src/repositories/database-mall-repository.ts
+[backend] backend/src/server.test.ts
+[backend] backend/src/server.ts
+[backend] backend/tsconfig.json
+[backend] backend/vitest.config.ts
+cloudbaserc.json
+[cloud functions] cloudfunctions/mallApi/index.js
+[cloud functions] cloudfunctions/mallApi/invoke-create-ocr-batch.json
+[cloud functions] cloudfunctions/mallApi/invoke-get-latest-drafts.json
+[cloud functions] cloudfunctions/mallApi/invoke-health.json
+[cloud functions] cloudfunctions/mallApi/invoke-list-contracts.json
+[cloud functions] cloudfunctions/mallApi/invoke-list-products.json
+[cloud functions] cloudfunctions/mallApi/invoke-unsupported.json
+[cloud functions] cloudfunctions/mallApi/mall-api-core.js
+[cloud functions] cloudfunctions/mallApi/mall-api-core.test.js
+[cloud functions] cloudfunctions/mallApi/package.json
+[cloud functions] cloudfunctions/mallApi/tencentcloud-ocr-provider.js
+[cloud functions] cloudfunctions/mallHealth/index.js
+[cloud functions] cloudfunctions/mallHealth/package.json
+[docs] docs/architecture/module-boundaries.md
+[docs] docs/architecture/page-ui-boundary-inventory.md
+[docs] docs/architecture/system-overview.md
+[docs] docs/contracts/api-contract.md
+[docs] docs/contracts/cloudbase-data-model.md
+[docs] docs/contracts/database-schema.md
+[docs] docs/contracts/domain-contract.md
+[docs] docs/contracts/page-facing-ui-contracts.md
+[docs] docs/operations/backup-restore.md
+[docs] docs/operations/migration-runbook.md
+[docs] docs/operations/production-config-runbook.md
+[docs] docs/operations/production-config-snapshot.current.json
+[docs] docs/operations/production-config-snapshot.example.json
+[docs] docs/plans/2026-05-07-mall-mvp-delivery-log.md
+[docs] docs/plans/2026-05-07-mall-mvp-framework.md
+[docs] docs/plans/2026-05-08-customer-wechat-auth-order-delivery-log.md
+[docs] docs/plans/2026-05-08-harness-hardening-delivery-log.md
+[docs] docs/plans/2026-05-08-ui-boundary-engineering-delivery-log.md
+[docs] docs/plans/2026-05-09-cloudbase-console-setup-log.md
+[docs] docs/plans/2026-05-09-cloudbase-phase-2-execution-log.md
+[docs] docs/plans/2026-05-09-cloudbase-route-decision.md
+[docs] docs/plans/2026-05-09-phase-0-baseline-acceptance-log.md
+[docs] docs/plans/2026-05-09-phase-1-1-ui-boundary-review-log.md
+[docs] docs/plans/2026-05-09-phase-1-2-medium-risk-ui-boundary-log.md
+[docs] docs/plans/2026-05-09-phase-1-3-ui-contract-freeze-log.md
+[docs] docs/plans/2026-05-09-phase-2-1-backend-baseline-log.md
+[docs] docs/plans/2026-05-09-phase-2-2-database-migration-log.md
+[docs] docs/plans/2026-05-09-phase-2-3-repository-port-log.md
+[docs] docs/plans/2026-05-09-phase-2-4-api-contract-log.md
+[docs] docs/plans/2026-05-09-phase-2-5-backup-restore-log.md
+[docs] docs/plans/2026-05-09-phase-2-backend-handoff.md
+[docs] docs/plans/2026-05-09-phase-2-strict-prd-gate-review.md
+[docs] docs/plans/2026-05-10-phase-3-real-image-object-storage-log.md
+[docs] docs/plans/2026-05-11-phase-4-wechat-auth-role-permission-log.md
+[docs] docs/plans/2026-05-11-phase-5-order-inventory-audit-log.md
+[docs] docs/plans/2026-05-12-high-fashion-mall-ui-prototype-delivery-log.md
+[docs] docs/plans/2026-05-13-admin-workbench-high-fashion-ui-log.md
+[docs] docs/plans/2026-05-13-admin-workbench-real-miniprogram-migration-plan.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-module-a-audit-log.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-module-b-log.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-module-c-log.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-module-d-log.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-module-e-log.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-module-f-log.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-module-g-log.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-module-h-log.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-module-i-log.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-module-j-log.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-module-k-log.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-module-l-freeze-log.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-visual-repair-module-1-home-log.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-visual-repair-module-2-product-list-log.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-visual-repair-module-3-product-detail-log.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-visual-repair-module-4-admin-dashboard-log.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-visual-repair-module-5-admin-bottom-nav-log.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-visual-repair-module-6-owner-products-log.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-visual-repair-module-7-owner-orders-log.md
+[docs] docs/plans/2026-05-14-high-fashion-real-miniprogram-visual-repair-module-8-import-upload-log.md
+[docs] docs/plans/2026-05-18-high-fashion-real-miniprogram-visual-repair-module-10-staff-image-tasks-log.md
+[docs] docs/plans/2026-05-18-high-fashion-real-miniprogram-visual-repair-module-9-draft-review-log.md
+[docs] docs/plans/2026-05-18-post-freeze-ui-navigation-performance-log.md
+[docs] docs/plans/2026-05-19-risk-group-a-production-config-gate-log.md
+[docs] docs/plans/2026-05-19-risk-group-b-ocr-job-main-chain-log.md
+[docs] docs/plans/2026-05-21-admin-workbench-account-auth-log.md
+[docs] docs/plans/2026-05-22-admin-workbench-entry-nav-defect-fix.md
+[docs] docs/plans/2026-05-22-admin-workbench-repair-baseline.md
+[docs] docs/plans/2026-05-23-admin-workbench-ocr-to-image-task-handoff.md
+[docs] docs/plans/2026-05-25-product-management-operations-delivery-log.md
+[docs] docs/plans/2026-05-26-product-management-online-repair-handoff.md
+[docs] docs/plans/2026-05-27-project-latency-optimization-cloudbase-smoke-log.md
+[docs] docs/plans/2026-05-27-project-latency-optimization-handoff.md
+[docs] docs/plans/2026-05-27-project-latency-optimization-manual-acceptance-log.md
+[docs] docs/plans/2026-05-27-project-latency-optimization-module-0-log.md
+[docs] docs/plans/2026-05-27-project-latency-optimization-module-1-log.md
+[docs] docs/plans/2026-05-27-project-latency-optimization-module-2-log.md
+[docs] docs/plans/2026-05-27-project-latency-optimization-module-3-log.md
+[docs] docs/plans/2026-05-27-project-latency-optimization-module-4-log.md
+[docs] docs/plans/2026-05-27-project-latency-optimization-module-5-log.md
+[docs] docs/plans/2026-05-27-project-latency-optimization-module-6-log.md
+[docs] docs/plans/2026-05-27-project-latency-optimization-module-7-log.md
+[docs] docs/plans/2026-05-27-shopping-bag-module-a-contract-log.md
+[docs] docs/plans/2026-05-27-shopping-bag-module-b-cloudbase-actions-log.md
+[docs] docs/plans/2026-05-28-shopping-bag-module-a-e-handoff.md
+[docs] docs/plans/2026-05-28-shopping-bag-module-c-facade-viewmodel-log.md
+[docs] docs/plans/2026-05-28-shopping-bag-module-d-ui-integration-log.md
+[docs] docs/plans/2026-05-28-shopping-bag-module-e-verification-acceptance-log.md
+[docs] docs/prd/2026-05-07-mall-mvp-prd.md
+[docs] docs/prd/2026-05-08-customer-wechat-auth-order-prd.md
+[docs] docs/prd/2026-05-08-enterprise-launch-master-prd.md
+[docs] docs/prd/2026-05-08-ui-boundary-engineering-prd.md
+[docs] docs/prd/2026-05-09-phase-2-real-backend-persistence-prd.md
+[docs] docs/prd/2026-05-11-phase-4-wechat-auth-role-permission-prd.md
+[docs] docs/prd/2026-05-12-high-fashion-mall-ui-reference-prd.md
+[docs] docs/prd/2026-05-12-phase-6-admin-ocr-ui-prototype-prd.md
+[docs] docs/prd/2026-05-13-admin-workbench-high-fashion-ui-prd.md
+[docs] docs/prd/2026-05-13-high-fashion-mall-real-miniprogram-safe-migration-prd.md
+[docs] docs/prd/2026-05-19-enterprise-launch-risk-grouped-prd.md
+[docs] docs/prd/2026-05-21-admin-workbench-account-auth-prd.md
+[docs] docs/prd/2026-05-25-product-management-operations-prd.md
+[docs] docs/prd/2026-05-27-customer-mine-module-prd.md
+[docs] docs/prd/2026-05-27-favorites-module-prd.md
+[docs] docs/prd/2026-05-27-project-latency-optimization-prd.md
+[docs] docs/prd/2026-05-27-shopping-bag-module-prd.md
+[docs] docs/prd/README.md
+[docs] docs/product/mvp-flow.md
+[docs] docs/prototypes/high-fashion-mall-ui/app.js
+[docs] docs/prototypes/high-fashion-mall-ui/index.html
+[docs] docs/prototypes/high-fashion-mall-ui/styles.css
+[docs] docs/quality/agent-failure-log.md
+[docs] docs/quality/review-checklist.md
+[docs] docs/testing/2026-05-27-page-performance-baseline.md
+[docs] docs/testing/test-strategy.md
+eslint.config.mjs
+index.html
+package.json
+pnpm-lock.yaml
+[scripts] scripts/check-boundaries.mjs
+[scripts] scripts/check-production-config.mjs
+[scripts] scripts/check-production-config.test.mjs
+[scripts] scripts/cloudbase-bind-owner.mjs
+[scripts] scripts/e2e-smoke.mjs
+[scripts] scripts/repro-product-management-contract.mjs
+[scripts] scripts/smoke-cloudbase-api.mjs
+[scripts] scripts/smoke-cloudbase-health.mjs
+shims-uni.d.ts
+skills-lock.json
+src/App.vue
+src/app/customer-shopping-bag-routing.test.ts
+src/app/navigation.test.ts
+src/app/navigation.ts
+src/app/pages-config.test.ts
+src/app/roles.ts
+src/app/routes-more.test.ts
+src/app/routes.ts
+[domain] src/domain/batch/rules.test.ts
+[domain] src/domain/batch/rules.ts
+[domain] src/domain/batch/types.ts
+[domain] src/domain/catalog/rules.test.ts
+[domain] src/domain/catalog/rules.ts
+[domain] src/domain/catalog/types.ts
+[domain] src/domain/draft/rules.test.ts
+[domain] src/domain/draft/rules.ts
+[domain] src/domain/draft/types.ts
+[domain] src/domain/inventory/types.ts
+[domain] src/domain/order/rules.test.ts
+[domain] src/domain/order/rules.ts
+[domain] src/domain/order/types.ts
+[domain] src/domain/shared/ids.ts
+src/env.d.ts
+[features] src/features/admin-permissions/admin-permissions.test.ts
+[features] src/features/admin-permissions/admin-permissions.ts
+[features] src/features/admin-workbench-auth/admin-workbench-auth.test.ts
+[features] src/features/admin-workbench-auth/admin-workbench-auth.ts
+[features] src/features/admin-workbench-auth/admin-workbench-entry.test.ts
+[features] src/features/admin-workbench-auth/admin-workbench-entry.ts
+[features] src/features/admin-workbench-auth/admin-workbench-guard.test.ts
+[features] src/features/admin-workbench-auth/admin-workbench-guard.ts
+[features] src/features/cloudbase-mall/cloudbase-mall.test.ts
+[features] src/features/cloudbase-mall/customer-favorites.test.ts
+[features] src/features/cloudbase-mall/customer-favorites.ts
+[features] src/features/cloudbase-mall/customer-product-detail.ts
+[features] src/features/cloudbase-mall/customer-product-list.ts
+[features] src/features/cloudbase-mall/customer-shopping-bag.test.ts
+[features] src/features/cloudbase-mall/customer-shopping-bag.ts
+[features] src/features/cloudbase-mall/owner-dashboard.ts
+[features] src/features/cloudbase-mall/owner-draft-review.ts
+[features] src/features/cloudbase-mall/owner-orders.ts
+[features] src/features/cloudbase-mall/owner-products.ts
+[features] src/features/cloudbase-mall/owner-screenshot-import.ts
+[features] src/features/cloudbase-mall/staff-image-tasks.ts
+[features] src/features/customer-favorites/customer-favorites.test.ts
+[features] src/features/customer-favorites/customer-favorites.ts
+[features] src/features/customer-order/customer-order.test.ts
+[features] src/features/customer-order/customer-order.ts
+[features] src/features/customer-product-detail/customer-product-detail.test.ts
+[features] src/features/customer-product-detail/customer-product-detail.ts
+[features] src/features/customer-product-list/customer-product-list.test.ts
+[features] src/features/customer-product-list/customer-product-list.ts
+[features] src/features/customer-shopping-bag/customer-shopping-bag.test.ts
+[features] src/features/customer-shopping-bag/customer-shopping-bag.ts
+[features] src/features/draft-review/draft-review.test.ts
+[features] src/features/draft-review/draft-review.ts
+[features] src/features/homepage-settings/homepage-settings.test.ts
+[features] src/features/homepage-settings/homepage-settings.ts
+[features] src/features/mall-workflow/mall-access.test.ts
+[features] src/features/mall-workflow/mall-access.ts
+[features] src/features/mall-workflow/mall-workflow.test.ts
+[features] src/features/mall-workflow/mall-workflow.ts
+[features] src/features/mall-workflow/phase-5.test.ts
+[features] src/features/owner-draft-review/owner-draft-review.test.ts
+[features] src/features/owner-draft-review/owner-draft-review.ts
+[features] src/features/owner-orders/owner-orders.test.ts
+[features] src/features/owner-orders/owner-orders.ts
+[features] src/features/owner-products/owner-products.test.ts
+[features] src/features/owner-products/owner-products.ts
+[features] src/features/owner-screenshot-import/owner-screenshot-import.test.ts
+[features] src/features/owner-screenshot-import/owner-screenshot-import.ts
+[features] src/features/staff-image-tasks/staff-image-tasks.test.ts
+[features] src/features/staff-image-tasks/staff-image-tasks.ts
+src/main.ts
+src/manifest.json
+src/pages.json
+[pages] src/pages/customer/customer-bottom-nav.test.ts
+[pages] src/pages/customer/customer-bottom-nav.ts
+[pages] src/pages/customer/favorites/index.test.ts
+[pages] src/pages/customer/favorites/index.vue
+[pages] src/pages/customer/mine/index.test.ts
+[pages] src/pages/customer/mine/index.vue
+[pages] src/pages/customer/product-detail/index.test.ts
+[pages] src/pages/customer/product-detail/index.vue
+[pages] src/pages/customer/product-list/index.test.ts
+[pages] src/pages/customer/product-list/index.vue
+[pages] src/pages/customer/shopping-bag/index.vue
+[pages] src/pages/customer/shopping-bag/useCustomerShoppingBagPageState.test.ts
+[pages] src/pages/customer/shopping-bag/useCustomerShoppingBagPageState.ts
+[pages] src/pages/index/index.test.ts
+[pages] src/pages/index/index.vue
+[pages] src/pages/login/index.test.ts
+[pages] src/pages/login/index.vue
+[pages] src/pages/owner/account-management/index.test.ts
+[pages] src/pages/owner/account-management/index.vue
+[pages] src/pages/owner/admin-nav-style.test.ts
+[pages] src/pages/owner/dashboard/index.test.ts
+[pages] src/pages/owner/dashboard/index.vue
+[pages] src/pages/owner/draft-review/index.test.ts
+[pages] src/pages/owner/draft-review/index.vue
+[pages] src/pages/owner/homepage-settings/index.test.ts
+[pages] src/pages/owner/homepage-settings/index.vue
+[pages] src/pages/owner/import-upload/index.vue
+[pages] src/pages/owner/more/index.test.ts
+[pages] src/pages/owner/more/index.vue
+[pages] src/pages/owner/navigation-recovery.test.ts
+[pages] src/pages/owner/no-permission/index.vue
+[pages] src/pages/owner/orders/index.test.ts
+[pages] src/pages/owner/orders/index.vue
+[pages] src/pages/owner/permissions/index.test.ts
+[pages] src/pages/owner/permissions/index.vue
+[pages] src/pages/owner/products/index.test.ts
+[pages] src/pages/owner/products/index.vue
+[pages] src/pages/owner/products/useOwnerProductsPageState.test.ts
+[pages] src/pages/owner/products/useOwnerProductsPageState.ts
+[pages] src/pages/staff/image-tasks/index.test.ts
+[pages] src/pages/staff/image-tasks/index.vue
+[services] src/services/auth/admin-workbench-session.test.ts
+[services] src/services/auth/admin-workbench-session.ts
+[services] src/services/auth/cloudbase-wechat-auth-service.test.ts
+[services] src/services/auth/cloudbase-wechat-auth-service.ts
+[services] src/services/auth/customer-session.ts
+[services] src/services/auth/mock-wechat-auth-service.test.ts
+[services] src/services/auth/mock-wechat-auth-service.ts
+[services] src/services/auth/wechat-auth-service.ts
+[services] src/services/cloudbase/cloudbase-function-client.test.ts
+[services] src/services/cloudbase/cloudbase-function-client.ts
+[services] src/services/cloudbase/mall-api-client.test.ts
+[services] src/services/cloudbase/mall-api-client.ts
+[services] src/services/cloudbase/runtime-mall-api-client.test.ts
+[services] src/services/cloudbase/runtime-mall-api-client.ts
+[services] src/services/ocr/http-ocr-provider.test.ts
+[services] src/services/ocr/http-ocr-provider.ts
+[services] src/services/ocr/mock-ocr-provider.test.ts
+[services] src/services/ocr/mock-ocr-provider.ts
+[services] src/services/ocr/ocr-provider.ts
+[services] src/services/ocr/tencentcloud-ocr-provider.test.ts
+[services] src/services/ocr/tencentcloud-ocr-provider.ts
+[services] src/services/performance/page-load-trace.test.ts
+[services] src/services/performance/page-load-trace.ts
+[services] src/services/privacy/runtime-wechat-privacy-service.test.ts
+[services] src/services/privacy/runtime-wechat-privacy-service.ts
+[services] src/services/privacy/wechat-privacy-service.ts
+[repositories] src/services/repositories/mall-repository-contract.test.ts
+[repositories] src/services/repositories/mall-repository-contract.ts
+[repositories] src/services/repositories/mall-repository-port.ts
+[repositories] src/services/repositories/mall-repository.test.ts
+[repositories] src/services/repositories/mall-repository.ts
+[repositories] src/services/repositories/memory-mall-repository.ts
+[repositories] src/services/repositories/mock-db.ts
+[services] src/services/storage/cloudbase-upload-service.test.ts
+[services] src/services/storage/cloudbase-upload-service.ts
+[services] src/services/storage/mock-upload-service.test.ts
+[services] src/services/storage/mock-upload-service.ts
+[services] src/services/storage/product-image-url.test.ts
+[services] src/services/storage/product-image-url.ts
+[services] src/services/storage/runtime-upload-service.test.ts
+[services] src/services/storage/runtime-upload-service.ts
+[services] src/services/storage/upload-service.ts
+src/shime-uni.d.ts
+src/uni.scss
+[tests] tests/contracts/product-publish-validation-cases.cjs
+tsconfig.json
+vite.config.ts
+vitest.config.ts
