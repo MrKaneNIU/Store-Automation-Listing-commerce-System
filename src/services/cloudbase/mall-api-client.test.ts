@@ -151,9 +151,11 @@ describe('CloudBase mall API client', () => {
   it('passes the active admin session with owner product snapshot requests', async () => {
     const calls: Array<{ name: string; data: unknown }> = []
     createAdminWorkbenchSession({
+      adminToken: 'opaque-admin-token',
       account: 'admin',
       role: 'creator',
       permissions: ['workbenchAccess', 'productManagement'],
+      expiresAt: '2026-06-03T12:00:00.000Z',
     })
     const client = createCloudBaseMallApiClient({
       call: async (name, data) => {
@@ -169,14 +171,168 @@ describe('CloudBase mall API client', () => {
         name: 'mallApi',
         data: {
           action: 'listOwnerProductCards',
-          adminSession: {
-            account: 'admin',
-            role: 'creator',
-            permissions: ['workbenchAccess', 'productManagement'],
-          },
+          adminToken: 'opaque-admin-token',
         },
       },
     ])
+    expect(JSON.stringify(calls)).not.toContain('adminSession')
+    expect(JSON.stringify(calls)).not.toContain('permissions')
+  })
+
+  it('maps admin auth actions through mallApi with opaque token authority', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        if ((data as { action: string }).action === 'adminLogin') {
+          return {
+            adminToken: 'server-token',
+            account: 'admin',
+            role: 'creator',
+            permissions: ['workbenchAccess'],
+            expiresAt: '2026-06-03T12:00:00.000Z',
+          } as never
+        }
+        return { revoked: true, changed: true } as never
+      },
+    })
+
+    await client.adminLogin({ account: 'admin', password: 'secret' })
+    createAdminWorkbenchSession({
+      adminToken: 'server-token',
+      account: 'admin',
+      role: 'creator',
+      permissions: ['workbenchAccess'],
+      expiresAt: '2026-06-03T12:00:00.000Z',
+    })
+    await client.getAdminSession()
+    await client.adminLogout()
+    await client.changeAdminPassword({ oldPassword: 'secret', newPassword: 'updated-secret' })
+
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'adminLogin',
+          payload: { account: 'admin', password: 'secret' },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'getAdminSession',
+          adminToken: 'server-token',
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'adminLogout',
+          adminToken: 'server-token',
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'changeAdminPassword',
+          payload: { oldPassword: 'secret', newPassword: 'updated-secret' },
+          adminToken: 'server-token',
+        },
+      },
+    ])
+    expect(JSON.stringify(calls)).not.toContain('adminSession')
+  })
+
+  it('maps admin account and permission actions through mallApi', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    createAdminWorkbenchSession({
+      adminToken: 'server-token',
+      account: 'admin',
+      role: 'creator',
+      permissions: ['workbenchAccess', 'accountManagement', 'permissionManagement'],
+      expiresAt: '2026-06-03T12:00:00.000Z',
+    })
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        return { account: { account: 'staff-a' }, accounts: [], logs: [], revokedCount: 1 } as never
+      },
+    })
+
+    await client.createAdminAccount({
+      account: 'staff-a',
+      role: 'staff',
+      permissions: ['workbenchAccess'],
+      initialPassword: 'staff-secret',
+    })
+    await client.updateAdminPermissions({
+      targetAccount: 'staff-a',
+      role: 'staff',
+      permissions: ['workbenchAccess', 'productManagement'],
+    })
+    await client.disableAdminAccount({ targetAccount: 'staff-a' })
+    await client.revokeAdminSessions({ targetAccount: 'staff-a' })
+    await client.listAdminAccounts()
+    await client.listAdminAuditLogs()
+
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'createAdminAccount',
+          payload: {
+            account: 'staff-a',
+            role: 'staff',
+            permissions: ['workbenchAccess'],
+            initialPassword: 'staff-secret',
+          },
+          adminToken: 'server-token',
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'updateAdminPermissions',
+          payload: {
+            targetAccount: 'staff-a',
+            role: 'staff',
+            permissions: ['workbenchAccess', 'productManagement'],
+          },
+          adminToken: 'server-token',
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'disableAdminAccount',
+          payload: { targetAccount: 'staff-a' },
+          adminToken: 'server-token',
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'revokeAdminSessions',
+          payload: { targetAccount: 'staff-a' },
+          adminToken: 'server-token',
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'listAdminAccounts',
+          adminToken: 'server-token',
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'listAdminAuditLogs',
+          adminToken: 'server-token',
+        },
+      },
+    ])
+    expect(JSON.stringify(calls)).not.toContain('adminSession')
   })
 
   it('maps staff image task snapshots to a single mallApi action', async () => {

@@ -1,4 +1,10 @@
-import { nowIso } from '../../domain/shared/ids'
+import { getRuntimeCloudBaseMallApiClient } from '../../services/cloudbase/runtime-mall-api-client'
+import type {
+  AdminAccountRecord,
+  AdminAuditLogRecord,
+  CloudBaseMallApiClient,
+  CloudBaseMallApiClientWithAdmin,
+} from '../../services/cloudbase/mall-api-client'
 
 export type AdminRole = 'creator' | 'owner' | 'staff'
 
@@ -29,7 +35,7 @@ export type AdminPermissionAuditLog = {
   id: string
   operatorAccount: string
   targetAccount: string
-  action: 'authorize' | 'disable'
+  action: 'authorize' | 'disable' | 'revoke'
   actionLabel: string
   role?: AdminRole
   roleLabel?: string
@@ -88,47 +94,19 @@ const statusLabels: Record<AdminAccountStatus, string> = {
 const actionLabels: Record<AdminPermissionAuditLog['action'], string> = {
   authorize: '授权',
   disable: '禁用',
+  revoke: '撤销会话',
 }
 
 const scopeLabelByValue = new Map(scopeOptions.map((scope) => [scope.value, scope.label]))
 
+const getClient = (client?: CloudBaseMallApiClient): CloudBaseMallApiClientWithAdmin =>
+  (client ?? getRuntimeCloudBaseMallApiClient()) as CloudBaseMallApiClientWithAdmin
+
 const getPermissionLabels = (permissions: AdminPermissionScope[]) =>
   permissions.map((permission) => scopeLabelByValue.get(permission) ?? permission)
 
-let auditSequence = 0
 let accounts: AdminAccount[] = []
 let auditLogs: AdminPermissionAuditLog[] = []
-
-const createAccount = (
-  account: string,
-  role: AdminRole,
-  permissions: AdminPermissionScope[],
-  status: AdminAccountStatus,
-): AdminAccount => {
-  const timestamp = nowIso()
-
-  return {
-    account,
-    role,
-    roleLabel: roleLabels[role],
-    permissions: [...permissions],
-    permissionLabels: getPermissionLabels(permissions),
-    status,
-    statusLabel: statusLabels[status],
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  }
-}
-
-export const resetAdminPermissionsForTests = () => {
-  auditSequence = 0
-  accounts = [
-    createAccount('admin', 'creator', allPermissionScopes, 'active'),
-  ]
-  auditLogs = []
-}
-
-resetAdminPermissionsForTests()
 
 const copyAccount = (account: AdminAccount): AdminAccount => ({
   ...account,
@@ -136,37 +114,97 @@ const copyAccount = (account: AdminAccount): AdminAccount => ({
   permissionLabels: [...account.permissionLabels],
 })
 
-const findActiveAccount = (account: string) =>
-  accounts.find((item) => item.account === account && item.status === 'active') ?? null
+const copyAuditLog = (log: AdminPermissionAuditLog): AdminPermissionAuditLog => ({
+  ...log,
+  permissions: [...log.permissions],
+  permissionLabels: [...log.permissionLabels],
+})
 
-const isSubset = (candidate: AdminPermissionScope[], allowed: AdminPermissionScope[]) =>
-  candidate.every((permission) => allowed.includes(permission))
+const toPermissionScopes = (permissions: string[] | AdminPermissionScope[]): AdminPermissionScope[] =>
+  permissions.filter((permission) =>
+    allPermissionScopes.includes(permission as AdminPermissionScope),
+  ) as AdminPermissionScope[]
 
-const uniquePermissions = (permissions: AdminPermissionScope[]) => Array.from(new Set(permissions))
+const toAdminAccount = (account: AdminAccountRecord): AdminAccount => {
+  const permissions = toPermissionScopes(account.permissions)
 
-const addAuditLog = (
-  operatorAccount: string,
-  targetAccount: string,
-  action: AdminPermissionAuditLog['action'],
-  permissions: AdminPermissionScope[],
-  role?: AdminRole,
-) => {
-  auditSequence += 1
-  auditLogs = [
-    ...auditLogs,
+  return {
+    account: account.account,
+    role: account.role,
+    roleLabel: roleLabels[account.role],
+    permissions,
+    permissionLabels: getPermissionLabels(permissions),
+    status: account.status,
+    statusLabel: statusLabels[account.status],
+    createdAt: account.createdAt,
+    updatedAt: account.updatedAt,
+  }
+}
+
+const normalizeAuditAction = (action: string): AdminPermissionAuditLog['action'] => {
+  if (action === 'disableAdminAccount') {
+    return 'disable'
+  }
+  if (action === 'revokeAdminSessions') {
+    return 'revoke'
+  }
+  return 'authorize'
+}
+
+const readAuditPermissions = (details: Record<string, unknown> | undefined): AdminPermissionScope[] => {
+  const permissions = details?.permissions
+  return Array.isArray(permissions) ? toPermissionScopes(permissions as string[]) : []
+}
+
+const readAuditRole = (details: Record<string, unknown> | undefined): AdminRole | undefined => {
+  const role = details?.role
+  return role === 'creator' || role === 'owner' || role === 'staff' ? role : undefined
+}
+
+const toAuditLog = (log: AdminAuditLogRecord): AdminPermissionAuditLog => {
+  const action = normalizeAuditAction(log.action)
+  const permissions = readAuditPermissions(log.details)
+  const role = readAuditRole(log.details)
+
+  return {
+    id: log.id,
+    operatorAccount: log.operatorAccount ?? '',
+    targetAccount: log.targetAccount ?? '',
+    action,
+    actionLabel: actionLabels[action],
+    role,
+    roleLabel: role ? roleLabels[role] : undefined,
+    permissions,
+    permissionLabels: getPermissionLabels(permissions),
+    createdAt: log.createdAt,
+  }
+}
+
+export const resetAdminPermissionsForTests = () => {
+  accounts = [
     {
-      id: `admin-permission-log-${auditSequence}`,
-      operatorAccount,
-      targetAccount,
-      action,
-      actionLabel: actionLabels[action],
-      role,
-      roleLabel: role ? roleLabels[role] : undefined,
-      permissions: [...permissions],
-      permissionLabels: getPermissionLabels(permissions),
-      createdAt: nowIso(),
+      account: 'admin',
+      role: 'creator',
+      roleLabel: roleLabels.creator,
+      permissions: [...allPermissionScopes],
+      permissionLabels: getPermissionLabels(allPermissionScopes),
+      status: 'active',
+      statusLabel: statusLabels.active,
+      createdAt: '',
+      updatedAt: '',
     },
   ]
+  auditLogs = []
+}
+
+resetAdminPermissionsForTests()
+
+const findAccount = (account: string) =>
+  accounts.find((item) => item.account === account) ?? null
+
+const findActiveAccount = (account: string) => {
+  const current = findAccount(account)
+  return current?.status === 'active' ? current : null
 }
 
 export const getAdminPermissionView = (currentAccount: string): AdminPermissionView => {
@@ -175,14 +213,26 @@ export const getAdminPermissionView = (currentAccount: string): AdminPermissionV
   return {
     currentAccount: current ? copyAccount(current) : null,
     accounts: accounts.map(copyAccount),
-    auditLogs: auditLogs.map((log) => ({
-      ...log,
-      permissions: [...log.permissions],
-      permissionLabels: [...log.permissionLabels],
-    })),
+    auditLogs: auditLogs.map(copyAuditLog),
     scopeOptions,
     canGrantOwner: current?.role === 'creator',
   }
+}
+
+export const refreshAdminPermissionView = async (
+  currentAccount: string,
+  client?: CloudBaseMallApiClient,
+): Promise<AdminPermissionView> => {
+  const api = getClient(client)
+  const [accountResult, auditResult] = await Promise.all([
+    api.listAdminAccounts(),
+    api.listAdminAuditLogs(),
+  ])
+
+  accounts = accountResult.accounts.map(toAdminAccount)
+  auditLogs = auditResult.logs.map(toAuditLog)
+
+  return getAdminPermissionView(currentAccount)
 }
 
 export const hasAdminPermission = (
@@ -194,98 +244,100 @@ export const hasAdminPermission = (
   return Boolean(current?.permissions.includes(permission))
 }
 
-export const authorizeAdminAccount = (params: {
-  operatorAccount: string
-  targetAccount: string
-  role: Exclude<AdminRole, 'creator'>
-  permissions: AdminPermissionScope[]
-}): AdminPermissionCommandResult => {
-  const operator = findActiveAccount(params.operatorAccount)
-  const targetAccount = params.targetAccount.trim()
-  const permissions = uniquePermissions(params.permissions)
+const getErrorMessage = (error: unknown, fallback: string): string =>
+  error instanceof Error ? error.message : fallback
 
-  if (!operator?.permissions.includes('permissionManagement')) {
-    return { status: 'failed', message: '无权执行授权操作' }
-  }
+export const createAdminAccount = async (
+  params: {
+    account: string
+    role: Exclude<AdminRole, 'creator'>
+    permissions: AdminPermissionScope[]
+    initialPassword: string
+  },
+  client?: CloudBaseMallApiClient,
+): Promise<AdminPermissionCommandResult> => {
+  const targetAccount = params.account.trim()
+  const initialPassword = params.initialPassword.trim()
+
   if (!targetAccount) {
     return { status: 'failed', message: '账号不能为空' }
   }
-  if (permissions.length === 0) {
+  if (initialPassword.length < 6) {
+    return { status: 'failed', message: '新密码至少 6 位' }
+  }
+  if (params.permissions.length === 0) {
     return { status: 'failed', message: '至少选择一个权限范围' }
   }
-  if (operator.role === 'owner' && params.role !== 'staff') {
-    return { status: 'failed', message: '店铺老板只能授权员工' }
+
+  try {
+    await getClient(client).createAdminAccount({
+      account: targetAccount,
+      role: params.role,
+      permissions: [...params.permissions],
+      initialPassword,
+    })
+    await refreshAdminPermissionView(targetAccount, client)
+    return { status: 'success', message: '账号已创建' }
+  } catch (error) {
+    return { status: 'failed', message: getErrorMessage(error, '账号创建失败') }
   }
-  if (operator.role === 'owner' && !isSubset(permissions, operator.permissions)) {
-    return { status: 'failed', message: '无权授予超出自身范围的权限' }
-  }
-
-  const timestamp = nowIso()
-  const existing = accounts.find((account) => account.account === targetAccount)
-
-  if (existing?.role === 'creator') {
-    return { status: 'failed', message: '创作者账号不可覆盖' }
-  }
-
-  const nextAccount: AdminAccount = existing
-    ? {
-        ...existing,
-        role: params.role,
-        roleLabel: roleLabels[params.role],
-        permissions: [...permissions],
-        permissionLabels: getPermissionLabels(permissions),
-        status: 'active',
-        statusLabel: statusLabels.active,
-        updatedAt: timestamp,
-      }
-    : {
-        account: targetAccount,
-        role: params.role,
-        roleLabel: roleLabels[params.role],
-        permissions: [...permissions],
-        permissionLabels: getPermissionLabels(permissions),
-        status: 'active',
-        statusLabel: statusLabels.active,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      }
-
-  accounts = existing
-    ? accounts.map((account) => (account.account === targetAccount ? nextAccount : account))
-    : [...accounts, nextAccount]
-  addAuditLog(params.operatorAccount, targetAccount, 'authorize', permissions, params.role)
-
-  return { status: 'success', message: '授权已保存' }
 }
 
-export const disableAdminAccount = (params: {
-  operatorAccount: string
-  targetAccount: string
-}): AdminPermissionCommandResult => {
-  const operator = findActiveAccount(params.operatorAccount)
-  const target = accounts.find((account) => account.account === params.targetAccount)
+export const authorizeAdminAccount = async (
+  params: {
+    targetAccount: string
+    role: Exclude<AdminRole, 'creator'>
+    permissions: AdminPermissionScope[]
+  },
+  client?: CloudBaseMallApiClient,
+): Promise<AdminPermissionCommandResult> => {
+  const targetAccount = params.targetAccount.trim()
 
-  if (!operator?.permissions.includes('permissionManagement')) {
-    return { status: 'failed', message: '无权执行禁用操作' }
+  if (!targetAccount) {
+    return { status: 'failed', message: '账号不能为空' }
   }
-  if (!target || target.role === 'creator') {
-    return { status: 'failed', message: '账号不可禁用' }
-  }
-  if (operator.role === 'owner' && !isSubset(target.permissions, operator.permissions)) {
-    return { status: 'failed', message: '无权禁用超出自身范围的账号' }
+  if (params.permissions.length === 0) {
+    return { status: 'failed', message: '至少选择一个权限范围' }
   }
 
-  accounts = accounts.map((account) =>
-    account.account === params.targetAccount
-      ? {
-          ...account,
-          status: 'disabled',
-          statusLabel: statusLabels.disabled,
-          updatedAt: nowIso(),
-        }
-      : account,
-  )
-  addAuditLog(params.operatorAccount, params.targetAccount, 'disable', target.permissions, target.role)
+  try {
+    await getClient(client).updateAdminPermissions({
+      targetAccount,
+      role: params.role,
+      permissions: [...params.permissions],
+    })
+    await refreshAdminPermissionView(targetAccount, client)
+    return { status: 'success', message: '授权已保存' }
+  } catch (error) {
+    return { status: 'failed', message: getErrorMessage(error, '授权保存失败') }
+  }
+}
 
-  return { status: 'success', message: '账号权限已禁用' }
+export const disableAdminAccount = async (
+  params: {
+    targetAccount: string
+  },
+  client?: CloudBaseMallApiClient,
+): Promise<AdminPermissionCommandResult> => {
+  try {
+    await getClient(client).disableAdminAccount({ targetAccount: params.targetAccount })
+    await refreshAdminPermissionView(params.targetAccount, client)
+    return { status: 'success', message: '账号权限已禁用' }
+  } catch (error) {
+    return { status: 'failed', message: getErrorMessage(error, '账号禁用失败') }
+  }
+}
+
+export const revokeAdminSessions = async (
+  params: {
+    targetAccount: string
+  },
+  client?: CloudBaseMallApiClient,
+): Promise<AdminPermissionCommandResult> => {
+  try {
+    await getClient(client).revokeAdminSessions({ targetAccount: params.targetAccount })
+    return { status: 'success', message: '会话已撤销' }
+  } catch (error) {
+    return { status: 'failed', message: getErrorMessage(error, '会话撤销失败') }
+  }
 }

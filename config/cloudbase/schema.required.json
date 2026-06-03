@@ -156,6 +156,48 @@
         { "name": "batch_id", "fields": ["batch_id"] },
         { "name": "status_created_at", "fields": ["status", "created_at"] }
       ]
+    },
+    {
+      "name": "admin_accounts",
+      "requiredFields": [
+        "_id",
+        "account",
+        "password_hash",
+        "password_algorithm",
+        "role",
+        "permissions",
+        "status",
+        "failed_login_count",
+        "created_at",
+        "updated_at"
+      ],
+      "indexes": [
+        { "name": "account_unique", "fields": ["account"], "unique": true },
+        { "name": "status", "fields": ["status"] }
+      ]
+    },
+    {
+      "name": "admin_sessions",
+      "requiredFields": [
+        "_id",
+        "account_id",
+        "account",
+        "token_hash",
+        "expires_at",
+        "created_at"
+      ],
+      "indexes": [
+        { "name": "token_hash_unique", "fields": ["token_hash"], "unique": true },
+        { "name": "account_id_expires_at", "fields": ["account_id", "expires_at"] }
+      ]
+    },
+    {
+      "name": "admin_audit_logs",
+      "requiredFields": ["_id", "action", "result", "created_at"],
+      "indexes": [
+        { "name": "operator_account_created_at", "fields": ["operator_account", "created_at"] },
+        { "name": "target_account_created_at", "fields": ["target_account", "created_at"] }
+      ]
     }
   ]
 }

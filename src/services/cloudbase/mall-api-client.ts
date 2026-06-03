@@ -3,19 +3,101 @@ import type { Product, Sku } from '../../domain/catalog/types'
 import type { ProductDraft } from '../../domain/draft/types'
 import type { Order } from '../../domain/order/types'
 import type { CustomerSession } from '../auth/customer-session'
-import { getAdminWorkbenchSession } from '../auth/admin-workbench-session'
+import { getAdminWorkbenchToken } from '../auth/admin-workbench-session'
 import type { CloudBaseFunctionClient } from './cloudbase-function-client'
 
 type CloudBaseMallApiRequest = {
   action: string
   params?: Record<string, string>
   payload?: unknown
-  adminSession?: {
-    account: string
-    role: 'creator' | 'owner' | 'staff'
-    permissions: string[]
-  }
+  adminToken?: string
 }
+
+export type AdminApiRole = 'creator' | 'owner' | 'staff'
+
+export type AdminApiPermissionScope =
+  | 'workbenchAccess'
+  | 'productManagement'
+  | 'orderConfirmation'
+  | 'more'
+  | 'homepageSettings'
+  | 'accountManagement'
+  | 'permissionManagement'
+
+export type AdminSessionSnapshot = {
+  account: string
+  role: AdminApiRole
+  permissions: AdminApiPermissionScope[]
+  status?: 'active'
+  expiresAt: string
+}
+
+export type AdminLoginInput = {
+  account: string
+  password: string
+}
+
+export type AdminLoginResult = AdminSessionSnapshot & {
+  adminToken: string
+}
+
+export type AdminPasswordChangeInput = {
+  oldPassword: string
+  newPassword: string
+}
+
+export type AdminAccountRecord = {
+  id: string
+  account: string
+  displayName?: string
+  role: AdminApiRole
+  permissions: AdminApiPermissionScope[]
+  status: 'active' | 'disabled'
+  createdBy?: string
+  createdAt: string
+  updatedAt: string
+  lastLoginAt?: string
+}
+
+export type CreateAdminAccountInput = {
+  account: string
+  displayName?: string
+  role: Exclude<AdminApiRole, 'creator'>
+  permissions: AdminApiPermissionScope[]
+  initialPassword: string
+}
+
+export type UpdateAdminPermissionsInput = {
+  targetAccount: string
+  role?: Exclude<AdminApiRole, 'creator'>
+  permissions?: AdminApiPermissionScope[]
+}
+
+export type TargetAdminAccountInput = {
+  targetAccount: string
+}
+
+export type AdminAuditLogRecord = {
+  id: string
+  operatorAccount?: string
+  action: string
+  targetAccount?: string
+  result: 'success' | 'failure'
+  details?: Record<string, unknown>
+  createdAt: string
+}
+
+type AdminMallApiMethod =
+  | 'adminLogin'
+  | 'adminLogout'
+  | 'getAdminSession'
+  | 'changeAdminPassword'
+  | 'createAdminAccount'
+  | 'updateAdminPermissions'
+  | 'disableAdminAccount'
+  | 'revokeAdminSessions'
+  | 'listAdminAccounts'
+  | 'listAdminAuditLogs'
 
 type CreateOcrBatchInput = {
   imageUrls: string[]
@@ -294,6 +376,16 @@ type ClearUnavailableCustomerShoppingBagItemsResult = {
 }
 
 export type CloudBaseMallApiClient = {
+  adminLogin?: (input: AdminLoginInput) => Promise<AdminLoginResult>
+  adminLogout?: () => Promise<{ revoked: boolean }>
+  getAdminSession?: () => Promise<AdminSessionSnapshot>
+  changeAdminPassword?: (input: AdminPasswordChangeInput) => Promise<{ changed: boolean }>
+  createAdminAccount?: (input: CreateAdminAccountInput) => Promise<{ account: AdminAccountRecord }>
+  updateAdminPermissions?: (input: UpdateAdminPermissionsInput) => Promise<{ account: AdminAccountRecord }>
+  disableAdminAccount?: (input: TargetAdminAccountInput) => Promise<{ account: AdminAccountRecord; revokedCount: number }>
+  revokeAdminSessions?: (input: TargetAdminAccountInput) => Promise<{ revokedCount: number }>
+  listAdminAccounts?: () => Promise<{ accounts: AdminAccountRecord[] }>
+  listAdminAuditLogs?: () => Promise<{ logs: AdminAuditLogRecord[] }>
   getCurrentCustomer: () => Promise<{ customer: CustomerIdentity }>
   bindCustomerPhone: (input: BindCustomerPhoneInput) => Promise<{ customer: CustomerIdentity }>
   bindStaff: (input: BindStaffInput) => Promise<{ roleAssignment: RoleAssignment }>
@@ -351,29 +443,54 @@ export type CloudBaseMallApiClient = {
   cancelMerchantOrder: (orderId: string) => Promise<{ order: Order }>
 }
 
+export type CloudBaseMallApiClientWithAdmin = CloudBaseMallApiClient &
+  Required<Pick<CloudBaseMallApiClient, AdminMallApiMethod>>
+
 const callMallApi = <TData>(
   functionClient: CloudBaseFunctionClient,
   request: CloudBaseMallApiRequest,
 ): Promise<TData> => {
-  const adminSession = getAdminWorkbenchSession()
+  const adminToken = getAdminWorkbenchToken()
 
   return functionClient.call<TData>('mallApi', {
     ...request,
-    ...(adminSession
-      ? {
-          adminSession: {
-            account: adminSession.account,
-            role: adminSession.role,
-            permissions: adminSession.permissions,
-          },
-        }
-      : {}),
+    ...(adminToken ? { adminToken } : {}),
   })
 }
 
 export const createCloudBaseMallApiClient = (
   functionClient: CloudBaseFunctionClient,
-): CloudBaseMallApiClient => ({
+): CloudBaseMallApiClientWithAdmin => ({
+  adminLogin(input) {
+    return callMallApi(functionClient, { action: 'adminLogin', payload: input })
+  },
+  adminLogout() {
+    return callMallApi(functionClient, { action: 'adminLogout' })
+  },
+  getAdminSession() {
+    return callMallApi(functionClient, { action: 'getAdminSession' })
+  },
+  changeAdminPassword(input) {
+    return callMallApi(functionClient, { action: 'changeAdminPassword', payload: input })
+  },
+  createAdminAccount(input) {
+    return callMallApi(functionClient, { action: 'createAdminAccount', payload: input })
+  },
+  updateAdminPermissions(input) {
+    return callMallApi(functionClient, { action: 'updateAdminPermissions', payload: input })
+  },
+  disableAdminAccount(input) {
+    return callMallApi(functionClient, { action: 'disableAdminAccount', payload: input })
+  },
+  revokeAdminSessions(input) {
+    return callMallApi(functionClient, { action: 'revokeAdminSessions', payload: input })
+  },
+  listAdminAccounts() {
+    return callMallApi(functionClient, { action: 'listAdminAccounts' })
+  },
+  listAdminAuditLogs() {
+    return callMallApi(functionClient, { action: 'listAdminAuditLogs' })
+  },
   getCurrentCustomer() {
     return callMallApi(functionClient, { action: 'getCurrentCustomer' })
   },

@@ -8,6 +8,10 @@ const {
   createHttpOcrProviderFromEnv,
   validateProductForPublish,
 } = require('./mall-api-core')
+const {
+  createAdminAccountRecord,
+  createAdminSessionRecord,
+} = require('./admin-auth-utils')
 const { productPublishValidationCases } = require('../../tests/contracts/product-publish-validation-cases.cjs')
 
 const createHandler = (options = {}) =>
@@ -145,10 +149,86 @@ const staffOrderSession = {
   permissions: ['workbenchAccess', 'orderConfirmation'],
 }
 
-const createProductFixture = async (handler) => {
+const seedAdminAccount = async (store, input = {}) => {
+  const account = createAdminAccountRecord(
+    {
+      id: input.id || `${input.account || 'owner'}-id`,
+      account: input.account || 'owner@example.com',
+      password: input.password || 'initial-password',
+      role: input.role || 'owner',
+      permissions: input.permissions || ['workbenchAccess'],
+      status: input.status || 'active',
+      createdBy: input.createdBy || 'creator@example.com',
+    },
+    {
+      now: () => '2026-05-11T00:00:00.000Z',
+      saltSource: () => `${input.account || 'owner'}-salt`,
+    },
+  )
+  await store.insert('admin_accounts', account)
+  return account
+}
+
+const seedAdminSession = async (store, account, input = {}) => {
+  const adminToken = input.adminToken || `${account.account}-token`
+  const { session } = createAdminSessionRecord(
+    {
+      id: input.id || `${account._id}-session`,
+      accountId: account._id,
+      account: account.account,
+      adminToken,
+      expiresAt: input.expiresAt || '2026-05-11T01:00:00.000Z',
+      revokedAt: input.revokedAt,
+    },
+    {
+      now: () => '2026-05-11T00:00:00.000Z',
+    },
+  )
+  await store.insert('admin_sessions', session)
+  return adminToken
+}
+
+const createAdminTokenHandler = async (accountInput = {}, sessionInput = {}) => {
+  const store = createStore()
+  const account = await seedAdminAccount(store, accountInput)
+  const adminToken = await seedAdminSession(store, account, sessionInput)
+  return {
+    account,
+    adminToken,
+    store,
+    handler: createProductionRoleHandler(store),
+  }
+}
+
+const createAdminWorkflowHandler = async (accountInput = {}, sessionInput = {}) => {
+  const store = createStore()
+  const account = await seedAdminAccount(store, accountInput)
+  const adminToken = await seedAdminSession(store, account, sessionInput)
+  return {
+    account,
+    adminToken,
+    store,
+    handler: createMallApiHandler(store, {
+      createId: (() => {
+        let index = 0
+        return (prefix) => `${prefix}-${++index}`
+      })(),
+      now: () => '2026-05-11T00:00:00.000Z',
+      allowTestIdentityRoles: true,
+      allowMockCustomerOrder: true,
+      exchangePhoneCode: async (phoneCode) => {
+        if (phoneCode !== 'phone-code-ok') throw new Error('Invalid phone code')
+        return '13800000000'
+      },
+    }),
+  }
+}
+
+const createProductFixture = async (handler, adminToken) => {
+  const adminAuthority = adminToken ? { adminToken } : { identity: ownerIdentity }
   const created = await handler({
     action: 'createOcrBatch',
-    identity: ownerIdentity,
+    ...adminAuthority,
     payload: {
       imageUrls: ['cloud://page-1.png'],
       drafts: [
@@ -166,13 +246,13 @@ const createProductFixture = async (handler) => {
   })
   const confirmed = await handler({
     action: 'confirmBatch',
-    identity: ownerIdentity,
+    ...adminAuthority,
     params: { batchId: created.data.batch.id },
   })
   const product = confirmed.data.products[0]
   await handler({
     action: 'supplementProductImages',
-    identity: staffIdentity,
+    ...adminAuthority,
     params: { productId: product.id },
     payload: {
       mainImageUrl: 'cloud://main.jpg',
@@ -181,7 +261,7 @@ const createProductFixture = async (handler) => {
   })
   const published = await handler({
     action: 'publishProduct',
-    identity: ownerIdentity,
+    ...adminAuthority,
     params: { productId: product.id },
   })
   return {
@@ -191,7 +271,7 @@ const createProductFixture = async (handler) => {
 }
 
 describe('mallApi Phase 4 auth and role permissions', () => {
-  it('ignores forged request roles unless the local test-role switch is enabled', async () => {
+  it('rejects admin-only actions without a server admin token', async () => {
     const handler = createProductionRoleHandler()
 
     const result = await handler({
@@ -206,12 +286,12 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     expect(result).toMatchObject({
       success: false,
       error: {
-        code: 'FORBIDDEN',
+        code: 'UNAUTHORIZED',
       },
     })
   })
 
-  it('resolves owner role from role_assignments instead of request roles', async () => {
+  it('does not use role_assignments as admin-only authority without a server admin token', async () => {
     const store = createStore()
     await store.insert('role_assignments', {
       _id: 'role-1',
@@ -233,14 +313,14 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     })
 
     expect(result).toMatchObject({
-      success: true,
-      data: {
-        orders: [],
+      success: false,
+      error: {
+        code: 'UNAUTHORIZED',
       },
     })
   })
 
-  it('lets an owner bind a staff openid through role_assignments', async () => {
+  it('rejects role_assignment owner bindStaff without a server admin token', async () => {
     const store = createStore()
     await store.insert('role_assignments', {
       _id: 'role-owner',
@@ -263,11 +343,28 @@ describe('mallApi Phase 4 auth and role permissions', () => {
         reason: 'new staff',
       },
     })
-    const staffOrders = await handler({
-      action: 'listPendingImageTasks',
-      identity: {
+
+    expect(result).toMatchObject({
+      success: false,
+      error: {
+        code: 'UNAUTHORIZED',
+      },
+    })
+  })
+
+  it('lets an owner bind a staff openid with a server admin token', async () => {
+    const { handler, adminToken } = await createAdminTokenHandler({
+      account: 'owner@example.com',
+      role: 'owner',
+      permissions: ['workbenchAccess', 'permissionManagement'],
+    })
+
+    const result = await handler({
+      action: 'bindStaff',
+      adminToken,
+      payload: {
         openid: 'staff-openid',
-        appid: 'wxa63c53796488d4d4',
+        reason: 'new staff',
       },
     })
 
@@ -278,18 +375,23 @@ describe('mallApi Phase 4 auth and role permissions', () => {
           openid: 'staff-openid',
           role: 'staff',
           status: 'active',
+          createdBy: 'owner@example.com',
+          updatedBy: 'owner@example.com',
         },
       },
     })
-    expect(staffOrders.success).toBe(true)
   })
 
   it('denies staff binding when caller is not an owner', async () => {
-    const handler = createProductionRoleHandler()
+    const { handler, adminToken } = await createAdminTokenHandler({
+      account: 'staff@example.com',
+      role: 'staff',
+      permissions: ['workbenchAccess', 'permissionManagement'],
+    })
 
     const result = await handler({
       action: 'bindStaff',
-      identity: customerIdentity,
+      adminToken,
       payload: {
         openid: 'staff-openid',
       },
@@ -946,11 +1048,15 @@ describe('mallApi Phase 4 auth and role permissions', () => {
   })
 
   it('requires product-management permission for owner product cards', async () => {
-    const handler = createHandler()
+    const { handler, adminToken } = await createAdminTokenHandler({
+      account: 'staff-order@example.com',
+      role: 'staff',
+      permissions: ['workbenchAccess', 'orderConfirmation'],
+    })
 
     await expect(handler({
       action: 'listOwnerProductCards',
-      adminSession: staffOrderSession,
+      adminToken,
     })).resolves.toMatchObject({
       success: false,
       error: {
@@ -1181,8 +1287,12 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     expect(traced.listCalls.filter((call) => call.name === 'orders')).toHaveLength(1)
   })
 
-  it('allows order-confirmation admin sessions to review and handle merchant orders without WeChat identity', async () => {
-    const handler = createHandler()
+  it('allows order-confirmation admin tokens to review and handle merchant orders without WeChat identity', async () => {
+    const { handler, adminToken } = await createAdminWorkflowHandler({
+      account: 'staff-order@example.com',
+      role: 'staff',
+      permissions: ['workbenchAccess', 'orderConfirmation'],
+    })
     const { product, sku } = await createProductFixture(handler)
     const firstOrder = await handler({
       action: 'createCustomerOrder',
@@ -1217,20 +1327,20 @@ describe('mallApi Phase 4 auth and role permissions', () => {
 
     const snapshot = await handler({
       action: 'getOwnerOrderSnapshot',
-      adminSession: staffOrderSession,
+      adminToken,
     })
     const listed = await handler({
       action: 'listMerchantOrders',
-      adminSession: staffOrderSession,
+      adminToken,
     })
     const confirmed = await handler({
       action: 'confirmMerchantOrder',
-      adminSession: staffOrderSession,
+      adminToken,
       params: { orderId: firstOrder.data.order.id },
     })
     const canceled = await handler({
       action: 'cancelMerchantOrder',
-      adminSession: staffOrderSession,
+      adminToken,
       params: { orderId: secondOrder.data.order.id },
     })
 
@@ -1267,11 +1377,15 @@ describe('mallApi Phase 4 auth and role permissions', () => {
   })
 
   it('requires order-confirmation permission for admin merchant order review', async () => {
-    const handler = createHandler()
+    const { handler, adminToken } = await createAdminTokenHandler({
+      account: 'staff-product@example.com',
+      role: 'staff',
+      permissions: ['workbenchAccess', 'productManagement'],
+    })
 
     await expect(handler({
       action: 'getOwnerOrderSnapshot',
-      adminSession: staffProductSession,
+      adminToken,
     })).resolves.toMatchObject({
       success: false,
       error: {
@@ -1341,10 +1455,16 @@ describe('mallApi Phase 4 auth and role permissions', () => {
       },
     })
     traced.listCalls.length = 0
+    const dashboardAccount = await seedAdminAccount(traced.store, {
+      account: 'creator-dashboard@example.com',
+      role: 'creator',
+      permissions: ['workbenchAccess'],
+    })
+    const dashboardToken = await seedAdminSession(traced.store, dashboardAccount)
 
     const result = await handler({
       action: 'getOwnerDashboardSnapshot',
-      adminSession: adminProductSession,
+      adminToken: dashboardToken,
     })
 
     expect(result).toMatchObject({
@@ -1363,11 +1483,15 @@ describe('mallApi Phase 4 auth and role permissions', () => {
   })
 
   it('requires product-management permission for staff image task snapshots', async () => {
-    const handler = createHandler()
+    const { handler, adminToken } = await createAdminTokenHandler({
+      account: 'staff-order@example.com',
+      role: 'staff',
+      permissions: ['workbenchAccess', 'orderConfirmation'],
+    })
 
     await expect(handler({
       action: 'getStaffImageTaskSnapshot',
-      adminSession: staffOrderSession,
+      adminToken,
     })).resolves.toMatchObject({
       success: false,
       error: {
@@ -1427,11 +1551,15 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     expect(latestDrafts.data.drafts).toHaveLength(1)
   })
 
-  it('creates OCR jobs from the admin workbench session without requiring WeChat identity', async () => {
-    const handler = createHandler()
+  it('creates OCR jobs from the admin workbench token without requiring WeChat identity', async () => {
+    const { handler, adminToken } = await createAdminWorkflowHandler({
+      account: 'staff-product@example.com',
+      role: 'staff',
+      permissions: ['workbenchAccess', 'productManagement'],
+    })
     const created = await handler({
       action: 'createOcrBatch',
-      adminSession: staffProductSession,
+      adminToken,
       payload: {
         imageUrls: ['cloud://page-1.png'],
         drafts: [],
@@ -1439,7 +1567,7 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     })
     const listed = await handler({
       action: 'listOcrJobs',
-      adminSession: staffProductSession,
+      adminToken,
       params: { batchId: created.data.batch.id },
     })
 
@@ -1454,10 +1582,14 @@ describe('mallApi Phase 4 auth and role permissions', () => {
   })
 
   it('continues from admin OCR drafts to pending image tasks without requiring WeChat identity', async () => {
-    const handler = createHandler()
+    const { handler, adminToken } = await createAdminWorkflowHandler({
+      account: 'staff-product@example.com',
+      role: 'staff',
+      permissions: ['workbenchAccess', 'productManagement'],
+    })
     const created = await handler({
       action: 'createOcrBatch',
-      adminSession: staffProductSession,
+      adminToken,
       payload: {
         imageUrls: ['cloud://page-1.png'],
         drafts: [
@@ -1475,16 +1607,16 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     })
     const confirmed = await handler({
       action: 'confirmBatch',
-      adminSession: staffProductSession,
+      adminToken,
       params: { batchId: created.data.batch.id },
     })
     const pending = await handler({
       action: 'listPendingImageTasks',
-      adminSession: staffProductSession,
+      adminToken,
     })
     const supplemented = await handler({
       action: 'supplementProductImages',
-      adminSession: staffProductSession,
+      adminToken,
       params: { productId: confirmed.data.products[0]?.id },
       payload: {
         mainImageUrl: 'cloud://main.jpg',
@@ -1513,11 +1645,15 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     })
   })
 
-  it('rejects OCR jobs when the admin workbench session lacks product permission', async () => {
-    const handler = createHandler()
+  it('rejects OCR jobs when the admin workbench token lacks product permission', async () => {
+    const { handler, adminToken } = await createAdminTokenHandler({
+      account: 'staff-order@example.com',
+      role: 'staff',
+      permissions: ['workbenchAccess', 'orderConfirmation'],
+    })
     const result = await handler({
       action: 'createOcrBatch',
-      adminSession: staffOrderSession,
+      adminToken,
       payload: {
         imageUrls: ['cloud://page-1.png'],
         drafts: [],
@@ -1707,7 +1843,13 @@ describe('mallApi Phase 4 auth and role permissions', () => {
         return '13800000000'
       },
     })
-    const { product, sku } = await createProductFixture(handler)
+    const adminAccount = await seedAdminAccount(store, {
+      account: 'owner-admin@example.com',
+      role: 'creator',
+      permissions: ['workbenchAccess', 'productManagement', 'orderConfirmation'],
+    })
+    const adminToken = await seedAdminSession(store, adminAccount)
+    const { product, sku } = await createProductFixture(handler, adminToken)
     await handler({
       action: 'bindCustomerPhone',
       identity: customerIdentity,
@@ -1727,12 +1869,12 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     })
     await handler({
       action: 'confirmMerchantOrder',
-      identity: ownerIdentity,
+      adminToken,
       params: { orderId: created.data.order.id },
     })
     const canceled = await handler({
       action: 'cancelMerchantOrder',
-      identity: ownerIdentity,
+      adminToken,
       params: { orderId: created.data.order.id },
     })
     const ledger = await store.list('inventory_ledger')
@@ -1878,6 +2020,600 @@ describe('mallApi Phase 4 auth and role permissions', () => {
         code: 'FORBIDDEN',
       },
     })
+  })
+})
+
+describe('mallApi Phase 2 admin server auth actions and guards', () => {
+  it('advertises server-side admin auth actions through listContracts', async () => {
+    const handler = createHandler()
+
+    const result = await handler({ action: 'listContracts' })
+
+    expect(result.data.actions).toEqual(expect.arrayContaining([
+      'adminLogin',
+      'adminLogout',
+      'getAdminSession',
+      'changeAdminPassword',
+      'createAdminAccount',
+      'updateAdminPermissions',
+      'disableAdminAccount',
+      'revokeAdminSessions',
+      'listAdminAccounts',
+      'listAdminAuditLogs',
+    ]))
+  })
+
+  it('rejects forged client adminSession without a valid server token', async () => {
+    const handler = createProductionRoleHandler()
+
+    const result = await handler({
+      action: 'listOwnerProductCards',
+      adminSession: adminProductSession,
+    })
+
+    expect(result).toMatchObject({
+      success: false,
+      error: {
+        code: 'UNAUTHORIZED',
+      },
+    })
+  })
+
+  it.each([
+    'listOcrBatches',
+    'getCurrentOcrBatch',
+    'getLatestDrafts',
+  ])('rejects %s without a server admin token', async (action) => {
+    const handler = createProductionRoleHandler()
+
+    const missingToken = await handler({ action })
+    const forgedSession = await handler({
+      action,
+      adminSession: adminProductSession,
+    })
+
+    expect(missingToken).toMatchObject({
+      success: false,
+      error: {
+        code: 'UNAUTHORIZED',
+      },
+    })
+    expect(forgedSession).toMatchObject({
+      success: false,
+      error: {
+        code: 'UNAUTHORIZED',
+      },
+    })
+  })
+
+  it('rejects resolved WeChat admin roles without a server admin token', async () => {
+    const store = createStore()
+    await store.insert('role_assignments', {
+      _id: 'role-owner',
+      openid: 'owner-openid',
+      role: 'owner',
+      status: 'active',
+      created_at: '2026-05-11T00:00:00.000Z',
+      updated_at: '2026-05-11T00:00:00.000Z',
+    })
+    const handler = createProductionRoleHandler(store)
+
+    const result = await handler({
+      action: 'listOwnerProductCards',
+      identity: {
+        openid: 'owner-openid',
+        appid: 'wxa63c53796488d4d4',
+        roles: ['customer'],
+      },
+    })
+
+    expect(result).toMatchObject({
+      success: false,
+      error: {
+        code: 'UNAUTHORIZED',
+      },
+    })
+  })
+
+  it.each([
+    ['listOcrBatches', 'batches'],
+    ['getCurrentOcrBatch', 'batch'],
+    ['getLatestDrafts', 'drafts'],
+  ])('allows %s with a valid product-management admin token', async (action, expectedKey) => {
+    const { handler, adminToken } = await createAdminTokenHandler({
+      permissions: ['workbenchAccess', 'productManagement'],
+    })
+
+    const result = await handler({
+      action,
+      adminToken,
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.data).toHaveProperty(expectedKey)
+  })
+
+  it.each([
+    'listOcrBatches',
+    'getCurrentOcrBatch',
+    'getLatestDrafts',
+  ])('forbids %s when admin token lacks product-management permission', async (action) => {
+    const { handler, adminToken } = await createAdminTokenHandler({
+      permissions: ['workbenchAccess', 'orderConfirmation'],
+    })
+
+    const result = await handler({
+      action,
+      adminToken,
+    })
+
+    expect(result).toMatchObject({
+      success: false,
+      error: {
+        code: 'FORBIDDEN',
+      },
+    })
+  })
+
+  it('allows a valid admin token with sufficient current account permission', async () => {
+    const { handler, adminToken } = await createAdminTokenHandler({
+      permissions: ['workbenchAccess', 'productManagement'],
+    })
+
+    const result = await handler({
+      action: 'listOwnerProductCards',
+      adminToken,
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        products: [],
+        readyProductCount: 0,
+      },
+    })
+  })
+
+  it('forbids a valid admin token without the required current account permission', async () => {
+    const { handler, adminToken } = await createAdminTokenHandler({
+      permissions: ['workbenchAccess', 'orderConfirmation'],
+    })
+
+    const result = await handler({
+      action: 'listOwnerProductCards',
+      adminToken,
+    })
+
+    expect(result).toMatchObject({
+      success: false,
+      error: {
+        code: 'FORBIDDEN',
+      },
+    })
+  })
+
+  it.each([
+    ['expired', { expiresAt: '2026-05-10T23:59:59.000Z' }, { status: 'active' }],
+    ['revoked', { revokedAt: '2026-05-11T00:00:00.000Z' }, { status: 'active' }],
+    ['disabled account', {}, { status: 'disabled' }],
+  ])('rejects %s admin tokens', async (_name, sessionInput, accountInput) => {
+    const { handler, adminToken } = await createAdminTokenHandler({
+      permissions: ['workbenchAccess', 'productManagement'],
+      ...accountInput,
+    }, sessionInput)
+
+    const result = await handler({
+      action: 'listOwnerProductCards',
+      adminToken,
+    })
+
+    expect(result).toMatchObject({
+      success: false,
+      error: {
+        code: 'UNAUTHORIZED',
+      },
+    })
+  })
+
+  it('refreshes getAdminSession role and permissions from admin_accounts instead of stale session state', async () => {
+    const store = createStore()
+    const account = await seedAdminAccount(store, {
+      account: 'staff@example.com',
+      role: 'staff',
+      permissions: ['workbenchAccess'],
+    })
+    const adminToken = await seedAdminSession(store, account)
+    await store.replace('admin_accounts', {
+      ...account,
+      role: 'owner',
+      permissions: ['workbenchAccess', 'productManagement'],
+      updated_at: '2026-05-11T00:30:00.000Z',
+    })
+    const handler = createProductionRoleHandler(store)
+
+    const result = await handler({
+      action: 'getAdminSession',
+      adminToken,
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        account: 'staff@example.com',
+        role: 'owner',
+        permissions: ['workbenchAccess', 'productManagement'],
+        status: 'active',
+        expiresAt: '2026-05-11T01:00:00.000Z',
+      },
+    })
+  })
+
+  it('logs in without exposing account enumeration or stored password metadata', async () => {
+    const store = createStore()
+    await seedAdminAccount(store, {
+      account: 'creator@example.com',
+      password: 'correct-password',
+      role: 'creator',
+      permissions: ['workbenchAccess', 'accountManagement', 'permissionManagement'],
+    })
+    const handler = createProductionRoleHandler(store)
+
+    const failedMissing = await handler({
+      action: 'adminLogin',
+      payload: { account: 'missing@example.com', password: 'wrong-password' },
+    })
+    const failedWrong = await handler({
+      action: 'adminLogin',
+      payload: { account: 'creator@example.com', password: 'wrong-password' },
+    })
+    const loggedIn = await handler({
+      action: 'adminLogin',
+      payload: { account: 'creator@example.com', password: 'correct-password' },
+    })
+    const serializedLogin = JSON.stringify(loggedIn)
+
+    expect(failedMissing).toMatchObject(failedWrong)
+    expect(failedMissing).toMatchObject({
+      success: false,
+      error: { code: 'UNAUTHORIZED' },
+    })
+    expect(loggedIn).toMatchObject({
+      success: true,
+      data: {
+        account: 'creator@example.com',
+        role: 'creator',
+        permissions: ['workbenchAccess', 'accountManagement', 'permissionManagement'],
+      },
+    })
+    expect(loggedIn.data.adminToken).toEqual(expect.any(String))
+    expect(serializedLogin).not.toContain('password_hash')
+    expect(serializedLogin).not.toContain('password_salt')
+    expect(serializedLogin).not.toContain('correct-password')
+  })
+
+  it('enforces creator, owner, and staff account-management boundaries', async () => {
+    const store = createStore()
+    const creator = await seedAdminAccount(store, {
+      account: 'creator@example.com',
+      role: 'creator',
+      permissions: ['workbenchAccess', 'accountManagement', 'permissionManagement', 'productManagement'],
+    })
+    const owner = await seedAdminAccount(store, {
+      account: 'owner@example.com',
+      role: 'owner',
+      permissions: ['workbenchAccess', 'accountManagement', 'permissionManagement', 'productManagement'],
+    })
+    const staff = await seedAdminAccount(store, {
+      account: 'staff@example.com',
+      role: 'staff',
+      permissions: ['workbenchAccess', 'accountManagement', 'permissionManagement'],
+    })
+    const creatorToken = await seedAdminSession(store, creator, { adminToken: 'creator-token' })
+    const ownerToken = await seedAdminSession(store, owner, { adminToken: 'owner-token' })
+    const staffToken = await seedAdminSession(store, staff, { adminToken: 'staff-token' })
+    const handler = createProductionRoleHandler(store)
+
+    const creatorCreatesOwner = await handler({
+      action: 'createAdminAccount',
+      adminToken: creatorToken,
+      payload: {
+        account: 'new-owner@example.com',
+        role: 'owner',
+        permissions: ['workbenchAccess', 'productManagement'],
+        initialPassword: 'owner-password',
+      },
+    })
+    const ownerCreatesStaff = await handler({
+      action: 'createAdminAccount',
+      adminToken: ownerToken,
+      payload: {
+        account: 'new-staff@example.com',
+        role: 'staff',
+        permissions: ['workbenchAccess', 'productManagement'],
+        initialPassword: 'staff-password',
+      },
+    })
+    const ownerCreatesOwner = await handler({
+      action: 'createAdminAccount',
+      adminToken: ownerToken,
+      payload: {
+        account: 'owner-takeover@example.com',
+        role: 'owner',
+        permissions: ['workbenchAccess'],
+        initialPassword: 'owner-password',
+      },
+    })
+    const ownerGrantsOutsideSubset = await handler({
+      action: 'createAdminAccount',
+      adminToken: ownerToken,
+      payload: {
+        account: 'outside-subset@example.com',
+        role: 'staff',
+        permissions: ['workbenchAccess', 'orderConfirmation'],
+        initialPassword: 'staff-password',
+      },
+    })
+    const ownerUpdatesOwnerAsStaff = await handler({
+      action: 'updateAdminPermissions',
+      adminToken: ownerToken,
+      payload: {
+        targetAccount: 'new-owner@example.com',
+        role: 'staff',
+        permissions: ['workbenchAccess'],
+      },
+    })
+    const staffCreatesStaff = await handler({
+      action: 'createAdminAccount',
+      adminToken: staffToken,
+      payload: {
+        account: 'staff-created@example.com',
+        role: 'staff',
+        permissions: ['workbenchAccess'],
+        initialPassword: 'staff-password',
+      },
+    })
+
+    expect(creatorCreatesOwner).toMatchObject({
+      success: true,
+      data: {
+        account: {
+          account: 'new-owner@example.com',
+          role: 'owner',
+          permissions: ['workbenchAccess', 'productManagement'],
+        },
+      },
+    })
+    expect(ownerCreatesStaff).toMatchObject({
+      success: true,
+      data: {
+        account: {
+          account: 'new-staff@example.com',
+          role: 'staff',
+          permissions: ['workbenchAccess', 'productManagement'],
+        },
+      },
+    })
+    expect(ownerCreatesOwner.error.code).toBe('FORBIDDEN')
+    expect(ownerGrantsOutsideSubset.error.code).toBe('FORBIDDEN')
+    expect(ownerUpdatesOwnerAsStaff.error.code).toBe('FORBIDDEN')
+    expect(staffCreatesStaff.error.code).toBe('FORBIDDEN')
+  })
+
+  it('writes safe failure admin audit logs for sensitive operations after operator resolution', async () => {
+    const store = createStore()
+    const creator = await seedAdminAccount(store, {
+      account: 'creator@example.com',
+      role: 'creator',
+      permissions: ['workbenchAccess', 'accountManagement', 'permissionManagement'],
+    })
+    const owner = await seedAdminAccount(store, {
+      account: 'owner@example.com',
+      role: 'owner',
+      permissions: ['workbenchAccess', 'accountManagement', 'permissionManagement'],
+    })
+    const staff = await seedAdminAccount(store, {
+      account: 'staff@example.com',
+      role: 'staff',
+      permissions: ['workbenchAccess', 'accountManagement', 'permissionManagement'],
+    })
+    const limitedStaff = await seedAdminAccount(store, {
+      account: 'limited-staff@example.com',
+      role: 'staff',
+      permissions: ['workbenchAccess'],
+    })
+    const creatorToken = await seedAdminSession(store, creator, { adminToken: 'creator-token' })
+    const ownerToken = await seedAdminSession(store, owner, { adminToken: 'owner-token' })
+    const staffToken = await seedAdminSession(store, staff, { adminToken: 'staff-token' })
+    const limitedStaffToken = await seedAdminSession(store, limitedStaff, { adminToken: 'limited-staff-token' })
+    const handler = createProductionRoleHandler(store)
+
+    const failedCreateWithoutPermission = await handler({
+      action: 'createAdminAccount',
+      adminToken: limitedStaffToken,
+      payload: {
+        account: 'blocked-permission-create@example.com',
+        role: 'staff',
+        permissions: ['workbenchAccess'],
+        initialPassword: 'blocked-password',
+      },
+    })
+    const failedCreate = await handler({
+      action: 'createAdminAccount',
+      adminToken: staffToken,
+      payload: {
+        account: 'blocked-create@example.com',
+        role: 'staff',
+        permissions: ['workbenchAccess'],
+        initialPassword: 'blocked-password',
+      },
+    })
+    const failedUpdate = await handler({
+      action: 'updateAdminPermissions',
+      adminToken: ownerToken,
+      payload: {
+        targetAccount: 'owner@example.com',
+        role: 'staff',
+        permissions: ['workbenchAccess'],
+      },
+    })
+    const failedDisable = await handler({
+      action: 'disableAdminAccount',
+      adminToken: creatorToken,
+      payload: { targetAccount: 'creator@example.com' },
+    })
+    const failedRevoke = await handler({
+      action: 'revokeAdminSessions',
+      adminToken: creatorToken,
+      payload: { targetAccount: 'creator@example.com' },
+    })
+    const failedBindStaff = await handler({
+      action: 'bindStaff',
+      adminToken: staffToken,
+      payload: {
+        openid: 'blocked-staff-openid',
+        reason: 'secret-token-value',
+      },
+    })
+
+    expect(failedCreateWithoutPermission.error.code).toBe('FORBIDDEN')
+    expect(failedCreate.error.code).toBe('FORBIDDEN')
+    expect(failedUpdate.error.code).toBe('FORBIDDEN')
+    expect(failedDisable.error.code).toBe('FORBIDDEN')
+    expect(failedRevoke.error.code).toBe('FORBIDDEN')
+    expect(failedBindStaff.error.code).toBe('FORBIDDEN')
+
+    const logs = await store.list('admin_audit_logs')
+    expect(logs.map((log) => ({
+      operator: log.operator_account,
+      action: log.action,
+      target: log.target_account,
+      result: log.result,
+      errorCode: log.details?.errorCode,
+    }))).toEqual([
+      {
+        operator: 'limited-staff@example.com',
+        action: 'createAdminAccount',
+        target: 'blocked-permission-create@example.com',
+        result: 'failure',
+        errorCode: 'FORBIDDEN',
+      },
+      {
+        operator: 'staff@example.com',
+        action: 'createAdminAccount',
+        target: 'blocked-create@example.com',
+        result: 'failure',
+        errorCode: 'FORBIDDEN',
+      },
+      {
+        operator: 'owner@example.com',
+        action: 'updateAdminPermissions',
+        target: 'owner@example.com',
+        result: 'failure',
+        errorCode: 'FORBIDDEN',
+      },
+      {
+        operator: 'creator@example.com',
+        action: 'disableAdminAccount',
+        target: 'creator@example.com',
+        result: 'failure',
+        errorCode: 'FORBIDDEN',
+      },
+      {
+        operator: 'creator@example.com',
+        action: 'revokeAdminSessions',
+        target: 'creator@example.com',
+        result: 'failure',
+        errorCode: 'FORBIDDEN',
+      },
+      {
+        operator: 'staff@example.com',
+        action: 'bindStaff',
+        target: 'blocked-staff-openid',
+        result: 'failure',
+        errorCode: 'FORBIDDEN',
+      },
+    ])
+    const serializedLogs = JSON.stringify(logs)
+    expect(serializedLogs).not.toContain('blocked-password')
+    expect(serializedLogs).not.toContain('staff-token')
+    expect(serializedLogs).not.toContain('creator-token')
+    expect(serializedLogs).not.toContain('owner-token')
+    expect(serializedLogs).not.toContain('secret-token-value')
+    expect(serializedLogs).not.toContain('password_hash')
+    expect(serializedLogs).not.toContain('password_salt')
+    expect(serializedLogs).not.toContain('token_hash')
+  })
+
+  it('prevents creator takeover and invalidates sessions after logout revoke or disable', async () => {
+    const store = createStore()
+    const creator = await seedAdminAccount(store, {
+      account: 'creator@example.com',
+      role: 'creator',
+      permissions: ['workbenchAccess', 'accountManagement', 'permissionManagement', 'productManagement'],
+    })
+    const staff = await seedAdminAccount(store, {
+      account: 'staff@example.com',
+      role: 'staff',
+      permissions: ['workbenchAccess', 'productManagement'],
+    })
+    const creatorToken = await seedAdminSession(store, creator, { adminToken: 'creator-token' })
+    const staffToken = await seedAdminSession(store, staff, { adminToken: 'staff-token' })
+    const handler = createProductionRoleHandler(store)
+
+    const creatorOverwrite = await handler({
+      action: 'createAdminAccount',
+      adminToken: creatorToken,
+      payload: {
+        account: 'creator@example.com',
+        role: 'owner',
+        permissions: ['workbenchAccess'],
+        initialPassword: 'new-password',
+      },
+    })
+    const disableCreator = await handler({
+      action: 'disableAdminAccount',
+      adminToken: creatorToken,
+      payload: { targetAccount: 'creator@example.com' },
+    })
+    const revokeStaff = await handler({
+      action: 'revokeAdminSessions',
+      adminToken: creatorToken,
+      payload: { targetAccount: 'staff@example.com' },
+    })
+    const staffAfterRevoke = await handler({
+      action: 'listOwnerProductCards',
+      adminToken: staffToken,
+    })
+    const reloginStaff = await handler({
+      action: 'adminLogin',
+      payload: { account: 'staff@example.com', password: 'initial-password' },
+    })
+    const disableStaff = await handler({
+      action: 'disableAdminAccount',
+      adminToken: creatorToken,
+      payload: { targetAccount: 'staff@example.com' },
+    })
+    const staffAfterDisable = await handler({
+      action: 'listOwnerProductCards',
+      adminToken: reloginStaff.data.adminToken,
+    })
+    const logoutCreator = await handler({
+      action: 'adminLogout',
+      adminToken: creatorToken,
+    })
+    const creatorAfterLogout = await handler({
+      action: 'listOwnerProductCards',
+      adminToken: creatorToken,
+    })
+
+    expect(creatorOverwrite.error.code).toBe('CONFLICT')
+    expect(disableCreator.error.code).toBe('FORBIDDEN')
+    expect(revokeStaff).toMatchObject({ success: true, data: { revokedCount: 1 } })
+    expect(staffAfterRevoke.error.code).toBe('UNAUTHORIZED')
+    expect(disableStaff).toMatchObject({ success: true })
+    expect(staffAfterDisable.error.code).toBe('UNAUTHORIZED')
+    expect(logoutCreator).toMatchObject({ success: true, data: { revoked: true } })
+    expect(creatorAfterLogout.error.code).toBe('UNAUTHORIZED')
   })
 })
 

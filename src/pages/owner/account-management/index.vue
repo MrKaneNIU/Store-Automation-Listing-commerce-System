@@ -129,12 +129,12 @@ import { redirectTo, relaunchTo } from '../../../app/navigation'
 import { routes, type AppRoute } from '../../../app/routes'
 import {
   changeAdminWorkbenchPassword,
-  setAdminWorkbenchInitialPassword,
 } from '../../../features/admin-workbench-auth/admin-workbench-auth'
-import { ensureAdminWorkbenchSession } from '../../../features/admin-workbench-auth/admin-workbench-guard'
+import { ensureAdminWorkbenchSessionFromServer } from '../../../features/admin-workbench-auth/admin-workbench-guard'
 import {
-  authorizeAdminAccount,
+  createAdminAccount,
   getAdminPermissionView,
+  refreshAdminPermissionView,
   type AdminPermissionScope,
 } from '../../../features/admin-permissions/admin-permissions'
 import { getAdminWorkbenchSession } from '../../../services/auth/admin-workbench-session'
@@ -169,10 +169,12 @@ const clearPasswordFields = () => {
   confirmPassword.value = ''
 }
 
-const refreshPermissionView = () => {
+const refreshPermissionView = async () => {
   const session = getAdminWorkbenchSession()
   currentAccount.value = session?.account ?? ''
-  permissionView.value = getAdminPermissionView(currentAccount.value)
+  permissionView.value = currentAccount.value
+    ? await refreshAdminPermissionView(currentAccount.value)
+    : getAdminPermissionView('')
 
   if (!permissionView.value.canGrantOwner && registerRole.value === 'owner') {
     registerRole.value = 'staff'
@@ -192,12 +194,12 @@ const setMode = (mode: 'register' | 'password') => {
   }
 }
 
-onShow(() => {
-  if (!ensureAdminWorkbenchSession('accountManagement')) {
+onShow(async () => {
+  if (!(await ensureAdminWorkbenchSessionFromServer('accountManagement'))) {
     return
   }
 
-  refreshPermissionView()
+  await refreshPermissionView()
   clearRegisterFields()
   clearPasswordFields()
   navigatingRoute.value = ''
@@ -222,7 +224,7 @@ const showResult = (nextMessage: string, nextStatus: 'success' | 'failed') => {
   })
 }
 
-const submitAccountRegistration = () => {
+const submitAccountRegistration = async () => {
   if (isSubmitting.value || !currentAccount.value) {
     return
   }
@@ -236,38 +238,29 @@ const submitAccountRegistration = () => {
   }
 
   isSubmitting.value = true
-  const result = authorizeAdminAccount({
-    operatorAccount: currentAccount.value,
-    targetAccount,
+  const result = await createAdminAccount({
+    account: targetAccount,
     role: registerRole.value,
     permissions: registerScopes.value,
+    initialPassword: nextPassword,
   })
-  const passwordResult = result.status === 'success'
-    ? setAdminWorkbenchInitialPassword({
-      account: targetAccount,
-      password: nextPassword,
-      confirmPassword: nextConfirmPassword,
-    })
-    : null
-  const finalMessage = passwordResult?.status === 'success' ? result.message : passwordResult?.message ?? result.message
-  const finalStatus = passwordResult?.status ?? result.status
 
   isSubmitting.value = false
-  showResult(finalMessage, finalStatus)
+  showResult(result.message, result.status)
 
-  if (finalStatus === 'success') {
+  if (result.status === 'success') {
     clearRegisterFields()
-    refreshPermissionView()
+    await refreshPermissionView()
   }
 }
 
-const submitPasswordChange = () => {
+const submitPasswordChange = async () => {
   if (isSubmitting.value) {
     return
   }
 
   isSubmitting.value = true
-  const result = changeAdminWorkbenchPassword({
+  const result = await changeAdminWorkbenchPassword({
     account: passwordAccountId.value.trim(),
     oldPassword: oldPassword.value,
     newPassword: newPassword.value,

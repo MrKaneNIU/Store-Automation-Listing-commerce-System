@@ -1,18 +1,22 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import type { CloudBaseMallApiClient } from '../../services/cloudbase/mall-api-client'
 import {
   changeAdminWorkbenchPassword,
   createAdminWorkbenchAuthView,
-  resetAdminWorkbenchPasswordsForTests,
-  setAdminWorkbenchInitialPassword,
   submitAdminWorkbenchAuth,
+  signOutAdminWorkbench,
 } from './admin-workbench-auth'
-import { logoutAdminWorkbench } from '../../services/auth/admin-workbench-session'
-import { authorizeAdminAccount, resetAdminPermissionsForTests } from '../admin-permissions/admin-permissions'
+import {
+  clearAdminWorkbenchSessionSnapshot,
+  getAdminWorkbenchToken,
+  logoutAdminWorkbench,
+} from '../../services/auth/admin-workbench-session'
+
+const createClient = (overrides: Partial<CloudBaseMallApiClient>): CloudBaseMallApiClient =>
+  overrides as CloudBaseMallApiClient
 
 describe('adminWorkbenchAuth', () => {
   beforeEach(() => {
-    resetAdminPermissionsForTests()
-    resetAdminWorkbenchPasswordsForTests()
     logoutAdminWorkbench()
   })
 
@@ -24,17 +28,34 @@ describe('adminWorkbenchAuth', () => {
     })
   })
 
-  it('accepts the initial account password and exposes an authenticated view', () => {
-    const result = submitAdminWorkbenchAuth({ account: 'admin', password: '123456' })
+  it('logs in through adminLogin and stores only the opaque token as local authority', async () => {
+    const calls: unknown[] = []
+    const client = createClient({
+      adminLogin: async (input) => {
+        calls.push(input)
+        return {
+          adminToken: 'opaque-token',
+          account: 'admin',
+          role: 'creator',
+          permissions: ['workbenchAccess', 'permissionManagement'],
+          expiresAt: '2026-06-03T12:00:00.000Z',
+        }
+      },
+    })
 
+    const result = await submitAdminWorkbenchAuth({ account: 'admin', password: 'server-secret' }, client)
+
+    expect(calls).toEqual([{ account: 'admin', password: 'server-secret' }])
     expect(result).toMatchObject({
       status: 'success',
       message: '登录成功',
       session: {
+        adminToken: 'opaque-token',
         account: 'admin',
         role: 'creator',
       },
     })
+    expect(getAdminWorkbenchToken()).toBe('opaque-token')
     expect(createAdminWorkbenchAuthView()).toMatchObject({
       isLoggedIn: true,
       account: 'admin',
@@ -42,143 +63,178 @@ describe('adminWorkbenchAuth', () => {
     })
   })
 
-  it('surfaces a clear error for invalid credentials', () => {
-    expect(submitAdminWorkbenchAuth({ account: 'admin', password: 'wrong' })).toMatchObject({
+  it('surfaces server login failures without creating a local token', async () => {
+    const client = createClient({
+      adminLogin: async () => {
+        throw new Error('账号或密码错误')
+      },
+    })
+
+    await expect(submitAdminWorkbenchAuth({ account: 'admin', password: 'wrong' }, client)).resolves.toMatchObject({
       status: 'failed',
       message: '账号或密码错误',
     })
+    expect(getAdminWorkbenchToken()).toBeNull()
     expect(createAdminWorkbenchAuthView()).toMatchObject({
       isLoggedIn: false,
     })
   })
 
-  it('sets an explicit initial password for newly authorized accounts', () => {
-    authorizeAdminAccount({
-      operatorAccount: 'admin',
-      targetAccount: 'staff-a',
-      role: 'staff',
-      permissions: ['workbenchAccess'],
-    })
-
-    expect(setAdminWorkbenchInitialPassword({
-      account: 'staff-a',
-      password: 'abc123',
-      confirmPassword: 'abc123',
-    })).toMatchObject({
-      status: 'success',
-      message: '初始密码已设置',
-    })
-    expect(submitAdminWorkbenchAuth({ account: 'staff-a', password: '123456' }).status).toBe('failed')
-    expect(submitAdminWorkbenchAuth({ account: 'staff-a', password: 'abc123' })).toMatchObject({
-      status: 'success',
-      session: {
-        account: 'staff-a',
+  it('changes password through the server action and clears the local token', async () => {
+    await submitAdminWorkbenchAuth(
+      { account: 'admin', password: 'server-secret' },
+      createClient({
+        adminLogin: async () => ({
+          adminToken: 'opaque-token',
+          account: 'admin',
+          role: 'creator',
+          permissions: ['workbenchAccess'],
+          expiresAt: '2026-06-03T12:00:00.000Z',
+        }),
+      }),
+    )
+    const calls: unknown[] = []
+    const client = createClient({
+      changeAdminPassword: async (input) => {
+        calls.push(input)
+        return { changed: true }
       },
     })
-  })
 
-  it('does not let newly authorized accounts log in with the shared creator default password', () => {
-    authorizeAdminAccount({
-      operatorAccount: 'admin',
-      targetAccount: 'staff-a',
-      role: 'staff',
-      permissions: ['workbenchAccess'],
-    })
-
-    expect(submitAdminWorkbenchAuth({ account: 'staff-a', password: '123456' })).toMatchObject({
-      status: 'failed',
-      message: '账号或密码错误',
-    })
-  })
-
-  it('rejects unusable initial passwords before login', () => {
-    authorizeAdminAccount({
-      operatorAccount: 'admin',
-      targetAccount: 'staff-a',
-      role: 'staff',
-      permissions: ['workbenchAccess'],
-    })
-
-    expect(setAdminWorkbenchInitialPassword({
-      account: 'staff-a',
-      password: '123',
-      confirmPassword: '123',
-    })).toMatchObject({
-      status: 'failed',
-      message: '新密码至少 6 位',
-    })
-    expect(setAdminWorkbenchInitialPassword({
-      account: 'staff-a',
-      password: 'abc123',
-      confirmPassword: 'abc124',
-    })).toMatchObject({
-      status: 'failed',
-      message: '两次输入的新密码不一致',
-    })
-  })
-
-  it('changes the current account password and clears the active session', () => {
-    submitAdminWorkbenchAuth({ account: 'admin', password: '123456' })
-
-    const result = changeAdminWorkbenchPassword({
+    const result = await changeAdminWorkbenchPassword({
       account: 'admin',
-      oldPassword: '123456',
-      newPassword: '654321',
-      confirmPassword: '654321',
-    })
+      oldPassword: 'server-secret',
+      newPassword: 'updated-secret',
+      confirmPassword: 'updated-secret',
+    }, client)
 
+    expect(calls).toEqual([{ oldPassword: 'server-secret', newPassword: 'updated-secret' }])
     expect(result).toMatchObject({
       status: 'success',
       message: '密码已修改，请重新登录',
     })
-    expect(createAdminWorkbenchAuthView().isLoggedIn).toBe(false)
-    expect(submitAdminWorkbenchAuth({ account: 'admin', password: '123456' }).status).toBe('failed')
-    expect(submitAdminWorkbenchAuth({ account: 'admin', password: '654321' })).toMatchObject({
-      status: 'success',
-      session: {
-        account: 'admin',
+    expect(getAdminWorkbenchToken()).toBeNull()
+  })
+
+  it('validates new password locally before calling changeAdminPassword', async () => {
+    const calls: unknown[] = []
+    const client = createClient({
+      changeAdminPassword: async (input) => {
+        calls.push(input)
+        return { changed: true }
       },
     })
-  })
 
-  it('keeps the old password when old password validation fails', () => {
-    const result = changeAdminWorkbenchPassword({
-      account: 'admin',
-      oldPassword: 'wrong',
-      newPassword: '654321',
-      confirmPassword: '654321',
-    })
-
-    expect(result).toMatchObject({
-      status: 'failed',
-      message: '旧密码不正确',
-    })
-    expect(submitAdminWorkbenchAuth({ account: 'admin', password: '123456' }).status).toBe('success')
-  })
-
-  it('rejects mismatched or too short new passwords', () => {
-    expect(
+    await expect(
       changeAdminWorkbenchPassword({
         account: 'admin',
-        oldPassword: '123456',
+        oldPassword: 'server-secret',
         newPassword: '123',
         confirmPassword: '123',
-      }),
-    ).toMatchObject({
+      }, client),
+    ).resolves.toMatchObject({
       status: 'failed',
       message: '新密码至少 6 位',
     })
-
-    expect(
+    await expect(
       changeAdminWorkbenchPassword({
         account: 'admin',
-        oldPassword: '123456',
-        newPassword: '654321',
-        confirmPassword: '654322',
-      }),
-    ).toMatchObject({
+        oldPassword: 'server-secret',
+        newPassword: 'updated-secret',
+        confirmPassword: 'different-secret',
+      }, client),
+    ).resolves.toMatchObject({
       status: 'failed',
       message: '两次输入的新密码不一致',
     })
+    expect(calls).toEqual([])
+  })
+
+  it('surfaces server password change failures without clearing the token', async () => {
+    await submitAdminWorkbenchAuth(
+      { account: 'admin', password: 'server-secret' },
+      createClient({
+        adminLogin: async () => ({
+          adminToken: 'opaque-token',
+          account: 'admin',
+          role: 'creator',
+          permissions: ['workbenchAccess'],
+          expiresAt: '2026-06-03T12:00:00.000Z',
+        }),
+      }),
+    )
+    const client = createClient({
+      changeAdminPassword: async () => {
+        throw new Error('当前密码错误')
+      },
+    })
+
+    await expect(
+      changeAdminWorkbenchPassword({
+        account: 'admin',
+        oldPassword: 'wrong-secret',
+        newPassword: 'updated-secret',
+        confirmPassword: 'updated-secret',
+      }, client),
+    ).resolves.toMatchObject({
+      status: 'failed',
+      message: '当前密码错误',
+    })
+    expect(getAdminWorkbenchToken()).toBe('opaque-token')
+  })
+
+  it('revokes the server session before clearing local logout state', async () => {
+    await submitAdminWorkbenchAuth(
+      { account: 'admin', password: 'server-secret' },
+      createClient({
+        adminLogin: async () => ({
+          adminToken: 'opaque-token',
+          account: 'admin',
+          role: 'creator',
+          permissions: ['workbenchAccess'],
+          expiresAt: '2026-06-03T12:00:00.000Z',
+        }),
+      }),
+    )
+    const calls: string[] = []
+    const client = createClient({
+      adminLogout: async () => {
+        calls.push('adminLogout')
+        return { revoked: true }
+      },
+    })
+
+    await signOutAdminWorkbench(client)
+
+    expect(calls).toEqual(['adminLogout'])
+    expect(getAdminWorkbenchToken()).toBeNull()
+  })
+
+  it('revokes the server session when only a restored admin token exists', async () => {
+    await submitAdminWorkbenchAuth(
+      { account: 'admin', password: 'server-secret' },
+      createClient({
+        adminLogin: async () => ({
+          adminToken: 'opaque-token',
+          account: 'admin',
+          role: 'creator',
+          permissions: ['workbenchAccess'],
+          expiresAt: '2026-06-03T12:00:00.000Z',
+        }),
+      }),
+    )
+    clearAdminWorkbenchSessionSnapshot()
+    const calls: string[] = []
+    const client = createClient({
+      adminLogout: async () => {
+        calls.push('adminLogout')
+        return { revoked: true }
+      },
+    })
+
+    await signOutAdminWorkbench(client)
+
+    expect(calls).toEqual(['adminLogout'])
+    expect(getAdminWorkbenchToken()).toBeNull()
   })
 })

@@ -1,6 +1,16 @@
 const SUPPORTED_ACTIONS = [
   'health',
   'listContracts',
+  'adminLogin',
+  'adminLogout',
+  'getAdminSession',
+  'changeAdminPassword',
+  'createAdminAccount',
+  'updateAdminPermissions',
+  'disableAdminAccount',
+  'revokeAdminSessions',
+  'listAdminAccounts',
+  'listAdminAuditLogs',
   'createOcrBatch',
   'listOcrJobs',
   'processOcrJob',
@@ -53,6 +63,25 @@ const SUPPORTED_ACTIONS = [
 ]
 
 const { createTencentCloudOcrProviderFromEnv } = require('./tencentcloud-ocr-provider')
+const {
+  createAdminAccountRecord,
+  createAdminAuditLogRecord,
+  createAdminSessionRecord,
+  hashAdminPassword,
+  resolveAdminSession,
+  verifyAdminPassword,
+} = require('./admin-auth-utils')
+
+const ADMIN_ROLES = ['creator', 'owner', 'staff']
+const ADMIN_PERMISSIONS = [
+  'workbenchAccess',
+  'productManagement',
+  'orderConfirmation',
+  'more',
+  'homepageSettings',
+  'accountManagement',
+  'permissionManagement',
+]
 
 const COLLECTIONS = [
   'ocr_batches',
@@ -69,6 +98,9 @@ const COLLECTIONS = [
   'customer_favorites',
   'inventory_ledger',
   'operation_audit_logs',
+  'admin_accounts',
+  'admin_sessions',
+  'admin_audit_logs',
   'uploaded_assets',
   'ocr_jobs',
 ]
@@ -362,6 +394,104 @@ const parseBindStaffInput = (value) => {
   }
 }
 
+const readPayload = (event) => {
+  if (event.payload === undefined) return {}
+  if (!isRecord(event.payload)) throw validationError('Request body must be a JSON object')
+  return event.payload
+}
+
+const readAdminRole = (input, field = 'role') => {
+  const role = readString(input, field)
+  if (!ADMIN_ROLES.includes(role)) throw validationError(`${field} is invalid`)
+  return role
+}
+
+const readAdminPermissions = (input, field = 'permissions') => {
+  const permissions = input[field]
+  if (!Array.isArray(permissions)) throw validationError(`${field} must be an array`)
+  const normalized = permissions.filter((permission) => typeof permission === 'string' && permission.trim() !== '')
+  if (normalized.length !== permissions.length) throw validationError(`${field} must contain strings`)
+  const unique = [...new Set(normalized)]
+  if (unique.some((permission) => !ADMIN_PERMISSIONS.includes(permission))) {
+    throw validationError(`${field} contains an invalid permission`)
+  }
+  return unique
+}
+
+const parseAdminLoginInput = (event) => {
+  const input = readPayload(event)
+  return {
+    account: readString(input, 'account').trim(),
+    password: readString(input, 'password'),
+  }
+}
+
+const parseAdminPasswordChangeInput = (event) => {
+  const input = readPayload(event)
+  return {
+    oldPassword: readString(input, 'oldPassword'),
+    newPassword: readString(input, 'newPassword'),
+  }
+}
+
+const parseCreateAdminAccountInput = (event) => {
+  const input = readPayload(event)
+  return {
+    account: readString(input, 'account').trim(),
+    displayName: readOptionalString(input, 'displayName'),
+    role: readAdminRole(input),
+    permissions: readAdminPermissions(input),
+    initialPassword: readString(input, 'initialPassword'),
+  }
+}
+
+const parseUpdateAdminPermissionsInput = (event) => {
+  const input = readPayload(event)
+  return {
+    targetAccount: readString(input, 'targetAccount').trim(),
+    role: input.role === undefined ? undefined : readAdminRole(input),
+    permissions: input.permissions === undefined ? undefined : readAdminPermissions(input),
+  }
+}
+
+const parseTargetAdminAccountInput = (event) => {
+  const input = readPayload(event)
+  return {
+    targetAccount: readString(input, 'targetAccount').trim(),
+  }
+}
+
+const toSafeAdminAccount = (account) => ({
+  id: account._id,
+  account: account.account,
+  displayName: account.display_name,
+  role: account.role,
+  permissions: [...(account.permissions || [])],
+  status: account.status,
+  createdBy: account.created_by,
+  createdAt: account.created_at,
+  updatedAt: account.updated_at,
+  lastLoginAt: account.last_login_at,
+})
+
+const toSafeAdminSession = (authority) => ({
+  account: authority.account,
+  role: authority.role,
+  permissions: [...(authority.permissions || [])],
+  status: authority.status,
+  expiresAt: authority.expiresAt,
+})
+
+const toSafeAdminAuditLog = (log) => ({
+  id: log._id,
+  operatorAccount: log.operator_account,
+  action: log.action,
+  targetAccount: log.target_account,
+  result: log.result,
+  details: log.details,
+  createdAt: log.created_at,
+})
+
 const parseShoppingBagItemInput = (value) => {
   if (!isRecord(value)) throw validationError('Request body must be a JSON object')
   return {
@@ -441,28 +571,100 @@ const requireAnyRole = (event, roles) => {
   return identity
 }
 
-const normalizeAdminSession = (session) => {
-  if (!isRecord(session)) return null
-  const account = readOptionalStringFromRecord(session, 'account')
-  const role = readOptionalStringFromRecord(session, 'role')
-  const permissions = Array.isArray(session.permissions)
-    ? session.permissions.filter((permission) => typeof permission === 'string')
-    : []
-  if (!account || !['creator', 'owner', 'staff'].includes(role)) return null
-  return { account, role, permissions }
-}
-
 const hasAdminPermission = (session, permission) =>
   session.role === 'creator' || session.permissions.includes(permission)
 
+const readAdminTokenFromEvent = (event) =>
+  readOptionalStringFromRecord(event, 'adminToken') || readOptionalStringFromRecord(event.payload, 'adminToken')
+
+const resolveAdminAuthority = async (event, context) => {
+  const adminToken = readAdminTokenFromEvent(event)
+  if (!adminToken) throw unauthorizedError('Invalid admin session')
+
+  try {
+    const authority = await resolveAdminSession({
+      adminToken,
+      now: context.now,
+      findSessionByTokenHash: context.repository.findAdminSessionByTokenHash,
+      findAccountById: context.repository.findAdminAccountById,
+    })
+    await context.repository.touchAdminSession(authority.sessionId, context.now())
+    return { ...authority, adminToken }
+  } catch (error) {
+    if (error?.code === 'UNAUTHORIZED') throw unauthorizedError('Invalid admin session')
+    throw error
+  }
+}
+
+const requireAdminPermission = async (event, context, permission) => {
+  const adminSession = await resolveAdminAuthority(event, context)
+  assertAdminPermission(adminSession, permission)
+  return adminSession
+}
+
+const assertAdminPermission = (adminSession, permission) => {
+  if (!hasAdminPermission(adminSession, permission)) throw forbiddenError('Permission denied')
+}
+
 const requireAdminOrResolvedAnyRole = async (event, context, roles, permission) => {
-  const adminSession = normalizeAdminSession(event.adminSession)
-  if (adminSession) {
-    if (!hasAdminPermission(adminSession, permission)) throw forbiddenError('Permission denied')
-    return adminSession
+  if (readAdminTokenFromEvent(event)) {
+    return requireAdminPermission(event, context, permission)
+  }
+  if (isRecord(event.adminSession) || !context.allowTestIdentityRoles) {
+    throw unauthorizedError('Invalid admin session')
   }
   return requireResolvedAnyRole(event, context, roles)
 }
+
+const saveAdminAudit = (context, input) =>
+  context.repository.saveAdminAuditLog(createAdminAuditLogRecord(input, {
+    createId: context.createId,
+    now: context.now,
+  }))
+
+const readAuditTargetFromPayload = (event, field) => {
+  const value = isRecord(event.payload) ? event.payload[field] : undefined
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+}
+
+const withFailedAdminAudit = async (context, operator, input, work) => {
+  try {
+    return await work()
+  } catch (error) {
+    await saveAdminAudit(context, {
+      operatorAccount: operator.account,
+      action: input.action,
+      targetAccount: typeof input.targetAccount === 'function' ? input.targetAccount() : input.targetAccount,
+      result: 'failure',
+      details: { errorCode: normalizeMallApiError(error).code },
+    })
+    throw error
+  }
+}
+
+const findAdminAccountByAccountOrThrow = async (context, account) => {
+  const found = await context.repository.findAdminAccountByAccount(account)
+  if (!found) throw notFoundError('Admin account not found')
+  return found
+}
+
+const isPermissionSubset = (permissions, allowedPermissions) =>
+  permissions.every((permission) => allowedPermissions.includes(permission))
+
+const canManageAdminTarget = (operator, targetRole, permissions) => {
+  if (operator.role === 'creator') return targetRole !== 'creator'
+  if (operator.role !== 'owner') return false
+  return targetRole === 'staff' && isPermissionSubset(permissions, operator.permissions || [])
+}
+
+const assertCanManageAdminTarget = (operator, targetRole, permissions) => {
+  if (!canManageAdminTarget(operator, targetRole, permissions)) {
+    throw forbiddenError('Permission denied')
+  }
+}
+
+const revokeSessionsForAccount = async (context, accountId) =>
+  context.repository.revokeAdminSessionsForAccount(accountId, context.now())
 
 const createIdFactory = () => {
   let counter = Number(process.env.MALL_API_ID_SEED || 0)
@@ -1176,6 +1378,39 @@ const createRepository = (store) => ({
     return favorite ? toCustomerFavorite(favorite) : null
   },
   saveAuditLog: async (auditLog) => store.insert('operation_audit_logs', toAuditLogDocument(auditLog)),
+  saveAdminAccount: async (account) => store.insert('admin_accounts', account),
+  updateAdminAccount: async (account) => store.replace('admin_accounts', account),
+  findAdminAccountById: async (accountId) => (await store.list('admin_accounts', { _id: accountId }))[0] || null,
+  findAdminAccountByAccount: async (account) => (await store.list('admin_accounts', { account }))[0] || null,
+  listAdminAccounts: async () =>
+    (await store.list('admin_accounts')).sort((a, b) => (a.created_at || '').localeCompare(b.created_at || '')),
+  saveAdminSession: async (session) => store.insert('admin_sessions', session),
+  updateAdminSession: async (session) => store.replace('admin_sessions', session),
+  findAdminSessionByTokenHash: async (tokenHash) => (await store.list('admin_sessions', { token_hash: tokenHash }))[0] || null,
+  touchAdminSession: async (sessionId, lastSeenAt) => {
+    const session = (await store.list('admin_sessions', { _id: sessionId }))[0]
+    if (!session) return null
+    return store.replace('admin_sessions', { ...session, last_seen_at: lastSeenAt })
+  },
+  revokeAdminSession: async (sessionId, revokedAt) => {
+    const session = (await store.list('admin_sessions', { _id: sessionId }))[0]
+    if (!session || session.revoked_at) return null
+    return store.replace('admin_sessions', { ...session, revoked_at: revokedAt })
+  },
+  revokeAdminSessionsForAccount: async (accountId, revokedAt) => {
+    const sessions = await store.list('admin_sessions', { account_id: accountId })
+    let revokedCount = 0
+    for (const session of sessions) {
+      if (!session.revoked_at) {
+        revokedCount += 1
+        await store.replace('admin_sessions', { ...session, revoked_at: revokedAt })
+      }
+    }
+    return revokedCount
+  },
+  saveAdminAuditLog: async (auditLog) => store.insert('admin_audit_logs', auditLog),
+  listAdminAuditLogs: async () =>
+    (await store.list('admin_audit_logs')).sort((a, b) => (a.created_at || '').localeCompare(b.created_at || '')),
 })
 
 const createProductsFromDrafts = (drafts, context) => {
@@ -1378,6 +1613,238 @@ const upsertRoleAssignment = async (repository, input, context) => {
 }
 
 const apiHandlers = {
+  async adminLogin(event, context) {
+    const input = parseAdminLoginInput(event)
+    const account = await context.repository.findAdminAccountByAccount(input.account)
+    const passwordMatches = account && account.status === 'active'
+      ? verifyAdminPassword(input.password, account)
+      : false
+
+    if (!passwordMatches) {
+      if (account) {
+        await context.repository.updateAdminAccount({
+          ...account,
+          failed_login_count: (account.failed_login_count || 0) + 1,
+          updated_at: context.now(),
+        })
+      }
+      await saveAdminAudit(context, {
+        action: 'adminLogin',
+        targetAccount: account?.account,
+        result: 'failure',
+        details: { account: input.account },
+      })
+      throw unauthorizedError('Invalid account or password')
+    }
+
+    const { adminToken, session } = createAdminSessionRecord(
+      {
+        accountId: account._id,
+        account: account.account,
+      },
+      {
+        createId: context.createId,
+        now: context.now,
+      },
+    )
+    await context.repository.saveAdminSession(session)
+    await context.repository.updateAdminAccount({
+      ...account,
+      failed_login_count: 0,
+      last_login_at: context.now(),
+      updated_at: context.now(),
+    })
+    await saveAdminAudit(context, {
+      operatorAccount: account.account,
+      action: 'adminLogin',
+      targetAccount: account.account,
+      result: 'success',
+      details: { account: account.account },
+    })
+
+    return {
+      adminToken,
+      account: account.account,
+      role: account.role,
+      permissions: [...(account.permissions || [])],
+      expiresAt: session.expires_at,
+    }
+  },
+  async adminLogout(event, context) {
+    const authority = await resolveAdminAuthority(event, context)
+    await context.repository.revokeAdminSession(authority.sessionId, context.now())
+    await saveAdminAudit(context, {
+      operatorAccount: authority.account,
+      action: 'adminLogout',
+      targetAccount: authority.account,
+      result: 'success',
+      details: { sessionId: authority.sessionId },
+    })
+    return { revoked: true }
+  },
+  async getAdminSession(event, context) {
+    return toSafeAdminSession(await resolveAdminAuthority(event, context))
+  },
+  async changeAdminPassword(event, context) {
+    const authority = await resolveAdminAuthority(event, context)
+    const input = parseAdminPasswordChangeInput(event)
+    const account = await context.repository.findAdminAccountById(authority.accountId)
+    if (!account || !verifyAdminPassword(input.oldPassword, account)) {
+      await saveAdminAudit(context, {
+        operatorAccount: authority.account,
+        action: 'changeAdminPassword',
+        targetAccount: authority.account,
+        result: 'failure',
+        details: { reason: 'invalid-old-password' },
+      })
+      throw unauthorizedError('Invalid admin password')
+    }
+
+    const passwordMetadata = hashAdminPassword(input.newPassword)
+    await context.repository.updateAdminAccount({
+      ...account,
+      ...passwordMetadata,
+      updated_at: context.now(),
+    })
+    await saveAdminAudit(context, {
+      operatorAccount: authority.account,
+      action: 'changeAdminPassword',
+      targetAccount: authority.account,
+      result: 'success',
+      details: { account: authority.account },
+    })
+    return { changed: true }
+  },
+  async createAdminAccount(event, context) {
+    const operator = await resolveAdminAuthority(event, context)
+    return withFailedAdminAudit(context, operator, {
+      action: 'createAdminAccount',
+      targetAccount: () => readAuditTargetFromPayload(event, 'account'),
+    }, async () => {
+      assertAdminPermission(operator, 'accountManagement')
+      const input = parseCreateAdminAccountInput(event)
+      assertCanManageAdminTarget(operator, input.role, input.permissions)
+      if (input.role !== 'creator' && input.initialPassword === '123456') {
+        throw validationError('initialPassword must be explicit')
+      }
+      const existing = await context.repository.findAdminAccountByAccount(input.account)
+      if (existing) throw conflictError('Admin account already exists')
+
+      const account = createAdminAccountRecord(
+        {
+          account: input.account,
+          displayName: input.displayName,
+          password: input.initialPassword,
+          role: input.role,
+          permissions: input.permissions,
+          createdBy: operator.account,
+        },
+        {
+          createId: context.createId,
+          now: context.now,
+        },
+      )
+      const saved = await context.repository.saveAdminAccount(account)
+      await saveAdminAudit(context, {
+        operatorAccount: operator.account,
+        action: 'createAdminAccount',
+        targetAccount: saved.account,
+        result: 'success',
+        details: { role: saved.role, permissions: saved.permissions },
+      })
+      return { account: toSafeAdminAccount(saved) }
+    })
+  },
+  async updateAdminPermissions(event, context) {
+    const operator = await resolveAdminAuthority(event, context)
+    return withFailedAdminAudit(context, operator, {
+      action: 'updateAdminPermissions',
+      targetAccount: () => readAuditTargetFromPayload(event, 'targetAccount'),
+    }, async () => {
+      assertAdminPermission(operator, 'permissionManagement')
+      const input = parseUpdateAdminPermissionsInput(event)
+      const target = await findAdminAccountByAccountOrThrow(context, input.targetAccount)
+      if (target.role === 'creator') throw forbiddenError('Permission denied')
+      if (operator.role === 'owner' && target.role !== 'staff') throw forbiddenError('Permission denied')
+      const nextRole = input.role || target.role
+      const nextPermissions = input.permissions || target.permissions || []
+      assertCanManageAdminTarget(operator, nextRole, nextPermissions)
+
+      const updated = await context.repository.updateAdminAccount({
+        ...target,
+        role: nextRole,
+        permissions: nextPermissions,
+        updated_at: context.now(),
+      })
+      await saveAdminAudit(context, {
+        operatorAccount: operator.account,
+        action: 'updateAdminPermissions',
+        targetAccount: updated.account,
+        result: 'success',
+        details: { role: updated.role, permissions: updated.permissions },
+      })
+      return { account: toSafeAdminAccount(updated) }
+    })
+  },
+  async disableAdminAccount(event, context) {
+    const operator = await resolveAdminAuthority(event, context)
+    return withFailedAdminAudit(context, operator, {
+      action: 'disableAdminAccount',
+      targetAccount: () => readAuditTargetFromPayload(event, 'targetAccount'),
+    }, async () => {
+      assertAdminPermission(operator, 'accountManagement')
+      const input = parseTargetAdminAccountInput(event)
+      const target = await findAdminAccountByAccountOrThrow(context, input.targetAccount)
+      if (target.role === 'creator') throw forbiddenError('Permission denied')
+      assertCanManageAdminTarget(operator, target.role, target.permissions || [])
+
+      const updated = await context.repository.updateAdminAccount({
+        ...target,
+        status: 'disabled',
+        updated_at: context.now(),
+      })
+      const revokedCount = await revokeSessionsForAccount(context, target._id)
+      await saveAdminAudit(context, {
+        operatorAccount: operator.account,
+        action: 'disableAdminAccount',
+        targetAccount: updated.account,
+        result: 'success',
+        details: { revokedCount },
+      })
+      return { account: toSafeAdminAccount(updated), revokedCount }
+    })
+  },
+  async revokeAdminSessions(event, context) {
+    const operator = await resolveAdminAuthority(event, context)
+    return withFailedAdminAudit(context, operator, {
+      action: 'revokeAdminSessions',
+      targetAccount: () => readAuditTargetFromPayload(event, 'targetAccount'),
+    }, async () => {
+      assertAdminPermission(operator, 'accountManagement')
+      const input = parseTargetAdminAccountInput(event)
+      const target = await findAdminAccountByAccountOrThrow(context, input.targetAccount)
+      if (target.role === 'creator') throw forbiddenError('Permission denied')
+      assertCanManageAdminTarget(operator, target.role, target.permissions || [])
+
+      const revokedCount = await revokeSessionsForAccount(context, target._id)
+      await saveAdminAudit(context, {
+        operatorAccount: operator.account,
+        action: 'revokeAdminSessions',
+        targetAccount: target.account,
+        result: 'success',
+        details: { revokedCount },
+      })
+      return { revokedCount }
+    })
+  },
+  async listAdminAccounts(event, context) {
+    await requireAdminPermission(event, context, 'accountManagement')
+    return { accounts: (await context.repository.listAdminAccounts()).map(toSafeAdminAccount) }
+  },
+  async listAdminAuditLogs(event, context) {
+    await requireAdminPermission(event, context, 'permissionManagement')
+    return { logs: (await context.repository.listAdminAuditLogs()).map(toSafeAdminAuditLog) }
+  },
   async getCurrentCustomer(event, context) {
     const identity = await requireResolvedIdentity(event, context)
     return { customer: await upsertCustomerFromIdentity(context.repository, identity, context) }
@@ -1396,25 +1863,33 @@ const apiHandlers = {
     }
   },
   async bindStaff(event, context) {
-    const ownerIdentity = await requireResolvedAnyRole(event, context, ['owner'])
-    const input = parseBindStaffInput(event.payload)
-    if (input.openid === ownerIdentity.openid) throw validationError('owner cannot bind self as staff')
-    const roleAssignment = await upsertRoleAssignment(context.repository, {
-      openid: input.openid,
-      role: 'staff',
-      operatorOpenid: ownerIdentity.openid,
-      reason: input.reason,
-    }, context)
-    await context.repository.saveAuditLog({
-      id: context.createId('audit'),
-      action: 'bind_staff',
-      operatorOpenid: ownerIdentity.openid,
-      targetOpenid: input.openid,
-      targetRole: 'staff',
-      reason: input.reason,
-      createdAt: context.now(),
+    const operatorAuthority = await resolveAdminAuthority(event, context)
+    return withFailedAdminAudit(context, operatorAuthority, {
+      action: 'bindStaff',
+      targetAccount: () => readAuditTargetFromPayload(event, 'openid'),
+    }, async () => {
+      assertAdminPermission(operatorAuthority, 'permissionManagement')
+      if (!['creator', 'owner'].includes(operatorAuthority.role)) throw forbiddenError('Permission denied')
+      const input = parseBindStaffInput(event.payload)
+      const operatorReference = operatorAuthority.account
+      if (input.openid === operatorReference) throw validationError('owner cannot bind self as staff')
+      const roleAssignment = await upsertRoleAssignment(context.repository, {
+        openid: input.openid,
+        role: 'staff',
+        operatorOpenid: operatorReference,
+        reason: input.reason,
+      }, context)
+      await context.repository.saveAuditLog({
+        id: context.createId('audit'),
+        action: 'bind_staff',
+        operatorOpenid: operatorReference,
+        targetOpenid: input.openid,
+        targetRole: 'staff',
+        reason: input.reason,
+        createdAt: context.now(),
+      })
+      return { roleAssignment }
     })
-    return { roleAssignment }
   },
   async getCustomerShoppingBagSnapshot(event, context) {
     const customer = await resolveShoppingBagCustomer(event, context)
@@ -1671,13 +2146,16 @@ const apiHandlers = {
     await context.repository.updateBatch({ ...batch, status: 'recognized', updatedAt: context.now() })
     return { job: succeeded, drafts }
   },
-  async listOcrBatches(_event, context) {
+  async listOcrBatches(event, context) {
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
     return { batches: await context.repository.listBatches() }
   },
-  async getCurrentOcrBatch(_event, context) {
+  async getCurrentOcrBatch(event, context) {
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
     return { batch: (await findLatestBatch(context.repository)) || null }
   },
-  async getLatestDrafts(_event, context) {
+  async getLatestDrafts(event, context) {
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'productManagement')
     const batch = await findLatestBatch(context.repository)
     return { batch: batch || null, drafts: batch ? await context.repository.listDrafts(batch.id) : [] }
   },

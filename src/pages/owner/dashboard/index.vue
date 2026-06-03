@@ -137,7 +137,7 @@ import { onHide, onShow } from '@dcloudio/uni-app'
 import { navigateTo, redirectTo, relaunchTo } from '../../../app/navigation'
 import type { AppRoute } from '../../../app/routes'
 import { routes } from '../../../app/routes'
-import { ensureAdminWorkbenchSession } from '../../../features/admin-workbench-auth/admin-workbench-guard'
+import { ensureAdminWorkbenchSessionFromServer } from '../../../features/admin-workbench-auth/admin-workbench-guard'
 import {
   createEmptyOwnerDashboardView,
   getCloudBaseOwnerDashboardView,
@@ -170,8 +170,8 @@ const syncPageTopPadding = () => {
 
 onMounted(syncPageTopPadding)
 
-onShow(() => {
-  if (!ensureAdminWorkbenchSession('workbenchAccess')) {
+onShow(async () => {
+  if (!(await ensureAdminWorkbenchSessionFromServer('workbenchAccess'))) {
     return
   }
 

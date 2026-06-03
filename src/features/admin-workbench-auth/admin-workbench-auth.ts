@@ -1,13 +1,12 @@
 import {
   createAdminWorkbenchSession,
+  getAdminWorkbenchToken,
   getAdminWorkbenchSession,
   logoutAdminWorkbench,
   type AdminWorkbenchSession,
 } from '../../services/auth/admin-workbench-session'
-import {
-  getAdminPermissionView,
-  hasAdminPermission,
-} from '../admin-permissions/admin-permissions'
+import { getRuntimeCloudBaseMallApiClient } from '../../services/cloudbase/runtime-mall-api-client'
+import type { CloudBaseMallApiClient, CloudBaseMallApiClientWithAdmin } from '../../services/cloudbase/mall-api-client'
 
 export type AdminWorkbenchAuthView = {
   isLoggedIn: boolean
@@ -33,32 +32,15 @@ export type AdminWorkbenchPasswordChangeResult = {
   message: string
 }
 
-const INITIAL_PASSWORD = '123456'
-const passwordHashByAccount = new Map<string, string>()
+const getClient = (client?: CloudBaseMallApiClient): CloudBaseMallApiClientWithAdmin =>
+  (client ?? getRuntimeCloudBaseMallApiClient()) as CloudBaseMallApiClientWithAdmin
 
-const hashAdminWorkbenchPassword = (account: string, password: string) => {
-  const input = `${account.trim()}:vx-admin:${password}`
-  let hash = 5381
-  for (const char of input) {
-    hash = (hash * 33 + char.charCodeAt(0)) % 2147483647
-  }
-  return `local:${hash.toString(36)}`
-}
+const getErrorMessage = (error: unknown, fallback: string): string =>
+  error instanceof Error ? error.message : fallback
 
 export const resetAdminWorkbenchPasswordsForTests = () => {
-  passwordHashByAccount.clear()
+  // Kept as a no-op compatibility hook for older tests; passwords are now server-side only.
 }
-
-const getPasswordHashForAccount = (account: string) => {
-  const storedHash = passwordHashByAccount.get(account)
-  if (storedHash) {
-    return storedHash
-  }
-  return account === 'admin' ? hashAdminWorkbenchPassword(account, INITIAL_PASSWORD) : null
-}
-
-const passwordMatchesAccount = (account: string, password: string) =>
-  getPasswordHashForAccount(account) === hashAdminWorkbenchPassword(account, password)
 
 export const createAdminWorkbenchAuthView = (): AdminWorkbenchAuthView => {
   const session = getAdminWorkbenchSession()
@@ -71,24 +53,25 @@ export const createAdminWorkbenchAuthView = (): AdminWorkbenchAuthView => {
   }
 }
 
-export const submitAdminWorkbenchAuth = (credentials: {
-  account: string
-  password: string
-}): AdminWorkbenchAuthSubmitResult => {
+export const submitAdminWorkbenchAuth = async (
+  credentials: {
+    account: string
+    password: string
+  },
+  client?: CloudBaseMallApiClient,
+): Promise<AdminWorkbenchAuthSubmitResult> => {
   try {
-    const account = getAdminPermissionView(credentials.account).currentAccount
-
-    if (!account || !passwordMatchesAccount(credentials.account, credentials.password)) {
-      throw new Error('账号或密码错误')
-    }
-    if (!hasAdminPermission(account.account, 'workbenchAccess')) {
-      throw new Error('账号无工作台进入权限')
-    }
-
+    const result = await getClient(client).adminLogin({
+      account: credentials.account,
+      password: credentials.password,
+    })
     const session = createAdminWorkbenchSession({
-      account: account.account,
-      role: account.role,
-      permissions: account.permissions,
+      adminToken: result.adminToken,
+      account: result.account,
+      role: result.role,
+      permissions: result.permissions,
+      expiresAt: result.expiresAt,
+      status: result.status,
     })
 
     return {
@@ -97,29 +80,26 @@ export const submitAdminWorkbenchAuth = (credentials: {
       message: '登录成功',
     }
   } catch (error) {
+    logoutAdminWorkbench()
     return {
       status: 'failed',
       session: null,
-      message: error instanceof Error ? error.message : '登录失败',
+      message: getErrorMessage(error, '登录失败'),
     }
   }
 }
 
-export const changeAdminWorkbenchPassword = (params: {
-  account: string
-  oldPassword: string
-  newPassword: string
-  confirmPassword: string
-}): AdminWorkbenchPasswordChangeResult => {
-  const account = getAdminPermissionView(params.account).currentAccount
+export const changeAdminWorkbenchPassword = async (
+  params: {
+    account: string
+    oldPassword: string
+    newPassword: string
+    confirmPassword: string
+  },
+  client?: CloudBaseMallApiClient,
+): Promise<AdminWorkbenchPasswordChangeResult> => {
   const nextPassword = params.newPassword.trim()
 
-  if (!account) {
-    return { status: 'failed', message: '账号不可用' }
-  }
-  if (!passwordMatchesAccount(params.account, params.oldPassword)) {
-    return { status: 'failed', message: '旧密码不正确' }
-  }
   if (nextPassword.length < 6) {
     return { status: 'failed', message: '新密码至少 6 位' }
   }
@@ -127,23 +107,27 @@ export const changeAdminWorkbenchPassword = (params: {
     return { status: 'failed', message: '两次输入的新密码不一致' }
   }
 
-  passwordHashByAccount.set(account.account, hashAdminWorkbenchPassword(account.account, nextPassword))
-  logoutAdminWorkbench()
-
-  return { status: 'success', message: '密码已修改，请重新登录' }
+  try {
+    await getClient(client).changeAdminPassword({
+      oldPassword: params.oldPassword,
+      newPassword: nextPassword,
+    })
+    logoutAdminWorkbench()
+    return { status: 'success', message: '密码已修改，请重新登录' }
+  } catch (error) {
+    return { status: 'failed', message: getErrorMessage(error, '密码修改失败') }
+  }
 }
 
-export const setAdminWorkbenchInitialPassword = (params: {
-  account: string
-  password: string
-  confirmPassword: string
-}): AdminWorkbenchPasswordChangeResult => {
-  const account = getAdminPermissionView(params.account).currentAccount
+export const setAdminWorkbenchInitialPassword = (
+  params: {
+    account: string
+    password: string
+    confirmPassword: string
+  },
+): AdminWorkbenchPasswordChangeResult => {
   const nextPassword = params.password.trim()
 
-  if (!account) {
-    return { status: 'failed', message: '账号不可用' }
-  }
   if (nextPassword.length < 6) {
     return { status: 'failed', message: '新密码至少 6 位' }
   }
@@ -151,10 +135,15 @@ export const setAdminWorkbenchInitialPassword = (params: {
     return { status: 'failed', message: '两次输入的新密码不一致' }
   }
 
-  passwordHashByAccount.set(account.account, hashAdminWorkbenchPassword(account.account, nextPassword))
-  return { status: 'success', message: '初始密码已设置' }
+  return { status: 'success', message: '初始密码校验通过' }
 }
 
-export const signOutAdminWorkbench = () => {
-  logoutAdminWorkbench()
+export const signOutAdminWorkbench = async (client?: CloudBaseMallApiClient) => {
+  try {
+    if (getAdminWorkbenchToken()) {
+      await getClient(client).adminLogout()
+    }
+  } finally {
+    logoutAdminWorkbench()
+  }
 }

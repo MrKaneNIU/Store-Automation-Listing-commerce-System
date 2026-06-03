@@ -23,4 +23,12 @@ describe('owner dashboard page state contract', () => {
     expect(source).toContain('navigatingRoute.value = route')
     expect(source).not.toContain('mallRepository')
   })
+
+  it('refreshes the server admin session before loading the dashboard after token restore', () => {
+    const source = ownerDashboardPageSource()
+
+    expect(source).toContain('ensureAdminWorkbenchSessionFromServer')
+    expect(source).toContain("await ensureAdminWorkbenchSessionFromServer('workbenchAccess')")
+    expect(source).not.toContain("ensureAdminWorkbenchSession('workbenchAccess')")
+  })
 })

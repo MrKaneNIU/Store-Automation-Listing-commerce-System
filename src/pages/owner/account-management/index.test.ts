@@ -13,7 +13,7 @@ describe('owner account management page contract', () => {
     expect(source).toContain("setMode('password')")
     expect(source).toContain('账号注册')
     expect(source).toContain('修改密码')
-    expect(source).toContain('authorizeAdminAccount')
+    expect(source).toContain('createAdminAccount')
   })
 
   it('does not render the dark explainer module above the account actions', () => {
@@ -30,7 +30,9 @@ describe('owner account management page contract', () => {
     expect(source).toContain('registerConfirmPassword')
     expect(source).toContain('初始密码')
     expect(source).toContain('确认初始密码')
-    expect(source).toContain('setAdminWorkbenchInitialPassword')
+    expect(source).toContain('initialPassword: nextPassword')
+    expect(source).toContain('await createAdminAccount')
+    expect(source).not.toContain('setAdminWorkbenchInitialPassword')
     expect(source).not.toContain('初始密码为 123456')
   })
 
@@ -44,6 +46,15 @@ describe('owner account management page contract', () => {
     expect(source).toContain('confirmPassword.value')
     expect(source).toContain('account: passwordAccountId.value.trim()')
     expect(source).not.toContain('account: currentAccount.value')
+  })
+
+  it('refreshes server session and permission view with async facades', () => {
+    const source = accountManagementPageSource()
+
+    expect(source).toContain('ensureAdminWorkbenchSessionFromServer')
+    expect(source).toContain('await ensureAdminWorkbenchSessionFromServer')
+    expect(source).toContain('await refreshAdminPermissionView')
+    expect(source).toContain('const refreshPermissionView = async () =>')
   })
 
   it('requires login again directly after a successful password change', () => {

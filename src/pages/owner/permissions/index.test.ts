@@ -26,4 +26,16 @@ describe('owner permissions page contract', () => {
     expect(source).toContain('navigateTo(routes.ownerAccountManagement')
     expect(source).toContain('const existingAccount = viewModel.value.accounts.find')
   })
+
+  it('refreshes session and writes permission changes through async server facades', () => {
+    const source = permissionsPageSource()
+
+    expect(source).toContain('ensureAdminWorkbenchSessionFromServer')
+    expect(source).toContain('await ensureAdminWorkbenchSessionFromServer')
+    expect(source).toContain('await refreshAdminPermissionView')
+    expect(source).toContain('const authorizeAccount = async () =>')
+    expect(source).toContain('await authorizeAdminAccount')
+    expect(source).toContain('const disableAccount = async')
+    expect(source).toContain('await disableAdminAccount')
+  })
 })

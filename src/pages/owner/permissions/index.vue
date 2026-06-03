@@ -78,12 +78,13 @@ import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { navigateTo, redirectTo } from '../../../app/navigation'
 import { routes, type AppRoute } from '../../../app/routes'
-import { ensureAdminWorkbenchSession } from '../../../features/admin-workbench-auth/admin-workbench-guard'
+import { ensureAdminWorkbenchSessionFromServer } from '../../../features/admin-workbench-auth/admin-workbench-guard'
 import { getAdminWorkbenchSession } from '../../../services/auth/admin-workbench-session'
 import {
   authorizeAdminAccount,
   disableAdminAccount,
   getAdminPermissionView,
+  refreshAdminPermissionView,
   type AdminPermissionScope,
 } from '../../../features/admin-permissions/admin-permissions'
 
@@ -94,22 +95,24 @@ const message = ref('')
 const navigatingRoute = ref<AppRoute | ''>('')
 const viewModel = ref(getAdminPermissionView('admin'))
 
-const refreshView = () => {
+const refreshView = async () => {
   const session = getAdminWorkbenchSession()
-  viewModel.value = getAdminPermissionView(session?.account ?? '')
+  viewModel.value = session?.account
+    ? await refreshAdminPermissionView(session.account)
+    : getAdminPermissionView('')
 
   if (!viewModel.value.canGrantOwner && selectedRole.value === 'owner') {
     selectedRole.value = 'staff'
   }
 }
 
-onShow(() => {
-  if (!ensureAdminWorkbenchSession('permissionManagement')) {
+onShow(async () => {
+  if (!(await ensureAdminWorkbenchSessionFromServer('permissionManagement'))) {
     return
   }
 
   navigatingRoute.value = ''
-  refreshView()
+  await refreshView()
 })
 
 const toggleScope = (scope: AdminPermissionScope) => {
@@ -118,7 +121,7 @@ const toggleScope = (scope: AdminPermissionScope) => {
     : [...selectedScopes.value, scope]
 }
 
-const authorizeAccount = () => {
+const authorizeAccount = async () => {
   const session = getAdminWorkbenchSession()
   if (!session) {
     return
@@ -137,8 +140,7 @@ const authorizeAccount = () => {
     return
   }
 
-  const result = authorizeAdminAccount({
-    operatorAccount: session.account,
+  const result = await authorizeAdminAccount({
     targetAccount: nextTargetAccount,
     role: selectedRole.value,
     permissions: selectedScopes.value,
@@ -147,21 +149,20 @@ const authorizeAccount = () => {
   if (result.status === 'success') {
     targetAccount.value = ''
   }
-  refreshView()
+  await refreshView()
 }
 
-const disableAccount = (account: string) => {
+const disableAccount = async (account: string) => {
   const session = getAdminWorkbenchSession()
   if (!session) {
     return
   }
 
-  const result = disableAdminAccount({
-    operatorAccount: session.account,
+  const result = await disableAdminAccount({
     targetAccount: account,
   })
   message.value = result.message
-  refreshView()
+  await refreshView()
 }
 
 const goMore = () => {

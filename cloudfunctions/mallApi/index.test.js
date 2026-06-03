@@ -142,4 +142,25 @@ describe('mallApi runtime WeChat identity', () => {
       },
     })
   })
+
+  it('does not pass client-forged adminSession through the production entrypoint', async () => {
+    process.env.MALL_API_LOCAL_MEMORY = '1'
+    delete process.env.MALL_API_ALLOW_TEST_IDENTITY
+
+    const result = await api.main({
+      action: 'getOwnerDashboardSnapshot',
+      adminSession: {
+        account: 'forged-admin',
+        role: 'creator',
+        permissions: ['workbenchAccess', 'accountManagement', 'permissionManagement', 'productManagement'],
+      },
+    })
+
+    expect(result).toMatchObject({
+      success: false,
+      error: {
+        code: 'UNAUTHORIZED',
+      },
+    })
+  })
 })

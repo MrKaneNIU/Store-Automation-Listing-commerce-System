@@ -194,7 +194,7 @@ const exchangePhoneCode = async (phoneCode) => {
 
 exports.main = async (event = {}) => {
   const identity = resolveTrustedIdentity(event, readRuntimeIdentity(), shouldAllowTestIdentity())
-  const { identity: _clientIdentity, ...trustedEvent } = event
+  const { identity: _clientIdentity, adminSession: _clientAdminSession, ...trustedEvent } = event
   return createMallApiHandler(getStore(), { exchangePhoneCode, resolveImageUrl })({ ...trustedEvent, ...(identity ? { identity } : {}) })
 }
 exports.__private__ = {

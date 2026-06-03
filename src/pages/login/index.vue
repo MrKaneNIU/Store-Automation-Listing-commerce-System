@@ -63,7 +63,7 @@ const goBack = () => {
   relaunchTo(routes.customerHome)
 }
 
-const handleSubmit = () => {
+const handleSubmit = async () => {
   if (submitting.value) {
     return
   }
@@ -71,7 +71,7 @@ const handleSubmit = () => {
   submitting.value = true
   errorMessage.value = ''
 
-  const result = submitAdminWorkbenchAuth({
+  const result = await submitAdminWorkbenchAuth({
     account: account.value.trim(),
     password: password.value,
   })
