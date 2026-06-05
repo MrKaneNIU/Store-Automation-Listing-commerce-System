@@ -8,11 +8,13 @@ import {
   type CustomerShoppingBagViewModel,
 } from '../../../features/customer-shopping-bag/customer-shopping-bag'
 import {
+  checkoutCloudBaseCustomerShoppingBag,
   clearUnavailableCloudBaseCustomerShoppingBagItems,
   getCloudBaseCustomerShoppingBagView,
   removeCloudBaseCustomerShoppingBagItem,
   selectCloudBaseCustomerShoppingBagItem,
   updateCloudBaseCustomerShoppingBagItemQuantity,
+  type CloudBaseCustomerShoppingBagCheckoutResult,
   type CloudBaseCustomerShoppingBagCommandResult,
 } from '../../../features/cloudbase-mall/customer-shopping-bag'
 import {
@@ -45,6 +47,9 @@ type CustomerShoppingBagPageStateDependencies = {
   clearUnavailable?: (
     previousView: CustomerShoppingBagViewModel,
   ) => Promise<CloudBaseCustomerShoppingBagCommandResult>
+  checkoutSelectedItems?: (
+    previousView: CustomerShoppingBagViewModel,
+  ) => Promise<CloudBaseCustomerShoppingBagCheckoutResult>
   now?: () => number
   cacheTtlMs?: number
   requestLogger?: CustomerRuntimeRequestLogger
@@ -71,6 +76,8 @@ const defaultDependencies = {
     removeCloudBaseCustomerShoppingBagItem(itemId, undefined, previousView),
   clearUnavailable: (previousView: CustomerShoppingBagViewModel) =>
     clearUnavailableCloudBaseCustomerShoppingBagItems(undefined, previousView),
+  checkoutSelectedItems: (previousView: CustomerShoppingBagViewModel) =>
+    checkoutCloudBaseCustomerShoppingBag(undefined, previousView),
   now: () => Date.now(),
   cacheTtlMs: 3000,
   requestLogger: undefined,
@@ -166,9 +173,9 @@ export const createCustomerShoppingBagPageState = (
 
   const handlePageShow = () => loadSnapshot({ showLoading: !hasLoadedSnapshot, source: 'onShow' })
 
-  const applyCommand = async (
-    command: (previousView: CustomerShoppingBagViewModel) => Promise<CloudBaseCustomerShoppingBagCommandResult>,
-  ) => {
+  const applyCommand = async <TCommandResult extends CloudBaseCustomerShoppingBagCommandResult>(
+    command: (previousView: CustomerShoppingBagViewModel) => Promise<TCommandResult>,
+  ): Promise<TCommandResult> => {
     const previousView = viewModel.value
     mutationVersion += 1
     const result = await command(previousView)
@@ -178,6 +185,8 @@ export const createCustomerShoppingBagPageState = (
     invalidatedSnapshotKeys.value = result.invalidatedSnapshotKeys
     hasLoadedSnapshot = true
     lastLoadedAt = deps.now()
+
+    return result
   }
 
   const updateQuantity = (itemId: string, quantity: number) =>
@@ -192,11 +201,15 @@ export const createCustomerShoppingBagPageState = (
   const clearUnavailable = () =>
     applyCommand((previousView) => deps.clearUnavailable(previousView))
 
-  const submitSelectedItems = (): CustomerShoppingBagCheckoutResult => {
-    const result = submitSelectedCustomerShoppingBagItemsToCheckout(viewModel.value)
-    message.value = result.message
+  const submitSelectedItems = async (): Promise<CustomerShoppingBagCheckoutResult | CloudBaseCustomerShoppingBagCheckoutResult> => {
+    const localResult = submitSelectedCustomerShoppingBagItemsToCheckout(viewModel.value)
+    if (localResult.status === 'blocked') {
+      message.value = localResult.message
 
-    return result
+      return localResult
+    }
+
+    return applyCommand((previousView) => deps.checkoutSelectedItems(previousView))
   }
 
   return {

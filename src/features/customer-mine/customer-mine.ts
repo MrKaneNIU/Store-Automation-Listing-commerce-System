@@ -21,6 +21,9 @@ export type CustomerMineView = {
   identityLabel: string
   identityDisplayName: string
   identityOpenidLabel: string
+  avatarUrl: string
+  hasAvatar: boolean
+  avatarPlaceholderText: string
   phoneLabel: string
   phoneDisplayText: string
   recentOrders: CustomerMineRecentOrderView[]
@@ -42,6 +45,7 @@ const EMPTY_MESSAGE = '暂无我的数据'
 const LOADING_MESSAGE = '正在加载我的'
 const RECENT_ORDERS_EMPTY_MESSAGE = '暂无近期订单'
 const FAILURE_MESSAGE = '我的暂时无法加载'
+const AVATAR_PLACEHOLDER_TEXT = '微'
 
 const createEmptySnapshot = (): CustomerMineSnapshot => ({
   customerId: '',
@@ -55,6 +59,9 @@ const createEmptySnapshot = (): CustomerMineSnapshot => ({
     isBound: false,
     maskedPhoneNumber: '',
     statusLabel: 'Phone not bound',
+  },
+  profile: {
+    avatarUrl: '',
   },
   recentOrders: [],
   recentOrderTotalCount: 0,
@@ -84,9 +91,44 @@ const orderStatusLabelMap: Record<CustomerMineRecentOrderSummary['status'], stri
 }
 
 const utilityLabelMap: Record<CustomerMineUtilityEntry['key'], string> = {
+  profile: '个人信息',
+  wallet: '钱包',
+  address: '地址',
+  orders: '我的订单',
   favorites: '收藏',
   shoppingBag: '购物袋',
 }
+
+const accountUtilityEntries: CustomerMineUtilityEntry[] = [
+  {
+    key: 'profile',
+    label: 'Personal information',
+    route: '/pages/customer/profile/index',
+    count: 0,
+    isEnabled: true,
+  },
+  {
+    key: 'wallet',
+    label: 'Wallet',
+    route: '/pages/customer/wallet/index',
+    count: 0,
+    isEnabled: true,
+  },
+  {
+    key: 'address',
+    label: 'Address',
+    route: '/pages/customer/address/index',
+    count: 0,
+    isEnabled: true,
+  },
+  {
+    key: 'orders',
+    label: 'My orders',
+    route: '/pages/customer/orders/index',
+    count: 0,
+    isEnabled: true,
+  },
+]
 
 const normalizePhoneStatusLabel = (label: string): string => {
   if (label === 'Phone bound') return '已绑定手机'
@@ -112,7 +154,11 @@ const toRecentOrderView = (order: CustomerMineRecentOrderSummary): CustomerMineR
 const toUtilityView = (entry: CustomerMineUtilityEntry): CustomerMineUtilityView => ({
   ...entry,
   label: utilityLabelMap[entry.key],
-  countLabel: String(entry.count),
+  countLabel: entry.key === 'profile' || entry.key === 'orders'
+    ? '查看'
+    : entry.key === 'wallet' || entry.key === 'address'
+    ? '空'
+    : String(entry.count),
 })
 
 export const createCustomerMineView = (
@@ -124,6 +170,7 @@ export const createCustomerMineView = (
   const isFailure = loadingState === 'failed'
   const isLoading = loadingState === 'loading'
   const isSignedIn = snapshot.identity.isSignedIn
+  const avatarUrl = (snapshot.profile?.avatarUrl ?? '').trim()
 
   return {
     customerId: snapshot.customerId,
@@ -134,12 +181,15 @@ export const createCustomerMineView = (
       ? snapshot.identity.displayName.trim() || '微信客户'
       : '登录后查看账户',
     identityOpenidLabel: snapshot.identity.openidMasked,
+    avatarUrl,
+    hasAvatar: avatarUrl.length > 0,
+    avatarPlaceholderText: avatarUrl ? '' : AVATAR_PLACEHOLDER_TEXT,
     phoneLabel: isFailure ? '手机状态暂不可用' : normalizePhoneStatusLabel(snapshot.phone.statusLabel),
     phoneDisplayText: snapshot.phone.isBound ? snapshot.phone.maskedPhoneNumber : '未绑定',
     recentOrders,
     recentOrderTotalCount: snapshot.recentOrderTotalCount,
     recentOrdersEmptyMessage: recentOrders.length === 0 ? RECENT_ORDERS_EMPTY_MESSAGE : '',
-    utilities: snapshot.utilities.map(toUtilityView),
+    utilities: [...accountUtilityEntries, ...snapshot.utilities].map(toUtilityView),
     emptyMessage: isLoading ? LOADING_MESSAGE : (recentOrders.length === 0 && snapshot.utilities.length === 0 ? EMPTY_MESSAGE : ''),
     loadingState,
     failureMessage: options.failureMessage ?? '',

@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 const require = createRequire(import.meta.url)
 const {
@@ -200,7 +200,7 @@ const createAdminTokenHandler = async (accountInput = {}, sessionInput = {}) => 
   }
 }
 
-const createAdminWorkflowHandler = async (accountInput = {}, sessionInput = {}) => {
+const createAdminWorkflowHandler = async (accountInput = {}, sessionInput = {}, handlerOptions = {}) => {
   const store = createStore()
   const account = await seedAdminAccount(store, accountInput)
   const adminToken = await seedAdminSession(store, account, sessionInput)
@@ -220,6 +220,7 @@ const createAdminWorkflowHandler = async (accountInput = {}, sessionInput = {}) 
         if (phoneCode !== 'phone-code-ok') throw new Error('Invalid phone code')
         return '13800000000'
       },
+      ...handlerOptions,
     }),
   }
 }
@@ -498,7 +499,7 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     expect(tracedStore.replaceCalls.filter((call) => call.name === 'customers')).toHaveLength(2)
   })
 
-  it('rejects WeChat order creation without a bound backend phone before stock reservation', async () => {
+  it('creates a WeChat order without requiring a bound backend phone', async () => {
     const tracedStore = createTracedStore()
     const handler = createTracedHandler(tracedStore)
     const { product, sku } = await createProductFixture(handler)
@@ -520,7 +521,6 @@ describe('mallApi Phase 4 auth and role permissions', () => {
         quantity: 1,
         session: {
           customerId: 'client-forged-customer',
-          phoneNumber: '13999999999',
           authSource: 'wechat',
         },
       },
@@ -536,15 +536,20 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     })
 
     expect(result).toMatchObject({
-      success: false,
-      error: {
-        code: 'UNAUTHORIZED',
+      success: true,
+      data: {
+        order: {
+          customerPhone: '',
+          customerAuthSource: 'wechat',
+          status: 'pending_merchant_confirm',
+        },
       },
     })
-    expect(detailAfter.data.skus[0].stock).toBe(detailBefore.data.skus[0].stock)
-    expect(orders.data.orders).toEqual([])
-    expect(tracedStore.replaceCalls.filter((call) => call.name === 'skus')).toEqual([])
-    expect(tracedStore.insertCalls.filter((call) => call.name === 'orders' || call.name === 'inventory_ledger')).toEqual([])
+    expect(detailAfter.data.skus[0].stock).toBe(detailBefore.data.skus[0].stock - 1)
+    expect(orders.data.orders).toHaveLength(1)
+    expect(tracedStore.replaceCalls.filter((call) => call.name === 'skus')).toHaveLength(1)
+    expect(tracedStore.insertCalls.filter((call) => call.name === 'orders')).toHaveLength(1)
+    expect(tracedStore.insertCalls.filter((call) => call.name === 'inventory_ledger')).toHaveLength(1)
   })
 
   it('rejects mock customer order sessions in the default production handler', async () => {
@@ -2628,14 +2633,37 @@ describe('mallApi customer mine actions', () => {
     ]))
   })
 
-  it('returns a customer-scoped mine snapshot with identity, phone, orders, utilities, and meta key', async () => {
-    const handler = createHandler()
+  it('returns a customer-scoped mine snapshot with identity, profile, phone, orders, utilities, and meta key', async () => {
+    const store = createStore()
+    const handler = createMallApiHandler(store, {
+      createId: (() => {
+        let index = 0
+        return (prefix) => `${prefix}-${++index}`
+      })(),
+      now: () => '2026-05-11T00:00:00.000Z',
+      allowTestIdentityRoles: true,
+      allowMockCustomerOrder: true,
+      exchangePhoneCode: async (phoneCode) => {
+        if (phoneCode !== 'phone-code-ok') throw new Error('Invalid phone code')
+        return '13800000000'
+      },
+    })
     const { product, sku } = await createProductFixture(handler)
 
     const bound = await handler({
       action: 'bindCustomerPhone',
       identity: customerIdentity,
       payload: { phoneCode: 'phone-code-ok' },
+    })
+    await store.replace('customers', {
+      _id: bound.data.customer.id,
+      openid: 'customer-openid',
+      appid: 'wxa63c53796488d4d4',
+      phone_number: '13800000000',
+      avatar_url: 'cloud://avatars/customer-1.png',
+      auth_source: 'wechat',
+      created_at: '2026-05-11T00:00:00.000Z',
+      updated_at: '2026-05-11T00:00:00.000Z',
     })
     await handler({
       action: 'addCustomerShoppingBagItem',
@@ -2702,6 +2730,9 @@ describe('mallApi customer mine actions', () => {
           displayName: '138****0000',
           authSource: 'wechat',
           openidMasked: 'cust...enid',
+        },
+        profile: {
+          avatarUrl: 'cloud://avatars/customer-1.png',
         },
         phone: {
           isBound: true,
@@ -2791,6 +2822,83 @@ describe('mallApi customer mine actions', () => {
       expect.objectContaining({ key: 'shoppingBag', count: 0 }),
     ])
     expect(result.data.recentOrders.map((order) => order.orderId)).not.toContain(otherOrder.data.order.id)
+  })
+
+  it('lists only the current customer orders while owner confirmation sees the same order', async () => {
+    const handler = createHandler()
+    const { product, sku } = await createProductFixture(handler)
+    await handler({
+      action: 'bindCustomerPhone',
+      identity: customerIdentity,
+      payload: { phoneCode: 'phone-code-ok' },
+    })
+    const ownOrder = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: {
+          customerId: 'forged-customer',
+          openid: 'forged-openid',
+          phoneNumber: '13999999999',
+          authSource: 'wechat',
+        },
+      },
+    })
+    await handler({
+      action: 'bindCustomerPhone',
+      identity: otherCustomerIdentity,
+      payload: { phoneCode: 'phone-code-ok' },
+    })
+    const otherOrder = await handler({
+      action: 'createCustomerOrder',
+      identity: otherCustomerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: {
+          customerId: 'other-forged-customer',
+          openid: 'other-forged-openid',
+          phoneNumber: '13999999999',
+          authSource: 'wechat',
+        },
+      },
+    })
+
+    const customerOrders = await handler({
+      action: 'getCustomerOrdersSnapshot',
+      identity: customerIdentity,
+    })
+    const ownerOrders = await handler({
+      action: 'getOwnerOrderSnapshot',
+      identity: ownerIdentity,
+    })
+    const unauthenticated = await handler({
+      action: 'getCustomerOrdersSnapshot',
+      payload: { customerId: ownOrder.data.order.customerId, phoneNumber: '13800000000' },
+    })
+
+    expect(customerOrders).toMatchObject({
+      success: true,
+      data: {
+        orders: [ownOrder.data.order],
+        totalCount: 1,
+        serverTime: '2026-05-11T00:00:00.000Z',
+      },
+    })
+    expect(customerOrders.data.customerId).toBe(ownOrder.data.order.customerId)
+    expect(customerOrders.data.orders.map((order) => order.id)).not.toContain(otherOrder.data.order.id)
+    expect(ownerOrders.data.orders.map((order) => order.id)).toEqual(expect.arrayContaining([
+      ownOrder.data.order.id,
+      otherOrder.data.order.id,
+    ]))
+    expect(unauthenticated).toMatchObject({
+      success: false,
+      error: { code: 'UNAUTHORIZED' },
+    })
   })
 
   it('rejects missing identity and ignores raw phone number payloads', async () => {
@@ -2918,6 +3026,16 @@ describe('mallApi customer mine actions', () => {
 })
 
 describe('mallApi customer shopping bag actions', () => {
+  it('advertises shopping-bag checkout through listContracts', async () => {
+    const handler = createHandler()
+
+    const result = await handler({ action: 'listContracts' })
+
+    expect(result.data.actions).toEqual(expect.arrayContaining([
+      'checkoutCustomerShoppingBag',
+    ]))
+  })
+
   it.each([
     ['getCustomerShoppingBagSnapshot', 'shopping_bag_items'],
     ['getCustomerFavoriteProductsSnapshot', 'customer_favorites'],
@@ -3131,6 +3249,192 @@ describe('mallApi customer shopping bag actions', () => {
     expect(tracedStore.insertCalls.filter((call) => call.name === 'inventory_ledger')).toEqual([])
     expect(removed.data.item).toMatchObject({ id: added.data.item.id })
     expect(finalSnapshot.data.items).toEqual([])
+  })
+
+  it('checks out selected available shopping-bag items into a customer-scoped order', async () => {
+    const tracedStore = createTracedStore()
+    const handler = createTracedHandler(tracedStore)
+    const first = await createProductFixture(handler)
+    const second = await createProductFixture(handler)
+    const firstAdded = await handler({
+      action: 'addCustomerShoppingBagItem',
+      identity: customerIdentity,
+      payload: {
+        productId: first.product.id,
+        skuId: first.sku.id,
+        quantity: 1,
+      },
+    })
+    const secondAdded = await handler({
+      action: 'addCustomerShoppingBagItem',
+      identity: customerIdentity,
+      payload: {
+        productId: second.product.id,
+        skuId: second.sku.id,
+        quantity: 1,
+      },
+    })
+    await handler({
+      action: 'selectCustomerShoppingBagItem',
+      identity: customerIdentity,
+      params: { itemId: secondAdded.data.item.id },
+      payload: { isSelected: false },
+    })
+    await handler({
+      action: 'addCustomerShoppingBagItem',
+      identity: otherCustomerIdentity,
+      payload: {
+        productId: first.product.id,
+        skuId: first.sku.id,
+        quantity: 1,
+      },
+    })
+    tracedStore.insertCalls.length = 0
+    tracedStore.replaceCalls.length = 0
+
+    const checkedOut = await handler({
+      action: 'checkoutCustomerShoppingBag',
+      identity: customerIdentity,
+    })
+    const customerSnapshot = await handler({
+      action: 'getCustomerShoppingBagSnapshot',
+      identity: customerIdentity,
+    })
+    const otherCustomerSnapshot = await handler({
+      action: 'getCustomerShoppingBagSnapshot',
+      identity: otherCustomerIdentity,
+    })
+    const orders = await tracedStore.store.list('orders')
+    const orderItems = await tracedStore.store.list('order_items')
+    const ledger = await tracedStore.store.list('inventory_ledger')
+    const firstDetailAfter = await handler({
+      action: 'getPublishedProductDetail',
+      identity: customerIdentity,
+      params: { productId: first.product.id },
+    })
+    const secondDetailAfter = await handler({
+      action: 'getPublishedProductDetail',
+      identity: customerIdentity,
+      params: { productId: second.product.id },
+    })
+
+    expect(checkedOut).toMatchObject({
+      success: true,
+      data: {
+        order: {
+          customerAuthSource: 'wechat',
+          customerPhone: '',
+          status: 'pending_merchant_confirm',
+          totalAmount: first.sku.salePrice,
+          items: [
+            {
+              productId: first.product.id,
+              skuId: first.sku.id,
+              quantity: 1,
+              salePrice: first.sku.salePrice,
+            },
+          ],
+        },
+        removedItemIds: [firstAdded.data.item.id],
+        snapshot: {
+          totalQuantity: 1,
+          selectedQuantity: 0,
+          selectedSubtotal: 0,
+        },
+        invalidatedSnapshotKeys: expect.arrayContaining([
+          expect.stringMatching(/^customer-shopping-bag:customer-/),
+          expect.stringMatching(/^customer-mine:customer-/),
+        ]),
+      },
+    })
+    expect(customerSnapshot.data.items).toEqual([
+      expect.objectContaining({
+        id: secondAdded.data.item.id,
+        isSelected: false,
+      }),
+    ])
+    expect(otherCustomerSnapshot.data.items).toHaveLength(1)
+    expect(orders).toHaveLength(1)
+    expect(orderItems).toHaveLength(1)
+    expect(ledger).toEqual([
+      expect.objectContaining({
+        sku_id: first.sku.id,
+        order_id: checkedOut.data.order.id,
+        action: 'reserve',
+        quantity_delta: -1,
+      }),
+    ])
+    expect(firstDetailAfter.data.skus[0].stock).toBe(first.sku.stock - 1)
+    expect(secondDetailAfter.data.skus[0].stock).toBe(second.sku.stock)
+    expect(tracedStore.replaceCalls.filter((call) => call.name === 'skus')).toHaveLength(1)
+    expect(tracedStore.insertCalls.filter((call) => call.name === 'orders')).toHaveLength(1)
+    expect(tracedStore.insertCalls.filter((call) => call.name === 'inventory_ledger')).toHaveLength(1)
+  })
+
+  it('does not create orders or mutate stock when selected shopping-bag checkout is unavailable', async () => {
+    const tracedStore = createTracedStore()
+    const handler = createTracedHandler(tracedStore)
+    const { product, sku } = await createProductFixture(handler)
+    await handler({
+      action: 'addCustomerShoppingBagItem',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+      },
+    })
+    const before = await handler({
+      action: 'getPublishedProductDetail',
+      identity: customerIdentity,
+      params: { productId: product.id },
+    })
+    tracedStore.insertCalls.length = 0
+    tracedStore.replaceCalls.length = 0
+
+    await handler({
+      action: 'updateSku',
+      identity: ownerIdentity,
+      params: { productId: product.id, skuId: sku.id },
+      payload: {
+        spec: sku.spec,
+        salePrice: sku.salePrice,
+        stock: 0,
+        reason: 'stock audit',
+      },
+    })
+    tracedStore.insertCalls.length = 0
+    tracedStore.replaceCalls.length = 0
+
+    const unavailable = await handler({
+      action: 'checkoutCustomerShoppingBag',
+      identity: customerIdentity,
+    })
+    const snapshotAfter = await handler({
+      action: 'getCustomerShoppingBagSnapshot',
+      identity: customerIdentity,
+    })
+    const storedSkuAfter = (await tracedStore.store.list('skus')).find((item) => item._id === sku.id)
+
+    expect(unavailable).toMatchObject({
+      success: false,
+      error: {
+        code: 'CONFLICT',
+      },
+    })
+    expect(snapshotAfter.data.items).toHaveLength(1)
+    expect(snapshotAfter.data.items[0]).toMatchObject({
+      productId: product.id,
+      skuId: sku.id,
+      isSelected: true,
+      isAvailableForCheckout: false,
+    })
+    expect(before.data.skus[0].stock).toBe(sku.stock)
+    expect(storedSkuAfter.stock).toBe(0)
+    expect(await tracedStore.store.list('orders')).toEqual([])
+    expect((await tracedStore.store.list('inventory_ledger')).filter((entry) => entry.action === 'reserve')).toEqual([])
+    expect(tracedStore.insertCalls.filter((call) => call.name === 'orders' || call.name === 'inventory_ledger')).toEqual([])
+    expect(tracedStore.replaceCalls.filter((call) => call.name === 'shopping_bag_items')).toEqual([])
   })
 
   it('clears only unavailable shopping-bag items for the current customer', async () => {
@@ -3462,6 +3766,294 @@ describe('mallApi customer favorites actions', () => {
     })
     expect(removed.data.invalidatedSnapshotKeys).not.toContain(`customer-product-detail:${product.id}:v1`)
     expect(snapshot.data.items).toEqual([])
+  })
+})
+
+describe('mallApi manager order notification actions', () => {
+  it('advertises manager order notification actions through listContracts', async () => {
+    const handler = createHandler()
+
+    const result = await handler({ action: 'listContracts' })
+
+    expect(result.data.actions).toEqual(expect.arrayContaining([
+      'getManagerOrderNotificationConfig',
+      'subscribeManagerOrderNotifications',
+    ]))
+  })
+
+  it('stores a manager subscription only for a verified admin and WeChat identity', async () => {
+    const { handler, adminToken, store } = await createAdminWorkflowHandler({
+      account: 'orders-owner@example.com',
+      role: 'owner',
+      permissions: ['workbenchAccess', 'orderConfirmation'],
+    }, {}, {
+      orderNotificationTemplateId: 'tmpl-order-created',
+    })
+
+    const config = await handler({
+      action: 'getManagerOrderNotificationConfig',
+      adminToken,
+      identity: ownerIdentity,
+    })
+    const subscribed = await handler({
+      action: 'subscribeManagerOrderNotifications',
+      adminToken,
+      identity: ownerIdentity,
+      payload: { templateId: 'tmpl-order-created' },
+    })
+    const stored = await store.list('order_notification_subscriptions')
+
+    expect(config).toMatchObject({
+      success: true,
+      data: {
+        isConfigured: true,
+        templateId: 'tmpl-order-created',
+        subscribed: false,
+      },
+    })
+    expect(subscribed).toMatchObject({
+      success: true,
+      data: {
+        notificationConfig: {
+          isConfigured: true,
+          templateId: 'tmpl-order-created',
+          subscribed: true,
+        },
+        subscription: {
+          managerOpenid: ownerIdentity.openid,
+          managerAccount: 'orders-owner@example.com',
+          templateId: 'tmpl-order-created',
+          status: 'active',
+        },
+      },
+    })
+    expect(stored).toHaveLength(1)
+    expect(stored[0]).toMatchObject({
+      manager_openid: ownerIdentity.openid,
+      manager_account: 'orders-owner@example.com',
+      template_id: 'tmpl-order-created',
+      status: 'active',
+    })
+    expect(JSON.stringify(stored)).not.toContain('hardcoded')
+  })
+
+  it('rejects notification subscription without runtime WeChat identity', async () => {
+    const { handler, adminToken } = await createAdminWorkflowHandler({
+      account: 'orders-staff@example.com',
+      role: 'staff',
+      permissions: ['workbenchAccess', 'orderConfirmation'],
+    }, {}, {
+      orderNotificationTemplateId: 'tmpl-order-created',
+    })
+
+    const result = await handler({
+      action: 'subscribeManagerOrderNotifications',
+      adminToken,
+      payload: { templateId: 'tmpl-order-created' },
+    })
+
+    expect(result).toMatchObject({
+      success: false,
+      error: {
+        code: 'UNAUTHORIZED',
+      },
+    })
+  })
+
+  it('creates an order and records a skipped notification log when no template is configured', async () => {
+    const store = createStore()
+    const handler = createMallApiHandler(store, {
+      now: () => '2026-05-11T00:00:00.000Z',
+      allowTestIdentityRoles: true,
+      allowMockCustomerOrder: true,
+    })
+    const { product, sku } = await createProductFixture(handler)
+
+    const created = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: {
+          customerId: 'client-customer',
+          openid: 'client-openid',
+          phoneNumber: '13800000000',
+          authSource: 'mock_wechat',
+        },
+      },
+    })
+    const logs = await store.list('order_notification_logs')
+
+    expect(created.success).toBe(true)
+    expect(logs).toEqual([
+      expect.objectContaining({
+        order_id: created.data.order.id,
+        status: 'skipped',
+        reason: 'missing_template',
+      }),
+    ])
+  })
+
+  it('creates an order and records a skipped notification log when no manager subscription exists', async () => {
+    const store = createStore()
+    const sendOrderNotification = vi.fn(async () => undefined)
+    const handler = createMallApiHandler(store, {
+      now: () => '2026-05-11T00:00:00.000Z',
+      allowTestIdentityRoles: true,
+      allowMockCustomerOrder: true,
+      orderNotificationTemplateId: 'tmpl-order-created',
+      sendOrderNotification,
+    })
+    const { product, sku } = await createProductFixture(handler)
+
+    const created = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: {
+          customerId: 'client-customer',
+          openid: 'client-openid',
+          phoneNumber: '13800000000',
+          authSource: 'mock_wechat',
+        },
+      },
+    })
+    const logs = await store.list('order_notification_logs')
+
+    expect(created.success).toBe(true)
+    expect(sendOrderNotification).not.toHaveBeenCalled()
+    expect(logs).toEqual([
+      expect.objectContaining({
+        order_id: created.data.order.id,
+        template_id: 'tmpl-order-created',
+        status: 'skipped',
+        reason: 'no_subscribers',
+      }),
+    ])
+  })
+
+  it('does not roll back order creation when notification delivery fails', async () => {
+    const sendAttempts = []
+    const { handler, adminToken, store } = await createAdminWorkflowHandler({
+      account: 'orders-owner@example.com',
+      role: 'owner',
+      permissions: ['workbenchAccess', 'orderConfirmation'],
+    }, {}, {
+      orderNotificationTemplateId: 'tmpl-order-created',
+      sendOrderNotification: async (message) => {
+        sendAttempts.push(message)
+        throw new Error('wechat send failed')
+      },
+    })
+    const { product, sku } = await createProductFixture(handler)
+    await handler({
+      action: 'subscribeManagerOrderNotifications',
+      adminToken,
+      identity: ownerIdentity,
+      payload: { templateId: 'tmpl-order-created' },
+    })
+
+    const created = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: {
+          customerId: 'client-customer',
+          openid: 'client-openid',
+          phoneNumber: '13800000000',
+          authSource: 'mock_wechat',
+        },
+      },
+    })
+    const [orders, logs] = await Promise.all([
+      store.list('orders'),
+      store.list('order_notification_logs'),
+    ])
+
+    expect(created.success).toBe(true)
+    expect(orders).toHaveLength(1)
+    expect(sendAttempts).toHaveLength(1)
+    expect(sendAttempts[0]).toMatchObject({
+      templateId: 'tmpl-order-created',
+      managerOpenid: ownerIdentity.openid,
+      order: { id: created.data.order.id },
+    })
+    expect(logs).toEqual([
+      expect.objectContaining({
+        order_id: created.data.order.id,
+        manager_openid: ownerIdentity.openid,
+        template_id: 'tmpl-order-created',
+        status: 'failed',
+        reason: 'delivery_failed',
+        error_message: 'wechat send failed',
+      }),
+    ])
+  })
+
+  it('records a sent notification log when delivery succeeds for a subscribed manager', async () => {
+    const sendAttempts = []
+    const { handler, adminToken, store } = await createAdminWorkflowHandler({
+      account: 'orders-owner@example.com',
+      role: 'owner',
+      permissions: ['workbenchAccess', 'orderConfirmation'],
+    }, {}, {
+      orderNotificationTemplateId: 'tmpl-order-created',
+      sendOrderNotification: async (message) => {
+        sendAttempts.push(message)
+      },
+    })
+    const { product, sku } = await createProductFixture(handler)
+    await handler({
+      action: 'subscribeManagerOrderNotifications',
+      adminToken,
+      identity: ownerIdentity,
+      payload: { templateId: 'tmpl-order-created' },
+    })
+
+    const created = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: {
+          customerId: 'client-customer',
+          openid: 'client-openid',
+          phoneNumber: '13800000000',
+          authSource: 'mock_wechat',
+        },
+      },
+    })
+    const logs = await store.list('order_notification_logs')
+
+    expect(created.success).toBe(true)
+    expect(sendAttempts).toEqual([
+      expect.objectContaining({
+        templateId: 'tmpl-order-created',
+        managerOpenid: ownerIdentity.openid,
+        managerAccount: 'orders-owner@example.com',
+        order: expect.objectContaining({ id: created.data.order.id }),
+      }),
+    ])
+    expect(logs).toEqual([
+      expect.objectContaining({
+        order_id: created.data.order.id,
+        manager_openid: ownerIdentity.openid,
+        manager_account: 'orders-owner@example.com',
+        template_id: 'tmpl-order-created',
+        status: 'sent',
+        reason: 'delivered',
+      }),
+    ])
   })
 })
 

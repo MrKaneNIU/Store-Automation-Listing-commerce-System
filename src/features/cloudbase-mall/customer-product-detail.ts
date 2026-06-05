@@ -18,7 +18,7 @@ import { productDescriptionFallbackText } from '../customer-product-detail/custo
 const productUnavailableMessage = '商品不存在或未上架'
 const selectAvailableSkuMessage = '请选择有库存的规格'
 const outOfStockMessage = '该规格暂无库存'
-const canceledAuthMessage = '已取消授权，未创建订单'
+const canceledAuthMessage = '请先登录后下单'
 
 const toSkuView = (sku: Sku, selectedSkuId: string): CustomerProductDetailSkuView => ({
   id: sku.id,
@@ -95,7 +95,6 @@ export const submitCloudBaseCustomerProductDetailOrder = async (params: {
   quantity?: number
   authService?: WechatAuthService
   confirmLogin?: () => Promise<boolean>
-  confirmPhoneAuthorization?: () => Promise<boolean>
   requestPhoneNumber?: () => Promise<string | null>
   client?: CloudBaseMallApiClient
 }): Promise<SubmitCustomerProductDetailOrderResult> => {
@@ -114,23 +113,13 @@ export const submitCloudBaseCustomerProductDetailOrder = async (params: {
     const authService = params.authService ?? mockWechatAuthService
     let session = authService.getCurrentSession()
     if (!session) {
+      if (params.confirmLogin) {
+        const shouldLogin = await params.confirmLogin()
+        if (!shouldLogin) {
+          return { status: 'canceled', order: null, message: canceledAuthMessage }
+        }
+      }
       session = await authService.login()
-    }
-
-    if (!session.phoneNumber) {
-      const phoneNumber = params.requestPhoneNumber ? await params.requestPhoneNumber() : undefined
-      if (!phoneNumber?.trim()) {
-        return { status: 'canceled', order: null, message: canceledAuthMessage }
-      }
-      const authorizedSession = await authService.authorizePhoneNumber(phoneNumber.trim())
-      if (!authorizedSession) {
-        return { status: 'canceled', order: null, message: canceledAuthMessage }
-      }
-      session = authorizedSession
-    }
-
-    if (!session?.phoneNumber) {
-      return { status: 'canceled', order: null, message: canceledAuthMessage }
     }
 
     const { order } = await client.createCustomerOrder({

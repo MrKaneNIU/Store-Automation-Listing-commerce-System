@@ -2,6 +2,7 @@ import type {
   CloudBaseMallApiClient,
   CustomerShoppingBagSnapshot,
 } from '../../services/cloudbase/mall-api-client'
+import type { Order } from '../../domain/order/types'
 import { getRuntimeCloudBaseMallApiClient } from '../../services/cloudbase/runtime-mall-api-client'
 import {
   createCustomerShoppingBagFailureView,
@@ -15,6 +16,18 @@ export type CloudBaseCustomerShoppingBagCommandResult = {
   invalidatedSnapshotKeys: string[]
   view: CustomerShoppingBagViewModel
 }
+
+export type CloudBaseCustomerShoppingBagCheckoutResult =
+  | (CloudBaseCustomerShoppingBagCommandResult & {
+      status: 'succeeded'
+      order: Order
+      removedItemIds: string[]
+    })
+  | (CloudBaseCustomerShoppingBagCommandResult & {
+      status: 'failed'
+      order: null
+      removedItemIds: []
+    })
 
 type ShoppingBagCommandOptions = {
   successMessage: string
@@ -133,3 +146,32 @@ export const clearUnavailableCloudBaseCustomerShoppingBagItems = async (
     previousView,
     command: () => getClient(client).clearUnavailableCustomerShoppingBagItems(),
   })
+
+export const checkoutCloudBaseCustomerShoppingBag = async (
+  client?: CloudBaseMallApiClient,
+  previousView?: CustomerShoppingBagViewModel,
+): Promise<CloudBaseCustomerShoppingBagCheckoutResult> => {
+  try {
+    const result = await getClient(client).checkoutCustomerShoppingBag()
+
+    return {
+      status: 'succeeded',
+      message: 'Order submitted',
+      invalidatedSnapshotKeys: result.invalidatedSnapshotKeys,
+      view: createCustomerShoppingBagView(result.snapshot),
+      order: result.order,
+      removedItemIds: result.removedItemIds,
+    }
+  } catch (error) {
+    const view = createCustomerShoppingBagFailureView(error, previousView)
+
+    return {
+      status: 'failed',
+      message: view.failureMessage,
+      invalidatedSnapshotKeys: [],
+      view,
+      order: null,
+      removedItemIds: [],
+    }
+  }
+}

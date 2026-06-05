@@ -45,7 +45,7 @@ const productUnavailableMessage = '商品不存在或未上架'
 export const productDescriptionFallbackText = '暂无商品简介，商家正在完善中。'
 const selectAvailableSkuMessage = '请选择有库存的规格'
 const outOfStockMessage = '该规格暂无库存'
-const canceledAuthMessage = '已取消授权，未创建订单'
+const canceledAuthMessage = '请先登录后下单'
 
 const toSkuView = (sku: Sku, selectedSkuId: string): CustomerProductDetailSkuView => ({
   id: sku.id,
@@ -98,7 +98,6 @@ export const submitCustomerProductDetailOrder = async (params: {
   quantity?: number
   authService?: WechatAuthService
   confirmLogin: () => Promise<boolean>
-  confirmPhoneAuthorization: () => Promise<boolean>
 }): Promise<SubmitCustomerProductDetailOrderResult> => {
   const view = getCustomerProductDetailView(params.productId, params.skuId)
   const sku = view.skus.find((item) => item.id === params.skuId)
@@ -117,7 +116,6 @@ export const submitCustomerProductDetailOrder = async (params: {
       quantity: params.quantity ?? 1,
       authService: params.authService ?? mockWechatAuthService,
       confirmLogin: params.confirmLogin,
-      confirmPhoneAuthorization: params.confirmPhoneAuthorization,
     })
 
     if (!order) {

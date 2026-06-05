@@ -16,6 +16,10 @@ export const routes = {
   customerFavorites: '/pages/customer/favorites/index',
   customerShoppingBag: '/pages/customer/shopping-bag/index',
   customerMine: '/pages/customer/mine/index',
+  customerProfile: '/pages/customer/profile/index',
+  customerWallet: '/pages/customer/wallet/index',
+  customerAddress: '/pages/customer/address/index',
+  customerOrders: '/pages/customer/orders/index',
   customerProductDetail: '/pages/customer/product-detail/index',
 } as const
 

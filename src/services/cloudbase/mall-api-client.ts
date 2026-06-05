@@ -217,6 +217,38 @@ export type OwnerOrderSnapshot = {
   serverTime: string
 }
 
+export type CustomerOrdersSnapshot = {
+  customerId: string
+  orders: Order[]
+  totalCount: number
+  serverTime: string
+}
+
+export type ManagerOrderNotificationConfig = {
+  isConfigured: boolean
+  templateId: string
+  subscribed: boolean
+}
+
+export type ManagerOrderNotificationSubscription = {
+  id: string
+  managerOpenid: string
+  managerAccount?: string
+  templateId: string
+  status: 'active'
+  createdAt: string
+  updatedAt: string
+}
+
+type ManagerOrderNotificationSubscriptionInput = {
+  templateId: string
+}
+
+export type ManagerOrderNotificationSubscriptionResult = {
+  subscription: ManagerOrderNotificationSubscription
+  notificationConfig: ManagerOrderNotificationConfig
+}
+
 export type OwnerDashboardSnapshot = {
   pendingDraftCount: number
   pendingImageTaskCount: number
@@ -324,7 +356,7 @@ export type CustomerMineRecentOrderSummary = {
 }
 
 export type CustomerMineUtilityEntry = {
-  key: 'favorites' | 'shoppingBag'
+  key: 'profile' | 'wallet' | 'address' | 'orders' | 'favorites' | 'shoppingBag'
   label: string
   route: string
   count: number
@@ -338,6 +370,9 @@ export type CustomerMineSnapshot = {
     displayName: string
     authSource: 'wechat'
     openidMasked: string
+  }
+  profile: {
+    avatarUrl: string
   }
   phone: {
     isBound: boolean
@@ -370,6 +405,13 @@ type CustomerFavoriteProductCommandResult = {
 }
 
 type ClearUnavailableCustomerShoppingBagItemsResult = {
+  removedItemIds: string[]
+  snapshot: CustomerShoppingBagSnapshot
+  invalidatedSnapshotKeys: string[]
+}
+
+type CheckoutCustomerShoppingBagResult = {
+  order: Order
   removedItemIds: string[]
   snapshot: CustomerShoppingBagSnapshot
   invalidatedSnapshotKeys: string[]
@@ -419,7 +461,12 @@ export type CloudBaseMallApiClient = {
   supplementProductImages: (productId: string, input: SupplementProductImagesInput) => Promise<{ product: Product }>
   createCustomerOrder: (input: CreateCustomerOrderInput) => Promise<{ order: Order }>
   getCustomerOrder: (orderId: string) => Promise<{ order: Order }>
+  getCustomerOrdersSnapshot: () => Promise<CustomerOrdersSnapshot>
   getOwnerOrderSnapshot: () => Promise<OwnerOrderSnapshot>
+  getManagerOrderNotificationConfig: () => Promise<ManagerOrderNotificationConfig>
+  subscribeManagerOrderNotifications: (
+    input: ManagerOrderNotificationSubscriptionInput,
+  ) => Promise<ManagerOrderNotificationSubscriptionResult>
   getOwnerDashboardSnapshot: () => Promise<OwnerDashboardSnapshot>
   getCustomerMineSnapshot?: () => Promise<CustomerMineSnapshot>
   getCustomerShoppingBagSnapshot: () => Promise<CustomerShoppingBagSnapshot>
@@ -434,6 +481,7 @@ export type CloudBaseMallApiClient = {
   ) => Promise<CustomerShoppingBagCommandResult>
   removeCustomerShoppingBagItem: (itemId: string) => Promise<CustomerShoppingBagCommandResult>
   clearUnavailableCustomerShoppingBagItems: () => Promise<ClearUnavailableCustomerShoppingBagItemsResult>
+  checkoutCustomerShoppingBag: () => Promise<CheckoutCustomerShoppingBagResult>
   getCustomerFavoriteProductsSnapshot: () => Promise<CustomerFavoriteProductsSnapshot>
   favoriteCustomerProduct: (productId: string) => Promise<CustomerFavoriteProductCommandResult>
   unfavoriteCustomerProduct: (productId: string) => Promise<CustomerFavoriteProductCommandResult>
@@ -593,8 +641,17 @@ export const createCloudBaseMallApiClient = (
   getCustomerOrder(orderId) {
     return callMallApi(functionClient, { action: 'getCustomerOrder', params: { orderId } })
   },
+  getCustomerOrdersSnapshot() {
+    return callMallApi(functionClient, { action: 'getCustomerOrdersSnapshot' })
+  },
   getOwnerOrderSnapshot() {
     return callMallApi(functionClient, { action: 'getOwnerOrderSnapshot' })
+  },
+  getManagerOrderNotificationConfig() {
+    return callMallApi(functionClient, { action: 'getManagerOrderNotificationConfig' })
+  },
+  subscribeManagerOrderNotifications(input) {
+    return callMallApi(functionClient, { action: 'subscribeManagerOrderNotifications', payload: input })
   },
   getOwnerDashboardSnapshot() {
     return callMallApi(functionClient, { action: 'getOwnerDashboardSnapshot' })
@@ -627,6 +684,9 @@ export const createCloudBaseMallApiClient = (
   },
   clearUnavailableCustomerShoppingBagItems() {
     return callMallApi(functionClient, { action: 'clearUnavailableCustomerShoppingBagItems' })
+  },
+  checkoutCustomerShoppingBag() {
+    return callMallApi(functionClient, { action: 'checkoutCustomerShoppingBag' })
   },
   getCustomerFavoriteProductsSnapshot() {
     return callMallApi(functionClient, { action: 'getCustomerFavoriteProductsSnapshot' })

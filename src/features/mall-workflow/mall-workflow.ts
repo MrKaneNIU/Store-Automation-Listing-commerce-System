@@ -220,13 +220,13 @@ export const mallWorkflow = {
       quantity: number
     },
   ) {
-    if (!params.session?.phoneNumber) {
-      throw new Error('请先完成微信手机号授权')
+    if (!params.session) {
+      throw new Error('请先登录后下单')
     }
 
     return mallWorkflow.createOrder(product, skuId, {
       customerName: params.session.nickname ?? '微信用户',
-      customerPhone: params.session.phoneNumber,
+      customerPhone: params.session.phoneNumber ?? '',
       customerId: params.session.customerId,
       customerAuthSource: params.session.authSource,
       idempotencyKey: params.idempotencyKey,

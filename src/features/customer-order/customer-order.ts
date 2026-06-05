@@ -9,7 +9,6 @@ export const submitCustomerWechatOrder = async (params: {
   quantity: number
   authService: WechatAuthService
   confirmLogin: () => Promise<boolean>
-  confirmPhoneAuthorization: () => Promise<boolean>
   requestPhoneNumber?: () => Promise<string | null>
 }): Promise<Order | null> => {
   let session = params.authService.getCurrentSession()
@@ -20,15 +19,6 @@ export const submitCustomerWechatOrder = async (params: {
       return null
     }
     session = await params.authService.login()
-  }
-
-  if (!session.phoneNumber) {
-    const shouldAuthorizePhone = await params.confirmPhoneAuthorization()
-    if (!shouldAuthorizePhone) {
-      return null
-    }
-    const phoneNumber = params.requestPhoneNumber ? await params.requestPhoneNumber() : undefined
-    session = await params.authService.authorizePhoneNumber(phoneNumber ?? undefined)
   }
 
   return mallWorkflow.createAuthorizedOrder(params.product, params.skuId, {

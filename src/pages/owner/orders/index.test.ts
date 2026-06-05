@@ -25,4 +25,16 @@ describe('owner orders page state contract', () => {
     expect(source).not.toContain('viewModel.value.orders = viewModel.value.orders.map')
     expect(source).not.toContain('result.order')
   })
+
+  it('keeps manager order notification opt-in on the facade and WeChat subscribe API', () => {
+    const source = ownerOrdersPageSource()
+
+    expect(source).toContain('getCloudBaseManagerOrderNotificationConfig')
+    expect(source).toContain('subscribeCloudBaseManagerOrderNotifications')
+    expect(source).toContain('requestSubscribeMessage')
+    expect(source).toContain('enableOrderReminders')
+    expect(source).not.toContain('order_notification_subscriptions')
+    expect(source).not.toContain('ORDER_NOTIFICATION_TEMPLATE_ID')
+    expect(source).not.toContain('managerOpenid')
+  })
 })

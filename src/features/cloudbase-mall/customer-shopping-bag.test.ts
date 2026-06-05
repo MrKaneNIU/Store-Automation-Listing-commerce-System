@@ -6,6 +6,7 @@ import type {
 } from '../../services/cloudbase/mall-api-client'
 import {
   addCloudBaseCustomerShoppingBagItem,
+  checkoutCloudBaseCustomerShoppingBag,
   clearUnavailableCloudBaseCustomerShoppingBagItems,
   getCloudBaseCustomerShoppingBagView,
   removeCloudBaseCustomerShoppingBagItem,
@@ -54,6 +55,40 @@ const commandResult = {
   invalidatedSnapshotKeys: ['customer-shopping-bag:customer-1:v1'],
 }
 
+const checkoutResult = {
+  order: {
+    id: 'order-1',
+    customerName: 'Wechat Customer',
+    customerPhone: '13800000000',
+    customerId: 'customer-1',
+    customerAuthSource: 'wechat' as const,
+    status: 'pending_merchant_confirm' as const,
+    items: [
+      {
+        skuId: 'sku-1',
+        productId: 'product-1',
+        productName: 'Cotton Shirt',
+        productCode: 'A1023',
+        spec: 'Black/M',
+        salePrice: 129,
+        quantity: 1,
+      },
+    ],
+    totalAmount: 129,
+    createdAt: '2026-05-27T00:00:00.000Z',
+    updatedAt: '2026-05-27T00:00:00.000Z',
+  },
+  removedItemIds: ['bag-item-1'],
+  snapshot: {
+    ...snapshot,
+    items: [],
+    totalQuantity: 0,
+    selectedQuantity: 0,
+    selectedSubtotal: 0,
+  },
+  invalidatedSnapshotKeys: ['customer-shopping-bag:customer-1:v1', 'customer-mine:customer-1:v1'],
+}
+
 const createClient = (overrides: Partial<CloudBaseMallApiClient>): CloudBaseMallApiClient => {
   const missing = vi.fn(async () => {
     throw new Error('unexpected shopping-bag client call')
@@ -94,6 +129,8 @@ const createClient = (overrides: Partial<CloudBaseMallApiClient>): CloudBaseMall
     createCustomerOrder: missing,
     getCustomerOrder: missing,
     getOwnerOrderSnapshot: missing,
+    getManagerOrderNotificationConfig: missing,
+    subscribeManagerOrderNotifications: missing,
     getOwnerDashboardSnapshot: missing,
     getCustomerShoppingBagSnapshot: missing,
     addCustomerShoppingBagItem: missing,
@@ -101,10 +138,12 @@ const createClient = (overrides: Partial<CloudBaseMallApiClient>): CloudBaseMall
     selectCustomerShoppingBagItem: missing,
     removeCustomerShoppingBagItem: missing,
     clearUnavailableCustomerShoppingBagItems: missing,
+    checkoutCustomerShoppingBag: missing,
     getCustomerFavoriteProductsSnapshot: missing,
     favoriteCustomerProduct: missing,
     unfavoriteCustomerProduct: missing,
     removeCustomerFavoriteProduct: missing,
+    getCustomerOrdersSnapshot: missing,
     listMerchantOrders: missing,
     confirmMerchantOrder: missing,
     cancelMerchantOrder: missing,
@@ -132,6 +171,7 @@ describe('CloudBase customer shopping bag facade', () => {
       updateCustomerShoppingBagItemQuantity: vi.fn(async () => commandResult),
       selectCustomerShoppingBagItem: vi.fn(async () => commandResult),
       removeCustomerShoppingBagItem: vi.fn(async () => commandResult),
+      checkoutCustomerShoppingBag: vi.fn(async () => checkoutResult),
       clearUnavailableCustomerShoppingBagItems: vi.fn(async () => ({
         removedItemIds: ['bag-item-2'],
         snapshot,
@@ -148,12 +188,24 @@ describe('CloudBase customer shopping bag facade', () => {
     await updateCloudBaseCustomerShoppingBagItemQuantity('bag-item-1', 2, client)
     await selectCloudBaseCustomerShoppingBagItem('bag-item-1', false, client)
     await removeCloudBaseCustomerShoppingBagItem('bag-item-1', client)
+    await expect(checkoutCloudBaseCustomerShoppingBag(client)).resolves.toMatchObject({
+      status: 'succeeded',
+      message: 'Order submitted',
+      order: { id: 'order-1' },
+      removedItemIds: ['bag-item-1'],
+      invalidatedSnapshotKeys: ['customer-shopping-bag:customer-1:v1', 'customer-mine:customer-1:v1'],
+      view: {
+        items: [],
+        selectedSubtotalText: '¥0.00',
+      },
+    })
     await clearUnavailableCloudBaseCustomerShoppingBagItems(client)
 
     expect(client.addCustomerShoppingBagItem).toHaveBeenCalledWith({ productId: 'product-1', skuId: 'sku-1', quantity: 1 })
     expect(client.updateCustomerShoppingBagItemQuantity).toHaveBeenCalledWith('bag-item-1', { quantity: 2 })
     expect(client.selectCustomerShoppingBagItem).toHaveBeenCalledWith('bag-item-1', { isSelected: false })
     expect(client.removeCustomerShoppingBagItem).toHaveBeenCalledWith('bag-item-1')
+    expect(client.checkoutCustomerShoppingBag).toHaveBeenCalledTimes(1)
     expect(client.clearUnavailableCustomerShoppingBagItems).toHaveBeenCalledTimes(1)
   })
 

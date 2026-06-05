@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { createCustomerShoppingBagView, type CustomerShoppingBagViewModel } from '../../../features/customer-shopping-bag/customer-shopping-bag'
-import type { CloudBaseCustomerShoppingBagCommandResult } from '../../../features/cloudbase-mall/customer-shopping-bag'
+import type {
+  CloudBaseCustomerShoppingBagCheckoutResult,
+  CloudBaseCustomerShoppingBagCommandResult,
+} from '../../../features/cloudbase-mall/customer-shopping-bag'
 import type { CustomerShoppingBagSnapshot } from '../../../services/cloudbase/mall-api-client'
 import { createCustomerShoppingBagPageState } from './useCustomerShoppingBagPageState'
 import type { CustomerRuntimeRequestLogEntry } from '../../../services/performance/customer-runtime-request-log'
@@ -43,6 +46,36 @@ const createCommandResult = (view: CustomerShoppingBagViewModel): CloudBaseCusto
   message: 'Quantity updated',
   invalidatedSnapshotKeys: ['customer-shopping-bag:customer-1:v1'],
   view,
+})
+
+const createCheckoutResult = (view: CustomerShoppingBagViewModel): CloudBaseCustomerShoppingBagCheckoutResult => ({
+  status: 'succeeded',
+  message: 'Order submitted',
+  invalidatedSnapshotKeys: ['customer-shopping-bag:customer-1:v1', 'customer-mine:customer-1:v1'],
+  view,
+  order: {
+    id: 'order-1',
+    customerName: 'Wechat Customer',
+    customerPhone: '13800000000',
+    customerId: 'customer-1',
+    customerAuthSource: 'wechat',
+    status: 'pending_merchant_confirm',
+    items: [
+      {
+        skuId: 'sku-1',
+        productId: 'product-1',
+        productName: 'Cotton Shirt',
+        productCode: 'A1023',
+        spec: 'Black/M',
+        salePrice: 129,
+        quantity: 1,
+      },
+    ],
+    totalAmount: 129,
+    createdAt: '2026-05-28T00:00:00.000Z',
+    updatedAt: '2026-05-28T00:00:00.000Z',
+  },
+  removedItemIds: ['bag-item-1'],
 })
 
 describe('customer shopping bag page state', () => {
@@ -180,6 +213,41 @@ describe('customer shopping bag page state', () => {
     expect(state.viewModel.value.selectedSubtotalText).toBe('¥258.00')
   })
 
+  it('submits selected shopping-bag items through the backend checkout command', async () => {
+    const initialView = createCustomerShoppingBagView(createSnapshot(1))
+    const checkedOutView = createCustomerShoppingBagView({
+      ...createSnapshot(1),
+      items: [],
+      totalQuantity: 0,
+      selectedQuantity: 0,
+      selectedSubtotal: 0,
+    })
+    const checkoutSelectedItems = vi.fn(async () => createCheckoutResult(checkedOutView))
+    const state = createCustomerShoppingBagPageState({
+      loadView: vi.fn(async () => initialView),
+      checkoutSelectedItems,
+    })
+
+    await state.handlePageShow()
+    await expect(state.submitSelectedItems()).resolves.toMatchObject({
+      status: 'succeeded',
+      order: { id: 'order-1' },
+      removedItemIds: ['bag-item-1'],
+    })
+
+    expect(checkoutSelectedItems).toHaveBeenCalledWith(initialView)
+    expect(state.message.value).toBe('Order submitted')
+    expect(state.invalidatedSnapshotKeys.value).toEqual(['customer-shopping-bag:customer-1:v1', 'customer-mine:customer-1:v1'])
+    expect(state.viewModel.value.items).toEqual([])
+  })
+
+  it('keeps shopping-bag checkout on the backend order path instead of product-detail navigation', () => {
+    expect(pageSource).toContain('const submitCheckout = async () =>')
+    expect(pageSource).toContain('shoppingBagState.submitSelectedItems()')
+    expect(pageSource).not.toContain('routes.customerProductDetail')
+    expect(pageSource).not.toContain('result.checkoutItems[0]')
+  })
+
   it('routes favorites and mine through shared bottom-nav routes without old placeholder copy', () => {
     expect(pageSource).toContain('customerBottomNavRoutes.favorites')
     expect(pageSource).toContain('customerBottomNavRoutes.mine')
@@ -189,6 +257,16 @@ describe('customer shopping bag page state', () => {
     expect(pageSource).not.toContain(legacyFavoritesSeparatePrdCopy)
     expect(pageSource).not.toContain(legacyVisualEntryCopy)
     expect(pageSource).not.toContain(legacySeparatePrdCopy)
+  })
+
+  it('aligns the custom header with the WeChat capsule and removes the title-bar refresh action', () => {
+    expect(pageSource).toContain('<view class="bag-header" :style="{ paddingTop: headerTopPadding }">')
+    expect(pageSource).toContain('onMounted(syncHeaderTopPadding)')
+    expect(pageSource).toContain('uni.getMenuButtonBoundingClientRect?.()')
+    expect(pageSource).toContain('<view class="nav-spacer" />')
+    expect(pageSource).toContain('position: sticky;')
+    expect(pageSource).not.toContain('aria-label="重新加载购物袋"')
+    expect(pageSource).not.toContain('refresh-mark')
   })
 
   it('shows a retryable identity failure before the empty shopping-bag state', () => {

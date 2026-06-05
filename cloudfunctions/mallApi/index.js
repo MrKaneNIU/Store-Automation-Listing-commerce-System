@@ -192,14 +192,66 @@ const exchangePhoneCode = async (phoneCode) => {
   return phoneNumber
 }
 
+const truncateTemplateValue = (value, length) => String(value || '').slice(0, length)
+
+const createOrderNotificationPayload = ({ templateId, managerOpenid, order }) => ({
+  touser: managerOpenid,
+  template_id: templateId,
+  page: 'pages/owner/orders/index',
+  data: {
+    thing1: {
+      value: truncateTemplateValue(order.items?.[0]?.productName || '新订单', 20),
+    },
+    amount2: {
+      value: `${Number(order.totalAmount || 0).toFixed(2)}元`,
+    },
+    phrase3: {
+      value: '待确认',
+    },
+    time4: {
+      value: truncateTemplateValue(String(order.createdAt || '').replace('T', ' '), 16),
+    },
+    thing5: {
+      value: truncateTemplateValue(order.id, 20),
+    },
+  },
+})
+
+const sendWechatOrderNotification = async (message, dependencies = {}) => {
+  const readAccessToken = dependencies.getWechatAccessToken || getWechatAccessToken
+  const postJson = dependencies.requestJson || requestJson
+  const accessToken = await readAccessToken()
+  const data = await postJson(
+    `https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=${encodeURIComponent(accessToken)}`,
+    {
+      method: 'POST',
+      body: JSON.stringify(createOrderNotificationPayload(message)),
+    },
+  )
+
+  if (data.errcode) {
+    throw new Error(`Wechat order notification failed: ${data.errcode} ${data.errmsg || ''}`.trim())
+  }
+  return data
+}
+
+const createRuntimeHandlerOptions = () => ({
+  exchangePhoneCode,
+  resolveImageUrl,
+  sendOrderNotification: sendWechatOrderNotification,
+})
+
 exports.main = async (event = {}) => {
   const identity = resolveTrustedIdentity(event, readRuntimeIdentity(), shouldAllowTestIdentity())
   const { identity: _clientIdentity, adminSession: _clientAdminSession, ...trustedEvent } = event
-  return createMallApiHandler(getStore(), { exchangePhoneCode, resolveImageUrl })({ ...trustedEvent, ...(identity ? { identity } : {}) })
+  return createMallApiHandler(getStore(), createRuntimeHandlerOptions())({ ...trustedEvent, ...(identity ? { identity } : {}) })
 }
 exports.__private__ = {
   createMallApiHandler,
   createMemoryDocumentStore,
+  createOrderNotificationPayload,
+  createRuntimeHandlerOptions,
   readRuntimeIdentityFromCloudbase,
   resolveTrustedIdentity,
+  sendWechatOrderNotification,
 }

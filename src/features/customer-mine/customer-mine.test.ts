@@ -20,6 +20,9 @@ const createSnapshot = (overrides: Partial<CustomerMineSnapshot> = {}): Customer
     maskedPhoneNumber: '138****0000',
     statusLabel: 'Phone bound',
   },
+  profile: {
+    avatarUrl: '',
+  },
   recentOrders: [
     {
       orderId: 'order-1',
@@ -67,6 +70,26 @@ describe('customer mine ViewModel', () => {
     expect(view.identityLabel).toBe('已登录')
     expect(view.identityDisplayName).toBe('微信客户')
     expect(view.identityOpenidLabel).toBe('cust...enid')
+  })
+
+  it('maps persisted avatar profile state and stable placeholder text', () => {
+    const withAvatar = createCustomerMineView(createSnapshot({
+      profile: {
+        avatarUrl: 'cloud://avatars/customer-1.png',
+      },
+    }))
+    const withoutAvatar = createCustomerMineView(createSnapshot({
+      profile: {
+        avatarUrl: '',
+      },
+    }))
+
+    expect(withAvatar.hasAvatar).toBe(true)
+    expect(withAvatar.avatarUrl).toBe('cloud://avatars/customer-1.png')
+    expect(withAvatar.avatarPlaceholderText).toBe('')
+    expect(withoutAvatar.hasAvatar).toBe(false)
+    expect(withoutAvatar.avatarUrl).toBe('')
+    expect(withoutAvatar.avatarPlaceholderText).toBe('微')
   })
 
   it('maps unsigned identity labels', () => {
@@ -135,7 +158,31 @@ describe('customer mine ViewModel', () => {
   it('maps favorites and shopping-bag utility routes', () => {
     const view = createCustomerMineView(createSnapshot())
 
-    expect(view.utilities).toEqual([
+    expect(view.utilities).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'profile',
+        label: '个人信息',
+        route: '/pages/customer/profile/index',
+        countLabel: '查看',
+      }),
+      expect.objectContaining({
+        key: 'wallet',
+        label: '钱包',
+        route: '/pages/customer/wallet/index',
+        countLabel: '空',
+      }),
+      expect.objectContaining({
+        key: 'address',
+        label: '地址',
+        route: '/pages/customer/address/index',
+        countLabel: '空',
+      }),
+      expect.objectContaining({
+        key: 'orders',
+        label: '我的订单',
+        route: '/pages/customer/orders/index',
+        countLabel: '查看',
+      }),
       expect.objectContaining({
         key: 'favorites',
         label: '收藏',
@@ -148,7 +195,7 @@ describe('customer mine ViewModel', () => {
         route: '/pages/customer/shopping-bag/index',
         countLabel: '4',
       }),
-    ])
+    ]))
   })
 
   it('creates loading and failure states', () => {

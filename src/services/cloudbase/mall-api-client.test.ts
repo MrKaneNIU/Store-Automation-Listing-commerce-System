@@ -395,6 +395,95 @@ describe('CloudBase mall API client', () => {
     ])
   })
 
+  it('maps customer order snapshots through mallApi without payload identity fields', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        return { customerId: 'customer-1', orders: [], totalCount: 0, serverTime: '2026-06-04T09:00:00.000Z' } as never
+      },
+    })
+
+    await client.getCustomerOrdersSnapshot()
+
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'getCustomerOrdersSnapshot',
+        },
+      },
+    ])
+  })
+
+  it('maps manager order notification config and subscription through mallApi', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    createAdminWorkbenchSession({
+      adminToken: 'opaque-admin-token',
+      account: 'owner',
+      role: 'owner',
+      permissions: ['workbenchAccess', 'orderConfirmation'],
+      expiresAt: '2026-06-03T12:00:00.000Z',
+    })
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        if ((data as { action: string }).action === 'getManagerOrderNotificationConfig') {
+          return {
+            isConfigured: true,
+            templateId: 'tmpl-order-created',
+            subscribed: false,
+          } as never
+        }
+        return {
+          subscription: {
+            id: 'subscription-1',
+            managerOpenid: 'owner-openid',
+            managerAccount: 'owner',
+            templateId: 'tmpl-order-created',
+            status: 'active',
+            createdAt: '2026-05-11T00:00:00.000Z',
+            updatedAt: '2026-05-11T00:00:00.000Z',
+          },
+          notificationConfig: {
+            isConfigured: true,
+            templateId: 'tmpl-order-created',
+            subscribed: true,
+          },
+        } as never
+      },
+    })
+
+    await expect(client.getManagerOrderNotificationConfig()).resolves.toMatchObject({
+      isConfigured: true,
+      templateId: 'tmpl-order-created',
+      subscribed: false,
+    })
+    await expect(client.subscribeManagerOrderNotifications({ templateId: 'tmpl-order-created' })).resolves.toMatchObject({
+      notificationConfig: { subscribed: true },
+      subscription: { managerOpenid: 'owner-openid' },
+    })
+
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: {
+          action: 'getManagerOrderNotificationConfig',
+          adminToken: 'opaque-admin-token',
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'subscribeManagerOrderNotifications',
+          payload: { templateId: 'tmpl-order-created' },
+          adminToken: 'opaque-admin-token',
+        },
+      },
+    ])
+    expect(JSON.stringify(calls)).not.toContain('openid')
+  })
+
   it('maps owner dashboard snapshots to a single mallApi action', async () => {
     const calls: Array<{ name: string; data: unknown }> = []
     const client = createCloudBaseMallApiClient({
@@ -435,6 +524,7 @@ describe('CloudBase mall API client', () => {
     await client.selectCustomerShoppingBagItem('bag-item-1', { isSelected: false })
     await client.removeCustomerShoppingBagItem('bag-item-1')
     await client.clearUnavailableCustomerShoppingBagItems()
+    await client.checkoutCustomerShoppingBag()
 
     expect(calls).toEqual([
       {
@@ -477,6 +567,12 @@ describe('CloudBase mall API client', () => {
         name: 'mallApi',
         data: {
           action: 'clearUnavailableCustomerShoppingBagItems',
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'checkoutCustomerShoppingBag',
         },
       },
     ])

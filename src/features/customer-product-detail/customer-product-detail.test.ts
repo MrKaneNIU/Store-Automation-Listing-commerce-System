@@ -96,40 +96,36 @@ describe('customer product detail ViewModel', () => {
     expect(selection).toEqual({ selectedSkuId: sku.id, message: '该规格暂无库存' })
   })
 
-  it('does not create an order or reserve stock when phone authorization is canceled', async () => {
+  it('does not create an order or reserve stock when login is canceled', async () => {
     const { product, sku } = await prepareProduct()
-    const confirmLogin = vi.fn().mockResolvedValue(true)
-    const confirmPhoneAuthorization = vi.fn().mockResolvedValue(false)
+    const confirmLogin = vi.fn().mockResolvedValue(false)
 
     const result = await submitCustomerProductDetailOrder({
       productId: product.id,
       skuId: sku.id,
       confirmLogin,
-      confirmPhoneAuthorization,
     })
 
-    expect(result).toMatchObject({ status: 'canceled', order: null, message: '已取消授权，未创建订单' })
+    expect(result).toMatchObject({ status: 'canceled', order: null, message: '请先登录后下单' })
+    expect(confirmLogin).toHaveBeenCalledTimes(1)
     expect(mallRepository.listOrders()).toHaveLength(0)
     expect(mallRepository.listSkus(product.id)[0].stock).toBe(sku.stock)
   })
 
-  it('creates an authorized order and reserves stock when authorization succeeds', async () => {
+  it('creates an authorized order and reserves stock after account login', async () => {
     const { product, sku } = await prepareProduct()
     const confirmLogin = vi.fn().mockResolvedValue(true)
-    const confirmPhoneAuthorization = vi.fn().mockResolvedValue(true)
 
     const result = await submitCustomerProductDetailOrder({
       productId: product.id,
       skuId: sku.id,
       confirmLogin,
-      confirmPhoneAuthorization,
     })
 
     expect(result.status).toBe('created')
     expect(confirmLogin).toHaveBeenCalledTimes(1)
-    expect(confirmPhoneAuthorization).toHaveBeenCalledTimes(1)
     expect(result.order).toMatchObject({
-      customerPhone: '13800000000',
+      customerPhone: '',
       customerId: 'mock-customer-001',
       customerAuthSource: 'mock_wechat',
       status: 'pending_merchant_confirm',

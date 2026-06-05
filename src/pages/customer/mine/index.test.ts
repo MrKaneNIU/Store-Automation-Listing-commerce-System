@@ -17,6 +17,16 @@ describe('customer mine UI integration', () => {
     expect(source).toContain('<text class="nav-title">我的</text>')
   })
 
+  it('aligns the custom header with the WeChat capsule and removes the title-bar refresh action', () => {
+    expect(source).toContain('<view class="mine-header" :style="{ paddingTop: headerTopPadding }">')
+    expect(source).toContain('onMounted(syncHeaderTopPadding)')
+    expect(source).toContain('uni.getMenuButtonBoundingClientRect?.()')
+    expect(source).toContain('<view class="nav-spacer" />')
+    expect(source).toContain('position: sticky;')
+    expect(source).not.toContain('aria-label="重新加载我的"')
+    expect(source).not.toContain('refresh-mark')
+  })
+
   it('loads the first screen through the page-facing facade state only', () => {
     expect(source).toContain("import { useCustomerMinePageState } from './useCustomerMinePageState'")
     expect(source).toContain('const mineState = useCustomerMinePageState()')
@@ -33,8 +43,13 @@ describe('customer mine UI integration', () => {
   })
 
   it('renders identity, phone, loading, failure, retry, and recent-order empty states', () => {
+    expect(source).toContain('viewModel.hasAvatar')
+    expect(source).toContain('viewModel.avatarUrl')
+    expect(source).toContain('viewModel.avatarPlaceholderText')
+    expect(source).toContain('viewModel.customerId')
     expect(source).toContain('viewModel.identityLabel')
     expect(source).toContain('viewModel.identityDisplayName')
+    expect(source).not.toContain('viewModel.identityOpenidLabel')
     expect(source).toContain('viewModel.phoneLabel')
     expect(source).toContain('viewModel.phoneDisplayText')
     expect(source).toContain("viewModel.loadingState === 'loading'")
@@ -64,6 +79,20 @@ describe('customer mine UI integration', () => {
     expect(source).toContain('route === customerBottomNavRoutes.shoppingBag')
     expect(source).toContain('goFavorites()')
     expect(source).toContain('goShoppingBag()')
+  })
+
+  it('registers account utility routes for profile, wallet, address, and customer orders', () => {
+    expect(source).toContain('const targetRoute = route as AppRoute')
+    expect(source).toContain('navigatingRoute.value = targetRoute')
+    expect(source).toContain('redirectTo(targetRoute')
+    expect(routesSource).toContain("customerProfile: '/pages/customer/profile/index'")
+    expect(routesSource).toContain("customerWallet: '/pages/customer/wallet/index'")
+    expect(routesSource).toContain("customerAddress: '/pages/customer/address/index'")
+    expect(routesSource).toContain("customerOrders: '/pages/customer/orders/index'")
+    expect(pagesJson).toContain('"path": "pages/customer/profile/index"')
+    expect(pagesJson).toContain('"path": "pages/customer/wallet/index"')
+    expect(pagesJson).toContain('"path": "pages/customer/address/index"')
+    expect(pagesJson).toContain('"path": "pages/customer/orders/index"')
   })
 
   it('keeps merchant, admin, staff, and workbench entries out of the Mine page', () => {
@@ -115,8 +144,10 @@ describe('customer mine UI integration', () => {
     expect(source).not.toContain('<text>Saved</text>')
   })
 
-  it('does not use order cover images, so no image fallback is required in Mine UI', () => {
-    expect(source).not.toContain('<image')
+  it('renders only the account avatar image and keeps order cover images out of Mine UI', () => {
+    expect(source).toContain('<image v-if="viewModel.hasAvatar"')
+    expect(source).toContain('class="identity-avatar-image"')
+    expect(source).toContain('mode="aspectFill"')
     expect(source).not.toContain('@error="markImageFailed')
   })
 })

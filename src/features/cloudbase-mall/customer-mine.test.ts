@@ -21,6 +21,9 @@ const createSnapshot = (): CustomerMineSnapshot => ({
     maskedPhoneNumber: '',
     statusLabel: 'Phone not bound',
   },
+  profile: {
+    avatarUrl: 'cloud://avatars/customer-1.png',
+  },
   recentOrders: [],
   recentOrderTotalCount: 0,
   utilities: [
@@ -55,6 +58,7 @@ describe('CloudBase customer mine facade', () => {
     expect(getCustomerMineSnapshot).toHaveBeenCalledTimes(1)
     expect(view.loadingState).toBe('idle')
     expect(view.identityDisplayName).toBe('Wechat Customer')
+    expect(view.avatarUrl).toBe('cloud://avatars/customer-1.png')
   })
 
   it('loads the mine snapshot through the mallApi client', async () => {
@@ -63,7 +67,14 @@ describe('CloudBase customer mine facade', () => {
 
     expect(getCustomerMineSnapshot).toHaveBeenCalledTimes(1)
     expect(view.identityLabel).toBe('已登录')
-    expect(view.utilities.map((entry) => entry.key)).toEqual(['favorites', 'shoppingBag'])
+    expect(view.utilities.map((entry) => entry.key)).toEqual([
+      'profile',
+      'wallet',
+      'address',
+      'orders',
+      'favorites',
+      'shoppingBag',
+    ])
   })
 
   it('maps failures to a failure view', async () => {

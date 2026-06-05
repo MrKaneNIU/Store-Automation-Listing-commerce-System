@@ -36,10 +36,9 @@ const preparePublishedProduct = async () => {
 }
 
 describe('submitCustomerWechatOrder', () => {
-  it('logs in, authorizes phone number, and creates an order from the authorized session', async () => {
+  it('logs in and creates an order without requiring phone authorization', async () => {
     const { product, sku } = await preparePublishedProduct()
     const confirmLogin = vi.fn().mockResolvedValue(true)
-    const confirmPhoneAuthorization = vi.fn().mockResolvedValue(true)
 
     const order = await submitCustomerWechatOrder({
       product,
@@ -47,14 +46,12 @@ describe('submitCustomerWechatOrder', () => {
       quantity: 1,
       authService: mockWechatAuthService,
       confirmLogin,
-      confirmPhoneAuthorization,
     })
 
     expect(confirmLogin).toHaveBeenCalledTimes(1)
-    expect(confirmPhoneAuthorization).toHaveBeenCalledTimes(1)
     expect(order).toMatchObject({
       customerName: '微信用户',
-      customerPhone: '13800000000',
+      customerPhone: '',
       customerId: 'mock-customer-001',
       customerAuthSource: 'mock_wechat',
       status: 'pending_merchant_confirm',
@@ -65,7 +62,6 @@ describe('submitCustomerWechatOrder', () => {
   it('does not prompt again when the current session already has a phone number', async () => {
     const { product, sku } = await preparePublishedProduct()
     const confirmLogin = vi.fn().mockResolvedValue(true)
-    const confirmPhoneAuthorization = vi.fn().mockResolvedValue(true)
     await mockWechatAuthService.login()
     await mockWechatAuthService.authorizePhoneNumber()
 
@@ -75,18 +71,15 @@ describe('submitCustomerWechatOrder', () => {
       quantity: 1,
       authService: mockWechatAuthService,
       confirmLogin,
-      confirmPhoneAuthorization,
     })
 
     expect(confirmLogin).not.toHaveBeenCalled()
-    expect(confirmPhoneAuthorization).not.toHaveBeenCalled()
     expect(order?.customerPhone).toBe('13800000000')
   })
 
-  it('does not create an order or reserve stock when phone authorization is canceled', async () => {
+  it('does not create an order or reserve stock when login is canceled', async () => {
     const { product, sku } = await preparePublishedProduct()
-    const confirmLogin = vi.fn().mockResolvedValue(true)
-    const confirmPhoneAuthorization = vi.fn().mockResolvedValue(false)
+    const confirmLogin = vi.fn().mockResolvedValue(false)
 
     const order = await submitCustomerWechatOrder({
       product,
@@ -94,9 +87,9 @@ describe('submitCustomerWechatOrder', () => {
       quantity: 1,
       authService: mockWechatAuthService,
       confirmLogin,
-      confirmPhoneAuthorization,
     })
 
+    expect(confirmLogin).toHaveBeenCalledTimes(1)
     expect(order).toBeNull()
     expect(mallRepository.listOrders()).toHaveLength(0)
     expect(mallRepository.listSkus(product.id)[0].stock).toBe(sku.stock)

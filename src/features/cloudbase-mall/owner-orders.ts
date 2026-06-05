@@ -1,6 +1,10 @@
 import type { Order, OrderStatus } from '../../domain/order/types'
 import { getRuntimeCloudBaseMallApiClient } from '../../services/cloudbase/runtime-mall-api-client'
-import type { CloudBaseMallApiClient } from '../../services/cloudbase/mall-api-client'
+import type {
+  CloudBaseMallApiClient,
+  ManagerOrderNotificationConfig,
+  ManagerOrderNotificationSubscriptionResult,
+} from '../../services/cloudbase/mall-api-client'
 import type {
   OwnerOrderCommandResult,
   OwnerOrderListItem,
@@ -54,5 +58,36 @@ export const cancelCloudBaseOwnerOrder = async (
     return { message: `订单已取消：${order.id}` }
   } catch (error) {
     return { message: error instanceof Error ? error.message : '订单取消失败' }
+  }
+}
+
+export type ManagerOrderNotificationCommandResult = {
+  message: string
+  notificationConfig: ManagerOrderNotificationConfig
+}
+
+export const getCloudBaseManagerOrderNotificationConfig = async (
+  client: CloudBaseMallApiClient = getRuntimeCloudBaseMallApiClient(),
+): Promise<ManagerOrderNotificationConfig> => client.getManagerOrderNotificationConfig()
+
+export const subscribeCloudBaseManagerOrderNotifications = async (
+  templateId: string,
+  client: CloudBaseMallApiClient = getRuntimeCloudBaseMallApiClient(),
+): Promise<ManagerOrderNotificationCommandResult> => {
+  try {
+    const result: ManagerOrderNotificationSubscriptionResult = await client.subscribeManagerOrderNotifications({ templateId })
+    return {
+      message: '订单提醒已开启',
+      notificationConfig: result.notificationConfig,
+    }
+  } catch (error) {
+    return {
+      message: error instanceof Error && error.message.trim() ? error.message : '订单提醒开启失败',
+      notificationConfig: {
+        isConfigured: Boolean(templateId),
+        templateId,
+        subscribed: false,
+      },
+    }
   }
 }

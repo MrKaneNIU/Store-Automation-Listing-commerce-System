@@ -74,22 +74,25 @@ describe('customer product detail real checkout authorization wiring', () => {
     expect(source).toContain('authService: customerAuthService')
   })
 
-  it('requests a WeChat phone code before submitting the order', () => {
-    expect(source).toContain('open-type="getPhoneNumber"')
-    expect(source).toContain('@getphonenumber="submitOrderWithPhoneAuthorization"')
-    expect(source).toContain('requestPhoneNumber: () => Promise.resolve(phoneCode ?? null)')
-    expect(source).not.toContain('confirmLogin')
+  it('prompts account login before submitting the order without requesting a phone code', () => {
+    expect(source).toContain('@tap="submitOrder"')
+    expect(source).toContain('confirmLogin: confirmCustomerLoginForOrder')
+    expect(source).toContain("title: '请先登录'")
+    expect(source).toContain("content: '登录账户后即可提交订单。'")
+    expect(source).toContain("confirmText: '登录下单'")
+    expect(source).not.toContain('open-type="getPhoneNumber"')
+    expect(source).not.toContain('@getphonenumber')
+    expect(source).not.toContain('requestPhoneNumber')
+    expect(source).not.toContain('手机号授权未完成')
     expect(source).not.toContain('confirmPhoneAuthorization')
-    expect(source).not.toContain('authPrompt')
-    expect(source).not.toContain('phoneCodeRequest')
   })
 
-  it('uses direct order submit only after the customer session is phone-bound', () => {
-    expect(source).toContain('const hasBoundCustomerPhone = ref(false)')
-    expect(source).toContain('v-if="hasBoundCustomerPhone"')
-    expect(source).toContain('@tap="submitBoundOrder"')
-    expect(source).toContain('v-else')
-    expect(source).toContain('open-type="getPhoneNumber"')
+  it('uses a single account-login order submit path regardless of phone binding state', () => {
+    expect(source).toContain('@tap="submitOrder"')
+    expect(source).not.toContain('const hasBoundCustomerPhone = ref(false)')
+    expect(source).not.toContain('v-if="hasBoundCustomerPhone"')
+    expect(source).not.toContain('@tap="submitBoundOrder"')
+    expect(source).not.toContain('open-type="getPhoneNumber"')
   })
 
   it('lets sold-out SKU pills stay tappable so selected spec and stock labels can update', () => {
@@ -116,7 +119,7 @@ describe('customer product detail real checkout authorization wiring', () => {
     expect(source).toContain('const addToShoppingBag = async () => {')
     expect(source).toContain('@tap="addToShoppingBag"')
     expect(source).toContain('submitCloudBaseCustomerProductDetailOrder')
-    expect(source).toContain('submitOrderWithPhoneAuthorization')
+    expect(source).toContain('confirmCustomerLoginForOrder')
   })
 
   it('does not route favorites through checkout, stock, or shopping-bag commands', () => {

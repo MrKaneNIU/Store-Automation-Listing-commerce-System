@@ -13,6 +13,15 @@
         <text class="hero-title">{{ pendingOrderCount }} 单待确认</text>
         <text class="hero-desc">确认与取消动作继续走现有订单 facade，库存扣减和审计规则保持不变。</text>
       </view>
+      <button
+        class="reminder-button"
+        :class="{ busy: isUpdatingReminder }"
+        :disabled="isUpdatingReminder || !notificationConfig.isConfigured || notificationConfig.subscribed"
+        hover-class="press-feedback"
+        @tap="enableOrderReminders"
+      >
+        {{ reminderButtonLabel }}
+      </button>
     </view>
 
     <view v-if="viewModel.orders.length > 0" class="order-list">
@@ -119,8 +128,11 @@ import type { OwnerOrdersViewModel } from '../../../features/owner-orders/owner-
 import {
   cancelCloudBaseOwnerOrder,
   confirmCloudBaseOwnerOrder,
+  getCloudBaseManagerOrderNotificationConfig,
   getCloudBaseOwnerOrdersView,
+  subscribeCloudBaseManagerOrderNotifications,
 } from '../../../features/cloudbase-mall/owner-orders'
+import type { ManagerOrderNotificationConfig } from '../../../services/cloudbase/mall-api-client'
 
 const message = ref('')
 const DEFAULT_PAGE_TOP_PADDING = 'calc(env(safe-area-inset-top) + 12rpx)'
@@ -131,14 +143,37 @@ const navigatingRoute = ref<AppRoute | ''>('')
 const processingOrderId = ref('')
 const processingOrderAction = ref<'confirm' | 'cancel' | ''>('')
 const isLoadingOrders = ref(false)
+const isUpdatingReminder = ref(false)
 const loadError = ref('')
 const viewModel = ref<OwnerOrdersViewModel>({
   orders: [],
   emptyMessage: '暂无订单',
 })
+const notificationConfig = ref<ManagerOrderNotificationConfig>({
+  isConfigured: false,
+  templateId: '',
+  subscribed: false,
+})
 let pendingRefresh: Promise<void> | null = null
 
 const pendingOrderCount = computed(() => viewModel.value.orders.filter((order) => order.canConfirm).length)
+const reminderButtonLabel = computed(() => {
+  if (!notificationConfig.value.isConfigured) return '提醒未配置'
+  if (notificationConfig.value.subscribed) return '提醒已开启'
+  return isUpdatingReminder.value ? '开启中...' : '开启提醒'
+})
+
+type SubscribeMessageResult = Record<string, string | undefined> & {
+  errMsg?: string
+}
+
+type SubscribeRequester = {
+  requestSubscribeMessage?: (options: {
+    tmplIds: string[]
+    success?: (result: SubscribeMessageResult) => void
+    fail?: (error: { errMsg?: string }) => void
+  }) => void
+}
 
 const stayOrders = () => {
   uni.pageScrollTo({ scrollTop: 0, duration: 180 })
@@ -200,6 +235,28 @@ const refreshView = () => {
   return pendingRefresh
 }
 
+const refreshNotificationConfig = async () => {
+  notificationConfig.value = await getCloudBaseManagerOrderNotificationConfig()
+}
+
+const requestOrderReminderPermission = (templateId: string) => new Promise<boolean>((resolve) => {
+  const requester = uni as unknown as SubscribeRequester
+  if (!requester.requestSubscribeMessage) {
+    resolve(false)
+    return
+  }
+
+  requester.requestSubscribeMessage({
+    tmplIds: [templateId],
+    success: (result) => {
+      resolve(result[templateId] === 'accept')
+    },
+    fail: () => {
+      resolve(false)
+    },
+  })
+})
+
 onShow(() => {
   navigatingRoute.value = ''
 
@@ -208,7 +265,31 @@ onShow(() => {
   }
 
   void refreshView()
+  void refreshNotificationConfig().catch((error) => {
+    message.value = getErrorMessage(error)
+  })
 })
+
+const enableOrderReminders = async () => {
+  if (isUpdatingReminder.value || !notificationConfig.value.isConfigured || notificationConfig.value.subscribed) {
+    return
+  }
+
+  isUpdatingReminder.value = true
+  try {
+    const accepted = await requestOrderReminderPermission(notificationConfig.value.templateId)
+    if (!accepted) {
+      message.value = '未获得订阅授权'
+      return
+    }
+
+    const result = await subscribeCloudBaseManagerOrderNotifications(notificationConfig.value.templateId)
+    notificationConfig.value = result.notificationConfig
+    message.value = result.message
+  } finally {
+    isUpdatingReminder.value = false
+  }
+}
 
 const confirm = async (orderId: string) => {
   if (processingOrderId.value) {
@@ -288,11 +369,16 @@ const cancel = async (orderId: string) => {
 
 .primary::after,
 .secondary::after,
+.reminder-button::after,
 .nav-item::after {
   border: 0;
 }
 
 .hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24rpx;
   box-sizing: border-box;
   margin-bottom: 26rpx;
   padding: 34rpx;
@@ -328,6 +414,28 @@ const cancel = async (orderId: string) => {
   color: #d7d7d7;
   font-size: 24rpx;
   line-height: 1.55;
+}
+
+.reminder-button {
+  flex: 0 0 auto;
+  min-width: 156rpx;
+  min-height: 62rpx;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 22rpx;
+  border-radius: 999rpx;
+  background: #ffffff;
+  color: #202020;
+  font-size: 24rpx;
+  font-weight: 600;
+  line-height: 62rpx;
+  white-space: nowrap;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.reminder-button[disabled] {
+  color: #9a9a9a;
+  background: #eeeeee;
 }
 
 .order-list {

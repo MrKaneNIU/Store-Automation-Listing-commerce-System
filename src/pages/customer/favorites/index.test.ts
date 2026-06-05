@@ -33,6 +33,16 @@ describe('customer favorites page UI integration', () => {
     expect(source).toContain('@error="markImageFailed(item.productId)"')
   })
 
+  it('aligns the custom header with the WeChat capsule and removes the title-bar refresh action', () => {
+    expect(source).toContain('<view class="favorites-header" :style="{ paddingTop: headerTopPadding }">')
+    expect(source).toContain('onMounted(syncHeaderTopPadding)')
+    expect(source).toContain('uni.getMenuButtonBoundingClientRect?.()')
+    expect(source).toContain('<view class="nav-spacer" />')
+    expect(source).toContain('position: sticky;')
+    expect(source).not.toContain('aria-label="重新加载收藏"')
+    expect(source).not.toContain('refresh-mark')
+  })
+
   it('removes favorites through the favorites remove command without SKU or checkout wiring', () => {
     const pageStateSource = readFileSync(path.resolve(__dirname, 'useCustomerFavoritesPageState.ts'), 'utf8')
     const combinedSource = `${source}\n${pageStateSource}`

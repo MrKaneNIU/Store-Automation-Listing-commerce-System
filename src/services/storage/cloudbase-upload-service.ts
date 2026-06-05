@@ -11,7 +11,7 @@ import type {
 } from './upload-service'
 
 type WxCloudRuntime = {
-  init?: (options: { env: string }) => void
+  init?: (options: { env: string; traceUser?: boolean }) => void
   uploadFile: (request: { cloudPath: string; filePath: string }) => Promise<{ fileID: string }>
   getTempFileURL: (request: { fileList: Array<{ fileID: string; maxAge?: number }> }) => Promise<{
     fileList: Array<{ fileID: string; tempFileURL?: string; download_url?: string }>
@@ -58,7 +58,7 @@ const ensureRuntime = (): WxCloudRuntime => {
   }
 
   if (!initialized) {
-    wx.cloud.init?.({ env: cloudBaseEnvId })
+    wx.cloud.init?.({ env: cloudBaseEnvId, traceUser: true })
     initialized = true
   }
 

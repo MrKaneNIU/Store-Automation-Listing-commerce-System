@@ -163,4 +163,77 @@ describe('mallApi runtime WeChat identity', () => {
       },
     })
   })
+
+  it('builds a WeChat subscription-message payload without hardcoded template or manager identity', () => {
+    const payload = __private__.createOrderNotificationPayload({
+      templateId: 'runtime-template-id',
+      managerOpenid: 'manager-runtime-openid',
+      order: {
+        id: 'order-1',
+        totalAmount: 129,
+        createdAt: '2026-06-04T09:00:00.000Z',
+        items: [{ productName: 'Cotton Shirt' }],
+      },
+    })
+
+    expect(payload).toMatchObject({
+      touser: 'manager-runtime-openid',
+      template_id: 'runtime-template-id',
+      page: 'pages/owner/orders/index',
+      data: {
+        thing1: { value: 'Cotton Shirt' },
+        amount2: { value: '129.00元' },
+        phrase3: { value: '待确认' },
+        time4: { value: '2026-06-04 09:00' },
+        thing5: { value: 'order-1' },
+      },
+    })
+  })
+
+  it('sends order notifications through the WeChat subscribe-message endpoint', async () => {
+    const calls = []
+
+    await expect(__private__.sendWechatOrderNotification({
+      templateId: 'runtime-template-id',
+      managerOpenid: 'manager-runtime-openid',
+      order: {
+        id: 'order-1',
+        totalAmount: 129,
+        createdAt: '2026-06-04T09:00:00.000Z',
+        items: [{ productName: 'Cotton Shirt' }],
+      },
+    }, {
+      getWechatAccessToken: async () => 'runtime-access-token',
+      requestJson: async (url, options) => {
+        calls.push({ url, options })
+        return { errcode: 0 }
+      },
+    })).resolves.toEqual({ errcode: 0 })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0].url).toBe(
+      'https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=runtime-access-token',
+    )
+    expect(JSON.parse(calls[0].options.body)).toMatchObject({
+      touser: 'manager-runtime-openid',
+      template_id: 'runtime-template-id',
+    })
+    expect(__private__.createRuntimeHandlerOptions().sendOrderNotification).toBe(__private__.sendWechatOrderNotification)
+  })
+
+  it('surfaces WeChat subscribe-message API failures for core logging', async () => {
+    await expect(__private__.sendWechatOrderNotification({
+      templateId: 'runtime-template-id',
+      managerOpenid: 'manager-runtime-openid',
+      order: {
+        id: 'order-1',
+        totalAmount: 129,
+        createdAt: '2026-06-04T09:00:00.000Z',
+        items: [{ productName: 'Cotton Shirt' }],
+      },
+    }, {
+      getWechatAccessToken: async () => 'runtime-access-token',
+      requestJson: async () => ({ errcode: 43101, errmsg: 'user refuse to accept the msg' }),
+    })).rejects.toThrow('Wechat order notification failed: 43101 user refuse to accept the msg')
+  })
 })

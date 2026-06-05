@@ -41,8 +41,11 @@ const SUPPORTED_ACTIONS = [
   'supplementProductImages',
   'createCustomerOrder',
   'getCustomerOrder',
+  'getCustomerOrdersSnapshot',
   'getOwnerOrderSnapshot',
   'getOwnerDashboardSnapshot',
+  'getManagerOrderNotificationConfig',
+  'subscribeManagerOrderNotifications',
   'getCustomerMineSnapshot',
   'getCustomerShoppingBagSnapshot',
   'addCustomerShoppingBagItem',
@@ -50,6 +53,7 @@ const SUPPORTED_ACTIONS = [
   'selectCustomerShoppingBagItem',
   'removeCustomerShoppingBagItem',
   'clearUnavailableCustomerShoppingBagItems',
+  'checkoutCustomerShoppingBag',
   'getCustomerFavoriteProductsSnapshot',
   'favoriteCustomerProduct',
   'unfavoriteCustomerProduct',
@@ -101,6 +105,8 @@ const COLLECTIONS = [
   'admin_accounts',
   'admin_sessions',
   'admin_audit_logs',
+  'order_notification_subscriptions',
+  'order_notification_logs',
   'uploaded_assets',
   'ocr_jobs',
 ]
@@ -376,6 +382,13 @@ const parseCustomerOrderInput = (value) => {
       phoneNumber: readOptionalString(value.session, 'phoneNumber'),
       authSource,
     },
+  }
+}
+
+const parseOrderNotificationSubscriptionInput = (value) => {
+  if (!isRecord(value)) throw validationError('Request body must be a JSON object')
+  return {
+    templateId: readString(value, 'templateId'),
   }
 }
 
@@ -932,6 +945,7 @@ const toCustomerDocument = (customer) => ({
   ...(customer.appid ? { appid: customer.appid } : {}),
   ...(customer.unionid ? { unionid: customer.unionid } : {}),
   ...(customer.phoneNumber ? { phone_number: customer.phoneNumber } : {}),
+  ...(customer.avatarUrl ? { avatar_url: customer.avatarUrl } : {}),
   auth_source: customer.authSource,
   created_at: customer.createdAt,
   updated_at: customer.updatedAt,
@@ -943,6 +957,7 @@ const toCustomer = (document) => ({
   ...(document.appid ? { appid: document.appid } : {}),
   ...(document.unionid ? { unionid: document.unionid } : {}),
   ...(document.phone_number ? { phoneNumber: document.phone_number } : {}),
+  ...(document.avatar_url ? { avatarUrl: document.avatar_url } : {}),
   authSource: document.auth_source,
   createdAt: document.created_at,
   updatedAt: document.updated_at,
@@ -1012,6 +1027,53 @@ const toCustomerFavorite = (document) => ({
 
 const createCustomerFavoriteId = (customerId, productId) =>
   `favorite-${Buffer.from(`${customerId}:${productId}`).toString('hex')}`
+
+const createOrderNotificationSubscriptionId = (managerOpenid, templateId) =>
+  `order-notification-subscription-${Buffer.from(`${managerOpenid}:${templateId}`).toString('hex')}`
+
+const toOrderNotificationSubscriptionDocument = (subscription) => ({
+  _id: subscription.id,
+  manager_openid: subscription.managerOpenid,
+  manager_account: subscription.managerAccount,
+  template_id: subscription.templateId,
+  status: subscription.status,
+  created_at: subscription.createdAt,
+  updated_at: subscription.updatedAt,
+})
+
+const toOrderNotificationSubscription = (document) => ({
+  id: document._id,
+  managerOpenid: document.manager_openid,
+  managerAccount: document.manager_account,
+  templateId: document.template_id,
+  status: document.status,
+  createdAt: document.created_at,
+  updatedAt: document.updated_at,
+})
+
+const toOrderNotificationLogDocument = (log) => ({
+  _id: log.id,
+  order_id: log.orderId,
+  ...(log.managerOpenid ? { manager_openid: log.managerOpenid } : {}),
+  ...(log.managerAccount ? { manager_account: log.managerAccount } : {}),
+  ...(log.templateId ? { template_id: log.templateId } : {}),
+  status: log.status,
+  reason: log.reason,
+  ...(log.errorMessage ? { error_message: log.errorMessage } : {}),
+  created_at: log.createdAt,
+})
+
+const toOrderNotificationLog = (document) => ({
+  id: document._id,
+  orderId: document.order_id,
+  ...(document.manager_openid ? { managerOpenid: document.manager_openid } : {}),
+  ...(document.manager_account ? { managerAccount: document.manager_account } : {}),
+  ...(document.template_id ? { templateId: document.template_id } : {}),
+  status: document.status,
+  reason: document.reason,
+  ...(document.error_message ? { errorMessage: document.error_message } : {}),
+  createdAt: document.created_at,
+})
 
 const toAuditLogDocument = (auditLog) => ({
   _id: auditLog.id,
@@ -1127,6 +1189,9 @@ const createCustomerMineSnapshot = async (customer, context) => {
       displayName: customer.phoneNumber ? maskPhoneNumber(customer.phoneNumber) : 'Wechat Customer',
       authSource: customer.authSource,
       openidMasked: maskOpenid(customer.openid),
+    },
+    profile: {
+      avatarUrl: customer.avatarUrl || '',
     },
     phone: {
       isBound: Boolean(customer.phoneNumber),
@@ -1377,6 +1442,25 @@ const createRepository = (store) => ({
     await store.deleteByField('customer_favorites', '_id', favoriteId)
     return favorite ? toCustomerFavorite(favorite) : null
   },
+  saveOrderNotificationSubscription: async (subscription) =>
+    toOrderNotificationSubscription(await store.upsert(
+      'order_notification_subscriptions',
+      toOrderNotificationSubscriptionDocument(subscription),
+    )),
+  listOrderNotificationSubscriptions: async (templateId) => {
+    const documents = templateId
+      ? await store.list('order_notification_subscriptions', { template_id: templateId, status: 'active' })
+      : await store.list('order_notification_subscriptions', { status: 'active' })
+    return documents.map(toOrderNotificationSubscription).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  },
+  saveOrderNotificationLog: async (log) =>
+    toOrderNotificationLog(await store.insert('order_notification_logs', toOrderNotificationLogDocument(log))),
+  listOrderNotificationLogs: async (orderId) => {
+    const documents = orderId
+      ? await store.list('order_notification_logs', { order_id: orderId })
+      : await store.list('order_notification_logs')
+    return documents.map(toOrderNotificationLog).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  },
   saveAuditLog: async (auditLog) => store.insert('operation_audit_logs', toAuditLogDocument(auditLog)),
   saveAdminAccount: async (account) => store.insert('admin_accounts', account),
   updateAdminAccount: async (account) => store.replace('admin_accounts', account),
@@ -1559,6 +1643,135 @@ const findShoppingBagItemForCustomer = async (context, customerId, itemId) => {
 
 const findCustomerFavoriteByProduct = async (context, customerId, productId) =>
   (await context.repository.listCustomerFavorites(customerId)).find((favorite) => favorite.productId === productId) || null
+
+const createOrderNotificationConfig = async (context, identity) => {
+  const templateId = context.orderNotificationTemplateId || ''
+  const subscriptions = identity && templateId
+    ? await context.repository.listOrderNotificationSubscriptions(templateId)
+    : []
+
+  return {
+    isConfigured: Boolean(templateId),
+    templateId,
+    subscribed: Boolean(identity && subscriptions.some((subscription) => subscription.managerOpenid === identity.openid)),
+  }
+}
+
+const saveOrderNotificationLog = (context, log) =>
+  context.repository.saveOrderNotificationLog({
+    id: context.createId('order-notification-log'),
+    createdAt: context.now(),
+    ...log,
+  })
+
+const notifyManagersForCreatedOrder = async (context, order) => {
+  const templateId = context.orderNotificationTemplateId || ''
+  if (!templateId) {
+    await saveOrderNotificationLog(context, {
+      orderId: order.id,
+      status: 'skipped',
+      reason: 'missing_template',
+    })
+    return
+  }
+
+  const subscriptions = await context.repository.listOrderNotificationSubscriptions(templateId)
+  if (subscriptions.length === 0) {
+    await saveOrderNotificationLog(context, {
+      orderId: order.id,
+      templateId,
+      status: 'skipped',
+      reason: 'no_subscribers',
+    })
+    return
+  }
+
+  for (const subscription of subscriptions) {
+    try {
+      if (typeof context.sendOrderNotification !== 'function') {
+        throw new Error('Order notification sender is not configured')
+      }
+      await context.sendOrderNotification({
+        templateId,
+        managerOpenid: subscription.managerOpenid,
+        managerAccount: subscription.managerAccount,
+        order,
+      })
+      await saveOrderNotificationLog(context, {
+        orderId: order.id,
+        managerOpenid: subscription.managerOpenid,
+        managerAccount: subscription.managerAccount,
+        templateId,
+        status: 'sent',
+        reason: 'delivered',
+      })
+    } catch (error) {
+      await saveOrderNotificationLog(context, {
+        orderId: order.id,
+        managerOpenid: subscription.managerOpenid,
+        managerAccount: subscription.managerAccount,
+        templateId,
+        status: 'failed',
+        reason: 'delivery_failed',
+        errorMessage: error instanceof Error ? error.message : 'Order notification delivery failed',
+      })
+    }
+  }
+}
+
+const savePendingCustomerOrder = async (context, input) => {
+  if (input.idempotencyKey) {
+    const existingOrder = (await context.repository.listOrders()).find((order) => order.idempotencyKey === input.idempotencyKey)
+    if (existingOrder) return existingOrder
+  }
+
+  const timestamp = context.now()
+  const orderItems = input.items.map(({ product, sku, quantity }) => ({
+    skuId: sku.id,
+    productId: product.id,
+    productName: product.productName,
+    productCode: product.productCode,
+    spec: sku.spec,
+    salePrice: sku.salePrice,
+    quantity,
+  }))
+  const order = {
+    id: context.createId('order'),
+    customerName: input.customerName || 'Wechat Customer',
+    customerPhone: input.customerPhone,
+    customerId: input.customerId,
+    customerAuthSource: input.customerAuthSource,
+    ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+    status: 'pending_merchant_confirm',
+    items: orderItems,
+    totalAmount: orderItems.reduce((sum, item) => sum + item.salePrice * item.quantity, 0),
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  }
+
+  for (const item of input.items) {
+    await context.repository.updateSku({ ...item.sku, stock: item.sku.stock - item.quantity })
+    await context.repository.saveInventoryLedgerEntry({
+      id: context.createId('ledger'),
+      skuId: item.sku.id,
+      orderId: order.id,
+      action: 'reserve',
+      quantityDelta: -item.quantity,
+      sourceType: 'order',
+      sourceId: order.id,
+      note: `reserve stock for order ${order.id}`,
+      createdAt: timestamp,
+    })
+  }
+
+  const savedOrder = await context.repository.saveOrder(order)
+  try {
+    await notifyManagersForCreatedOrder(context, savedOrder)
+  } catch {
+    // Notification observability must not make order creation fail.
+  }
+  return savedOrder
+}
 
 const resolveIdentityRoles = async (identity, context) => {
   if (context.allowTestIdentityRoles && identity.roles.length > 0) return identity
@@ -1992,6 +2205,56 @@ const apiHandlers = {
       invalidatedSnapshotKeys: [`customer-shopping-bag:${customer.id}:v1`],
     }
   },
+  async checkoutCustomerShoppingBag(event, context) {
+    const customer = await resolveShoppingBagCustomer(event, context)
+
+    const shoppingBagItems = await context.repository.listShoppingBagItems(customer.id)
+    const selectedItems = shoppingBagItems.filter((item) => item.isSelected !== false)
+    if (selectedItems.length === 0) throw conflictError('Select an available item before checkout')
+
+    const [products, skus] = await Promise.all([
+      context.repository.listProducts(),
+      context.repository.listSkus(),
+    ])
+    const productById = new Map(products.map((product) => [product.id, product]))
+    const skuById = new Map(skus.map((sku) => [sku.id, sku]))
+    const orderInputItems = selectedItems.map((item) => {
+      const product = productById.get(item.productId)
+      const sku = skuById.get(item.skuId)
+      const availability = getShoppingBagAvailability(product, sku)
+      if (availability !== 'available' || sku.stock < item.quantity) {
+        throw conflictError('Selected shopping-bag items are unavailable or stock is insufficient')
+      }
+      return {
+        product,
+        sku,
+        quantity: item.quantity,
+      }
+    })
+
+    const order = await savePendingCustomerOrder(context, {
+      customerName: 'Wechat Customer',
+      customerPhone: customer.phoneNumber || '',
+      customerId: customer.id,
+      customerAuthSource: 'wechat',
+      items: orderInputItems,
+    })
+    const removedItemIds = []
+    for (const item of selectedItems) {
+      await context.repository.deleteShoppingBagItem(item.id)
+      removedItemIds.push(item.id)
+    }
+
+    return {
+      order,
+      removedItemIds,
+      snapshot: await createShoppingBagSnapshot(customer.id, context),
+      invalidatedSnapshotKeys: [
+        `customer-shopping-bag:${customer.id}:v1`,
+        `customer-mine:${customer.id}:v1`,
+      ],
+    }
+  },
   async getCustomerFavoriteProductsSnapshot(event, context) {
     const customer = await resolveFavoriteCustomer(event, context)
     return createFavoriteProductsSnapshot(customer.id, context)
@@ -2419,63 +2682,76 @@ const apiHandlers = {
       ? await resolveWechatCustomerForOrder(event, context)
       : null
     const phoneNumber = customer ? customer.phoneNumber : input.session.phoneNumber
-    if (!phoneNumber) throw unauthorizedError('Wechat phone authorization is required before ordering')
     const product = await findProduct(context.repository, input.productId)
     const sku = (await context.repository.listSkus(product.id)).find((item) => item.id === input.skuId)
     if (!sku) throw notFoundError('SKU not found')
     if (product.status !== 'published' || sku.stock < input.quantity) {
       throw conflictError('Product is unpublished or stock is insufficient')
     }
-    if (input.idempotencyKey) {
-      const existingOrder = (await context.repository.listOrders()).find((order) => order.idempotencyKey === input.idempotencyKey)
-      if (existingOrder) {
-        return { order: existingOrder }
-      }
+    return {
+      order: await savePendingCustomerOrder(context, {
+        customerName: input.session.nickname || 'Wechat Customer',
+        customerPhone: phoneNumber || '',
+        customerId: customer?.id || input.session.customerId,
+        customerAuthSource: customer ? 'wechat' : (input.session.authSource || 'mock_wechat'),
+        idempotencyKey: input.idempotencyKey,
+        items: [{ product, sku, quantity: input.quantity }],
+      }),
     }
-    const timestamp = context.now()
-    const order = {
-      id: context.createId('order'),
-      customerName: input.session.nickname || 'Wechat Customer',
-      customerPhone: phoneNumber,
-      customerId: customer?.id || input.session.customerId,
-      customerAuthSource: customer ? 'wechat' : (input.session.authSource || 'mock_wechat'),
-      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
-      status: 'pending_merchant_confirm',
-      items: [{
-        skuId: sku.id,
-        productId: product.id,
-        productName: product.productName,
-        productCode: product.productCode,
-        spec: sku.spec,
-        salePrice: sku.salePrice,
-        quantity: input.quantity,
-      }],
-      totalAmount: sku.salePrice * input.quantity,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }
-    await context.repository.updateSku({ ...sku, stock: sku.stock - input.quantity })
-    await context.repository.saveInventoryLedgerEntry({
-      id: context.createId('ledger'),
-      skuId: sku.id,
-      orderId: order.id,
-      action: 'reserve',
-      quantityDelta: -input.quantity,
-      sourceType: 'order',
-      sourceId: order.id,
-      note: `reserve stock for order ${order.id}`,
-      createdAt: timestamp,
-    })
-    return { order: await context.repository.saveOrder(order) }
   },
   async getCustomerOrder(event, context) {
     return { order: await findOrder(context.repository, readString(event.params || {}, 'orderId')) }
+  },
+  async getCustomerOrdersSnapshot(event, context) {
+    const customer = await resolveMineCustomer(event, context)
+    const orders = (await context.repository.listOrders())
+      .filter((order) => order.customerId === customer.id)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+
+    return {
+      customerId: customer.id,
+      orders,
+      totalCount: orders.length,
+      serverTime: context.now(),
+    }
   },
   async getOwnerOrderSnapshot(event, context) {
     await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'orderConfirmation')
     return {
       orders: await context.repository.listOrders(),
       serverTime: context.now(),
+    }
+  },
+  async getManagerOrderNotificationConfig(event, context) {
+    await requireAdminOrResolvedAnyRole(event, context, ['owner'], 'orderConfirmation')
+    const identity = isRecord(event.identity) ? await requireResolvedIdentity(event, context) : null
+    return createOrderNotificationConfig(context, identity)
+  },
+  async subscribeManagerOrderNotifications(event, context) {
+    const adminSession = await requireAdminPermission(event, context, 'orderConfirmation')
+    const identity = await requireResolvedIdentity(event, context)
+    const input = parseOrderNotificationSubscriptionInput(event.payload)
+    const templateId = context.orderNotificationTemplateId || ''
+    if (!templateId) throw conflictError('Order notification template is not configured')
+    if (input.templateId !== templateId) {
+      throw validationError('templateId does not match configured order notification template')
+    }
+    const timestamp = context.now()
+    const existing = (await context.repository.listOrderNotificationSubscriptions(templateId))
+      .find((subscription) => subscription.managerOpenid === identity.openid)
+    const subscription = await context.repository.saveOrderNotificationSubscription({
+      id: existing?.id || createOrderNotificationSubscriptionId(identity.openid, templateId),
+      managerOpenid: identity.openid,
+      managerAccount: adminSession.account,
+      templateId,
+      status: 'active',
+      createdAt: existing?.createdAt || timestamp,
+      updatedAt: timestamp,
+    })
+
+    return {
+      subscription,
+      notificationConfig: await createOrderNotificationConfig(context, identity),
     }
   },
   async listMerchantOrders(_event, context) {
@@ -2540,6 +2816,8 @@ const createMallApiHandler = (store, options = {}) => {
     allowMockCustomerOrder: options.allowMockCustomerOrder === true,
     exchangePhoneCode: options.exchangePhoneCode,
     ocrProvider: options.ocrProvider || createHttpOcrProviderFromEnv(process.env, fetch, { resolveImageUrl: options.resolveImageUrl }),
+    orderNotificationTemplateId: options.orderNotificationTemplateId || process.env.ORDER_NOTIFICATION_TEMPLATE_ID || '',
+    sendOrderNotification: options.sendOrderNotification,
   }
 
   return async (event = {}) => {

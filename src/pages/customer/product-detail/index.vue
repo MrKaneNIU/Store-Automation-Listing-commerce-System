@@ -121,13 +121,13 @@
           </view>
           <view class="info-card">
             <text>下单授权</text>
-            <text>只有确认下单时才触发微信登录和手机号授权。</text>
+            <text>只有确认下单时才触发账户登录，登录后即可提交订单。</text>
           </view>
         </view>
 
         <view v-if="message" class="auth-feedback">
           <text>{{ message }}</text>
-          <text>若你取消授权，系统不会创建订单。</text>
+          <text>若未完成登录，系统不会创建订单。</text>
         </view>
 
         <view v-if="favoriteMessage" class="favorite-feedback" :class="{ danger: favoriteProductsView.loadingState === 'failed' }">
@@ -146,22 +146,10 @@
           <text>{{ isAddingToBag ? '加入中' : '加入购物袋' }}</text>
         </button>
         <button
-          v-if="hasBoundCustomerPhone"
           class="primary-button"
           :class="{ disabledButton: !viewModel.canSubmitOrder }"
           :disabled="!viewModel.canSubmitOrder"
-          @tap="submitBoundOrder"
-        >
-          <text>立即下单</text>
-          <text class="button-mark">↗</text>
-        </button>
-        <button
-          v-else
-          class="primary-button"
-          :class="{ disabledButton: !viewModel.canSubmitOrder }"
-          :disabled="!viewModel.canSubmitOrder"
-          open-type="getPhoneNumber"
-          @getphonenumber="submitOrderWithPhoneAuthorization"
+          @tap="submitOrder"
         >
           <text>立即下单</text>
           <text class="button-mark">↗</text>
@@ -213,13 +201,6 @@ import {
 import { addCloudBaseCustomerShoppingBagItem } from '../../../features/cloudbase-mall/customer-shopping-bag'
 import { createCloudBaseWechatAuthService } from '../../../services/auth/cloudbase-wechat-auth-service'
 
-type PhoneNumberAuthorizationEvent = {
-  detail?: {
-    code?: string
-    errMsg?: string
-  }
-}
-
 const productId = ref('')
 const selectedSkuId = ref('')
 const message = ref('')
@@ -229,7 +210,6 @@ const isBackNavigating = ref(false)
 const isAddingToBag = ref(false)
 const isFavoriteBusy = ref(false)
 const hasRetriedProductImage = ref(false)
-const hasBoundCustomerPhone = ref(false)
 const customerAuthService = createCloudBaseWechatAuthService()
 const viewModel = ref<CustomerProductDetailViewModel>({
   product: null,
@@ -342,7 +322,6 @@ const loadFavoriteState = async () => {
 
 const loadInitialView = async () => {
   await refreshView()
-  syncPhoneBindingState()
   void loadFavoriteState()
 }
 
@@ -382,11 +361,7 @@ const selectSku = (skuId: string) => {
   viewModel.value = result.view
 }
 
-const syncPhoneBindingState = () => {
-  hasBoundCustomerPhone.value = Boolean(customerAuthService.getCurrentSession()?.phoneNumber)
-}
-
-const submitOrder = async (phoneCode?: string | null) => {
+const submitOrder = async () => {
   if (!viewModel.value.canSubmitOrder) {
     message.value = '请选择有库存的规格'
     return
@@ -397,20 +372,28 @@ const submitOrder = async (phoneCode?: string | null) => {
     skuId: selectedSkuId.value,
     quantity: 1,
     authService: customerAuthService,
-    requestPhoneNumber: () => Promise.resolve(phoneCode ?? null),
+    confirmLogin: confirmCustomerLoginForOrder,
   })
   message.value = result.message
-  syncPhoneBindingState()
   await refreshView({ showLoading: false })
 }
 
-const submitBoundOrder = () => {
-  void submitOrder()
-}
+const confirmCustomerLoginForOrder = async () => {
+  const session = customerAuthService.getCurrentSession()
+  if (session) {
+    return true
+  }
 
-const submitOrderWithPhoneAuthorization = (event: PhoneNumberAuthorizationEvent) => {
-  const phoneCode = event.detail?.code?.trim() || null
-  void submitOrder(phoneCode)
+  return new Promise<boolean>((resolve) => {
+    uni.showModal({
+      title: '请先登录',
+      content: '登录账户后即可提交订单。',
+      confirmText: '登录下单',
+      cancelText: '暂不下单',
+      success: (result) => resolve(Boolean(result.confirm)),
+      fail: () => resolve(false),
+    })
+  })
 }
 
 const addToShoppingBag = async () => {

@@ -1,15 +1,13 @@
 <template>
   <view class="page">
-    <view class="mine-header">
+    <view class="mine-header" :style="{ paddingTop: headerTopPadding }">
       <view class="mine-nav">
         <view class="nav-spacer" />
         <view class="title-cluster">
           <text class="nav-title">我的</text>
           <text class="mine-count">共 {{ viewModel.recentOrderTotalCount }} 笔订单</text>
         </view>
-        <button class="icon-button plain" aria-label="重新加载我的" hover-class="press-feedback" @tap="retry">
-          <text class="refresh-mark" />
-        </button>
+        <view class="nav-spacer" />
       </view>
     </view>
 
@@ -30,10 +28,14 @@
       </view>
 
       <view class="identity-panel">
+        <view class="identity-avatar" aria-label="客户头像">
+          <image v-if="viewModel.hasAvatar" class="identity-avatar-image" :src="viewModel.avatarUrl" mode="aspectFill" />
+          <text v-else class="identity-avatar-placeholder">{{ viewModel.avatarPlaceholderText }}</text>
+        </view>
         <view class="identity-copy">
           <text class="identity-label">{{ viewModel.identityLabel }}</text>
           <text class="identity-name">{{ viewModel.identityDisplayName }}</text>
-          <text v-if="viewModel.identityOpenidLabel" class="identity-meta">{{ viewModel.identityOpenidLabel }}</text>
+          <text v-if="viewModel.customerId" class="identity-meta">客户ID {{ viewModel.customerId }}</text>
         </view>
         <view class="phone-pill">
           <text>{{ viewModel.phoneLabel }}</text>
@@ -132,7 +134,7 @@
 
 <script setup lang="ts">
 import { onShow } from '@dcloudio/uni-app'
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { redirectTo } from '../../../app/navigation'
 import type { AppRoute } from '../../../app/routes'
 import { customerBottomNavRoutes, shouldIgnoreCustomerBottomNavTap } from '../customer-bottom-nav'
@@ -141,6 +143,10 @@ import { useCustomerMinePageState } from './useCustomerMinePageState'
 const mineState = useCustomerMinePageState()
 const viewModel = mineState.viewModel
 const navigatingRoute = ref<AppRoute | ''>('')
+const DEFAULT_HEADER_TOP_PADDING = 'calc(env(safe-area-inset-top) + 28rpx)'
+const HEADER_TOP_OFFSET_RPX = -8
+const STATUS_BAR_FALLBACK_GAP_RPX = 44
+const headerTopPadding = ref(DEFAULT_HEADER_TOP_PADDING)
 let navigationFallbackTimer: ReturnType<typeof setTimeout> | null = null
 
 const clearNavigationLock = () => {
@@ -155,6 +161,30 @@ const clearNavigationLock = () => {
 const scheduleNavigationFallback = () => {
   navigationFallbackTimer = setTimeout(clearNavigationLock, 900)
 }
+
+const syncHeaderTopPadding = () => {
+  try {
+    const menuButton = uni.getMenuButtonBoundingClientRect?.()
+    const windowInfo = uni.getWindowInfo()
+    const rpxToPx = windowInfo.windowWidth / 750
+
+    if (menuButton && Number.isFinite(menuButton.top) && menuButton.top > 0) {
+      headerTopPadding.value = `${Math.ceil(menuButton.top + HEADER_TOP_OFFSET_RPX * rpxToPx)}px`
+
+      return
+    }
+
+    const statusBarHeight = windowInfo.statusBarHeight
+
+    if (typeof statusBarHeight === 'number' && Number.isFinite(statusBarHeight) && statusBarHeight > 0) {
+      headerTopPadding.value = `${Math.ceil(statusBarHeight + STATUS_BAR_FALLBACK_GAP_RPX * rpxToPx)}px`
+    }
+  } catch {
+    headerTopPadding.value = DEFAULT_HEADER_TOP_PADDING
+  }
+}
+
+onMounted(syncHeaderTopPadding)
 
 const loadMineSnapshot = () => {
   void mineState.loadSnapshot({ showLoading: viewModel.value.customerId === '' })
@@ -195,7 +225,15 @@ const navigateUtility = (route: string) => {
 
   if (route === customerBottomNavRoutes.shoppingBag) {
     goShoppingBag()
+    return
   }
+
+  const targetRoute = route as AppRoute
+  navigatingRoute.value = targetRoute
+  scheduleNavigationFallback()
+  redirectTo(targetRoute, {
+    onComplete: clearNavigationLock,
+  })
 }
 
 const goHome = () => {
@@ -230,7 +268,11 @@ const goMine = () => {
 }
 
 .mine-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   padding: calc(env(safe-area-inset-top) + 28rpx) 32rpx 0;
+  background: #f8f8f8;
 }
 
 .mine-nav {
@@ -269,7 +311,6 @@ const goMine = () => {
   line-height: 1.2;
 }
 
-.icon-button,
 .utility-entry,
 .empty-action,
 .inline-error button,
@@ -279,47 +320,11 @@ const goMine = () => {
   transition: opacity 160ms ease, transform 160ms ease, background-color 160ms ease;
 }
 
-.icon-button::after,
 .utility-entry::after,
 .empty-action::after,
 .inline-error button::after,
 .tab::after {
   border: 0;
-}
-
-.icon-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 76rpx;
-  min-width: 76rpx;
-  height: 76rpx;
-  padding: 0;
-  border-radius: 999rpx;
-  background: #ffffff;
-  color: #050505;
-  box-shadow: 0 0 0 1rpx #e8e8e8 inset;
-}
-
-.refresh-mark {
-  position: relative;
-  width: 34rpx;
-  height: 34rpx;
-  border: 3rpx solid #050505;
-  border-left-color: transparent;
-  border-radius: 999rpx;
-}
-
-.refresh-mark::after {
-  position: absolute;
-  top: 0;
-  right: -4rpx;
-  width: 12rpx;
-  height: 12rpx;
-  border-top: 3rpx solid #050505;
-  border-right: 3rpx solid #050505;
-  content: "";
-  transform: rotate(18deg);
 }
 
 .press-feedback {
@@ -426,6 +431,27 @@ const goMine = () => {
   justify-content: space-between;
   gap: 22rpx;
   padding: 34rpx;
+}
+
+.identity-avatar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 118rpx;
+  height: 118rpx;
+  overflow: hidden;
+  border-radius: 999rpx;
+  background: #ece8dd;
+  color: #4b4336;
+  font-size: 42rpx;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.identity-avatar-image {
+  width: 100%;
+  height: 100%;
 }
 
 .identity-copy {

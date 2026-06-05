@@ -1,6 +1,6 @@
 <template>
   <view class="page">
-    <view class="bag-header">
+    <view class="bag-header" :style="{ paddingTop: headerTopPadding }">
       <view class="bag-nav">
         <button
           class="icon-button plain"
@@ -16,9 +16,7 @@
           <text class="nav-title">购物袋</text>
           <text class="bag-count">{{ viewModel.totalQuantityLabel }}</text>
         </view>
-        <button class="icon-button plain" aria-label="重新加载购物袋" hover-class="press-feedback" @tap="reload">
-          <text class="refresh-mark" />
-        </button>
+        <view class="nav-spacer" />
       </view>
     </view>
 
@@ -187,10 +185,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { navigateTo, redirectTo } from '../../../app/navigation'
-import { routes, type AppRoute } from '../../../app/routes'
+import { redirectTo } from '../../../app/navigation'
+import type { AppRoute } from '../../../app/routes'
 import { customerBottomNavRoutes, shouldIgnoreCustomerBottomNavTap } from '../customer-bottom-nav'
 import { createCustomerShoppingBagPageState } from './useCustomerShoppingBagPageState'
 
@@ -199,6 +197,10 @@ const viewModel = shoppingBagState.viewModel
 const message = shoppingBagState.message
 const failedImageIds = ref<string[]>([])
 const navigatingRoute = ref<AppRoute | ''>('')
+const DEFAULT_HEADER_TOP_PADDING = 'calc(env(safe-area-inset-top) + 28rpx)'
+const HEADER_TOP_OFFSET_RPX = -8
+const STATUS_BAR_FALLBACK_GAP_RPX = 44
+const headerTopPadding = ref(DEFAULT_HEADER_TOP_PADDING)
 let navigationFallbackTimer: ReturnType<typeof setTimeout> | null = null
 
 const clearNavigationLocks = () => {
@@ -213,6 +215,30 @@ const clearNavigationLocks = () => {
 const scheduleNavigationFallback = () => {
   navigationFallbackTimer = setTimeout(clearNavigationLocks, 900)
 }
+
+const syncHeaderTopPadding = () => {
+  try {
+    const menuButton = uni.getMenuButtonBoundingClientRect?.()
+    const windowInfo = uni.getWindowInfo()
+    const rpxToPx = windowInfo.windowWidth / 750
+
+    if (menuButton && Number.isFinite(menuButton.top) && menuButton.top > 0) {
+      headerTopPadding.value = `${Math.ceil(menuButton.top + HEADER_TOP_OFFSET_RPX * rpxToPx)}px`
+
+      return
+    }
+
+    const statusBarHeight = windowInfo.statusBarHeight
+
+    if (typeof statusBarHeight === 'number' && Number.isFinite(statusBarHeight) && statusBarHeight > 0) {
+      headerTopPadding.value = `${Math.ceil(statusBarHeight + STATUS_BAR_FALLBACK_GAP_RPX * rpxToPx)}px`
+    }
+  } catch {
+    headerTopPadding.value = DEFAULT_HEADER_TOP_PADDING
+  }
+}
+
+onMounted(syncHeaderTopPadding)
 
 onShow(() => {
   clearNavigationLocks()
@@ -247,19 +273,8 @@ const clearUnavailableItems = () => {
   void shoppingBagState.clearUnavailable()
 }
 
-const submitCheckout = () => {
-  const result = shoppingBagState.submitSelectedItems()
-
-  if (result.status === 'blocked') {
-    return
-  }
-
-  const firstItem = result.checkoutItems[0]
-  if (!firstItem) {
-    return
-  }
-
-  navigateTo(`${routes.customerProductDetail}?id=${firstItem.productId}`)
+const submitCheckout = async () => {
+  await shoppingBagState.submitSelectedItems()
 }
 
 const markImageFailed = (itemId: string) => {
@@ -316,7 +331,11 @@ const goMine = () => {
 }
 
 .bag-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   padding: calc(env(safe-area-inset-top) + 28rpx) 32rpx 0;
+  background: #f8f8f8;
 }
 
 .bag-nav {
@@ -325,6 +344,12 @@ const goMine = () => {
   justify-content: space-between;
   gap: 16rpx;
   min-height: 92rpx;
+}
+
+.nav-spacer {
+  width: 76rpx;
+  min-width: 76rpx;
+  height: 76rpx;
 }
 
 .title-cluster {
@@ -393,27 +418,6 @@ const goMine = () => {
   font-weight: 300;
   line-height: 1;
   transform: translateY(-1rpx);
-}
-
-.refresh-mark {
-  position: relative;
-  width: 34rpx;
-  height: 34rpx;
-  border: 3rpx solid #050505;
-  border-left-color: transparent;
-  border-radius: 999rpx;
-}
-
-.refresh-mark::after {
-  position: absolute;
-  top: 0;
-  right: -4rpx;
-  width: 12rpx;
-  height: 12rpx;
-  border-top: 3rpx solid #050505;
-  border-right: 3rpx solid #050505;
-  content: "";
-  transform: rotate(18deg);
 }
 
 .press-feedback {

@@ -11,7 +11,7 @@ describe('cloudbase upload service', () => {
     const globalAny = globalThis as typeof globalThis & {
       wx?: {
         cloud?: {
-          init?: (options: { env: string }) => void
+          init?: (options: { env: string; traceUser?: boolean }) => void
           uploadFile: (request: { cloudPath: string; filePath: string }) => Promise<{ fileID: string }>
           getTempFileURL: (request: { fileList: Array<{ fileID: string; maxAge?: number }> }) => Promise<{
             fileList: Array<{ fileID: string; tempFileURL?: string; download_url?: string }>
@@ -36,9 +36,11 @@ describe('cloudbase upload service', () => {
     }))
     const deleteFile = vi.fn(async () => ({ fileList: [{ fileID: 'cloud://asset-1', status: 'success' }] }))
 
+    const init = vi.fn()
+
     globalAny.wx = {
       cloud: {
-        init: vi.fn(),
+        init,
         uploadFile,
         getTempFileURL,
         deleteFile,
@@ -53,6 +55,7 @@ describe('cloudbase upload service', () => {
 
     const { cloudbaseUploadService } = await import('./cloudbase-upload-service')
     const images = await cloudbaseUploadService.chooseImages({ businessType: 'ocr_screenshot', sourceRole: 'owner', entityType: 'ocr_batch' })
+    expect(init).toHaveBeenCalledWith({ env: 'cloud1-d7gifjyzl7721b383', traceUser: true })
     expect(images[0].url).toBe('https://temp-url')
     expect(images[0].assetId).toBe('cloud://asset-1')
 

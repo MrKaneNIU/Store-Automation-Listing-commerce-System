@@ -113,6 +113,34 @@
       }
     },
     {
+      "path": "pages/customer/profile/index",
+      "style": {
+        "navigationBarTitleText": "个人信息",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/customer/wallet/index",
+      "style": {
+        "navigationBarTitleText": "钱包",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/customer/address/index",
+      "style": {
+        "navigationBarTitleText": "地址",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/customer/orders/index",
+      "style": {
+        "navigationBarTitleText": "我的订单",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/customer/product-detail/index",
       "style": {
         "navigationBarTitleText": "商品详情",

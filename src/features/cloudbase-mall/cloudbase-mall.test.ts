@@ -77,6 +77,8 @@ import {
   cancelCloudBaseOwnerOrder,
   confirmCloudBaseOwnerOrder,
   getCloudBaseOwnerOrdersView,
+  getCloudBaseManagerOrderNotificationConfig,
+  subscribeCloudBaseManagerOrderNotifications,
 } from './owner-orders'
 import { getCloudBaseOwnerDashboardView } from './owner-dashboard'
 import {
@@ -127,6 +129,8 @@ const createClient = (overrides: Partial<CloudBaseMallApiClient>): CloudBaseMall
     createCustomerOrder: missing,
     getCustomerOrder: missing,
     getOwnerOrderSnapshot: missing,
+    getManagerOrderNotificationConfig: missing,
+    subscribeManagerOrderNotifications: missing,
     getOwnerDashboardSnapshot: missing,
     getCustomerShoppingBagSnapshot: missing,
     addCustomerShoppingBagItem: missing,
@@ -134,10 +138,12 @@ const createClient = (overrides: Partial<CloudBaseMallApiClient>): CloudBaseMall
     selectCustomerShoppingBagItem: missing,
     removeCustomerShoppingBagItem: missing,
     clearUnavailableCustomerShoppingBagItems: missing,
+    checkoutCustomerShoppingBag: missing,
     getCustomerFavoriteProductsSnapshot: missing,
     favoriteCustomerProduct: missing,
     unfavoriteCustomerProduct: missing,
     removeCustomerFavoriteProduct: missing,
+    getCustomerOrdersSnapshot: missing,
     listMerchantOrders: missing,
     confirmMerchantOrder: missing,
     cancelMerchantOrder: missing,
@@ -718,6 +724,44 @@ describe('CloudBase mall facades', () => {
     await expect(cancelCloudBaseOwnerOrder('order-1', client)).resolves.toMatchObject({ message: expect.stringContaining('order-1') })
   })
 
+  it('keeps manager order notifications behind the CloudBase owner order facade', async () => {
+    const client = createClient({
+      getManagerOrderNotificationConfig: vi.fn(async () => ({
+        isConfigured: true,
+        templateId: 'tmpl-order-created',
+        subscribed: false,
+      })),
+      subscribeManagerOrderNotifications: vi.fn(async () => ({
+        subscription: {
+          id: 'subscription-1',
+          managerOpenid: 'owner-openid',
+          managerAccount: 'owner',
+          templateId: 'tmpl-order-created',
+          status: 'active' as const,
+          createdAt: '2026-05-11T00:00:00.000Z',
+          updatedAt: '2026-05-11T00:00:00.000Z',
+        },
+        notificationConfig: {
+          isConfigured: true,
+          templateId: 'tmpl-order-created',
+          subscribed: true,
+        },
+      })),
+    })
+
+    await expect(getCloudBaseManagerOrderNotificationConfig(client)).resolves.toMatchObject({
+      isConfigured: true,
+      templateId: 'tmpl-order-created',
+      subscribed: false,
+    })
+    await expect(subscribeCloudBaseManagerOrderNotifications('tmpl-order-created', client)).resolves.toMatchObject({
+      message: '订单提醒已开启',
+      notificationConfig: { subscribed: true },
+    })
+
+    expect(client.subscribeManagerOrderNotifications).toHaveBeenCalledWith({ templateId: 'tmpl-order-created' })
+  })
+
   it('loads owner dashboard counts through one mallApi snapshot', async () => {
     const client = createClient({
       getOwnerDashboardSnapshot: vi.fn(async () => ({
@@ -793,7 +837,7 @@ describe('CloudBase mall facades', () => {
     expect(getStaffImageTaskSnapshot).toHaveBeenCalledTimes(1)
   })
 
-  it('submits customer orders through mallApi after mock WeChat authorization', async () => {
+  it('submits customer orders through mallApi after mock WeChat login', async () => {
     const session: CustomerSession = {
       customerId: 'customer-1',
       openid: 'openid-1',
@@ -801,97 +845,8 @@ describe('CloudBase mall facades', () => {
       authSource: 'mock_wechat',
       loggedInAt: '2026-05-09T00:00:00.000Z',
     }
-    const authorizedSession = { ...session, phoneNumber: '13800000000' }
     const createCustomerOrder = vi.fn(async () => ({ order }))
-    const authService = {
-      getCurrentSession: () => null,
-      login: vi.fn(async () => session),
-      authorizePhoneNumber: vi.fn(async () => authorizedSession),
-      logout: vi.fn(),
-    }
-
-    const result = await submitCloudBaseCustomerProductDetailOrder({
-      productId: product.id,
-      skuId: sku.id,
-      quantity: 1,
-      authService,
-      confirmLogin: async () => true,
-      confirmPhoneAuthorization: async () => true,
-      requestPhoneNumber: async () => '13800000000',
-      client: createClient({
-        getPublishedProductDetail: vi.fn(async () => ({ product, skus: [sku], serverTime: '2026-05-27T00:00:00.000Z' })),
-        createCustomerOrder,
-      }),
-    })
-
-    expect(result.status).toBe('created')
-    expect(createCustomerOrder).toHaveBeenCalledWith(expect.objectContaining({
-      productId: 'product-1',
-      skuId: 'sku-1',
-      session: authorizedSession,
-    }))
-  })
-
-  it('submits customer orders only after real WeChat phone binding returns a phone-bound session', async () => {
-    const session: CustomerSession = {
-      customerId: 'customer-1',
-      openid: 'openid-1',
-      nickname: 'Wechat Customer',
-      authSource: 'wechat',
-      loggedInAt: '2026-05-09T00:00:00.000Z',
-    }
-    const authorizedSession = {
-      ...session,
-      phoneNumber: '13800000000',
-      phoneAuthorizedAt: '2026-05-09T00:01:00.000Z',
-    }
-    const createCustomerOrder = vi.fn(async () => ({ order: { ...order, customerAuthSource: 'wechat' as const } }))
-    const requestPhoneNumber = vi.fn(async () => 'phone-code-ok')
-    const authService = {
-      getCurrentSession: () => null,
-      login: vi.fn(async () => session),
-      authorizePhoneNumber: vi.fn(async (phoneCode?: string) => {
-        expect(phoneCode).toBe('phone-code-ok')
-        expect(createCustomerOrder).not.toHaveBeenCalled()
-        return authorizedSession
-      }),
-      logout: vi.fn(),
-    }
-
-    const result = await submitCloudBaseCustomerProductDetailOrder({
-      productId: product.id,
-      skuId: sku.id,
-      quantity: 1,
-      authService,
-      confirmLogin: async () => true,
-      confirmPhoneAuthorization: async () => true,
-      requestPhoneNumber,
-      client: createClient({
-        getPublishedProductDetail: vi.fn(async () => ({ product, skus: [sku], serverTime: '2026-05-27T00:00:00.000Z' })),
-        createCustomerOrder,
-      }),
-    })
-
-    expect(result.status).toBe('created')
-    expect(requestPhoneNumber).toHaveBeenCalledTimes(1)
-    expect(authService.authorizePhoneNumber).toHaveBeenCalledWith('phone-code-ok')
-    expect(createCustomerOrder).toHaveBeenCalledWith(expect.objectContaining({
-      productId: 'product-1',
-      skuId: 'sku-1',
-      session: authorizedSession,
-    }))
-  })
-
-  it('cancels checkout without creating an order when native phone authorization returns no code', async () => {
-    const session: CustomerSession = {
-      customerId: 'customer-1',
-      openid: 'openid-1',
-      nickname: 'Wechat Customer',
-      authSource: 'wechat',
-      loggedInAt: '2026-05-09T00:00:00.000Z',
-    }
-    const createCustomerOrder = vi.fn(async () => ({ order }))
-    const requestPhoneNumber = vi.fn(async () => null)
+    const confirmLogin = vi.fn(async () => true)
     const authService = {
       getCurrentSession: () => null,
       login: vi.fn(async () => session),
@@ -904,6 +859,89 @@ describe('CloudBase mall facades', () => {
       skuId: sku.id,
       quantity: 1,
       authService,
+      confirmLogin,
+      client: createClient({
+        getPublishedProductDetail: vi.fn(async () => ({ product, skus: [sku], serverTime: '2026-05-27T00:00:00.000Z' })),
+        createCustomerOrder,
+      }),
+    })
+
+    expect(result.status).toBe('created')
+    expect(confirmLogin).toHaveBeenCalledTimes(1)
+    expect(authService.authorizePhoneNumber).not.toHaveBeenCalled()
+    expect(createCustomerOrder).toHaveBeenCalledWith(expect.objectContaining({
+      productId: 'product-1',
+      skuId: 'sku-1',
+      session,
+    }))
+  })
+
+  it('submits customer orders after real WeChat account login without requesting phone authorization', async () => {
+    const session: CustomerSession = {
+      customerId: 'customer-1',
+      openid: 'openid-1',
+      nickname: 'Wechat Customer',
+      authSource: 'wechat',
+      loggedInAt: '2026-05-09T00:00:00.000Z',
+    }
+    const createCustomerOrder = vi.fn(async () => ({ order: { ...order, customerAuthSource: 'wechat' as const } }))
+    const requestPhoneNumber = vi.fn(async () => 'phone-code-ok')
+    const confirmLogin = vi.fn(async () => true)
+    const authService = {
+      getCurrentSession: () => null,
+      login: vi.fn(async () => session),
+      authorizePhoneNumber: vi.fn(),
+      logout: vi.fn(),
+    }
+
+    const result = await submitCloudBaseCustomerProductDetailOrder({
+      productId: product.id,
+      skuId: sku.id,
+      quantity: 1,
+      authService,
+      confirmLogin,
+      requestPhoneNumber,
+      client: createClient({
+        getPublishedProductDetail: vi.fn(async () => ({ product, skus: [sku], serverTime: '2026-05-27T00:00:00.000Z' })),
+        createCustomerOrder,
+      }),
+    })
+
+    expect(result.status).toBe('created')
+    expect(confirmLogin).toHaveBeenCalledTimes(1)
+    expect(requestPhoneNumber).not.toHaveBeenCalled()
+    expect(authService.authorizePhoneNumber).not.toHaveBeenCalled()
+    expect(createCustomerOrder).toHaveBeenCalledWith(expect.objectContaining({
+      productId: 'product-1',
+      skuId: 'sku-1',
+      session,
+    }))
+  })
+
+  it('cancels checkout without creating an order when account login is canceled', async () => {
+    const session: CustomerSession = {
+      customerId: 'customer-1',
+      openid: 'openid-1',
+      nickname: 'Wechat Customer',
+      authSource: 'wechat',
+      loggedInAt: '2026-05-09T00:00:00.000Z',
+    }
+    const createCustomerOrder = vi.fn(async () => ({ order }))
+    const requestPhoneNumber = vi.fn(async () => null)
+    const confirmLogin = vi.fn(async () => false)
+    const authService = {
+      getCurrentSession: () => null,
+      login: vi.fn(async () => session),
+      authorizePhoneNumber: vi.fn(),
+      logout: vi.fn(),
+    }
+
+    const result = await submitCloudBaseCustomerProductDetailOrder({
+      productId: product.id,
+      skuId: sku.id,
+      quantity: 1,
+      authService,
+      confirmLogin,
       requestPhoneNumber,
       client: createClient({
         getPublishedProductDetail: vi.fn(async () => ({ product, skus: [sku], serverTime: '2026-05-27T00:00:00.000Z' })),
@@ -912,7 +950,10 @@ describe('CloudBase mall facades', () => {
     })
 
     expect(result.status).toBe('canceled')
-    expect(requestPhoneNumber).toHaveBeenCalledTimes(1)
+    expect(result.message).toBe('请先登录后下单')
+    expect(confirmLogin).toHaveBeenCalledTimes(1)
+    expect(authService.login).not.toHaveBeenCalled()
+    expect(requestPhoneNumber).not.toHaveBeenCalled()
     expect(authService.authorizePhoneNumber).not.toHaveBeenCalled()
     expect(createCustomerOrder).not.toHaveBeenCalled()
   })
@@ -976,7 +1017,6 @@ describe('CloudBase mall facades', () => {
       quantity: 1,
       authService,
       confirmLogin: async () => true,
-      confirmPhoneAuthorization: async () => true,
       client: createClient({
         getPublishedProductDetail: vi.fn(async () => ({ product, skus: [sku], serverTime: '2026-05-27T00:00:00.000Z' })),
         createCustomerOrder,
@@ -989,7 +1029,7 @@ describe('CloudBase mall facades', () => {
     expect(createCustomerOrder).not.toHaveBeenCalled()
   })
 
-  it('returns a failed checkout result when WeChat phone binding is rejected', async () => {
+  it('submits customer orders for an existing login session without phone binding', async () => {
     const session: CustomerSession = {
       customerId: 'customer-1',
       openid: 'openid-1',
@@ -997,13 +1037,12 @@ describe('CloudBase mall facades', () => {
       authSource: 'wechat',
       loggedInAt: '2026-05-09T00:00:00.000Z',
     }
-    const createCustomerOrder = vi.fn(async () => ({ order }))
+    const createCustomerOrder = vi.fn(async () => ({ order: { ...order, customerAuthSource: 'wechat' as const } }))
+    const requestPhoneNumber = vi.fn(async () => 'phone-code-1')
     const authService = {
       getCurrentSession: () => session,
       login: vi.fn(),
-      authorizePhoneNumber: vi.fn(async () => {
-        throw new Error('UNAUTHORIZED: Verified WeChat identity is required')
-      }),
+      authorizePhoneNumber: vi.fn(),
       logout: vi.fn(),
     }
 
@@ -1013,18 +1052,18 @@ describe('CloudBase mall facades', () => {
       quantity: 1,
       authService,
       confirmLogin: async () => true,
-      confirmPhoneAuthorization: async () => true,
-      requestPhoneNumber: async () => 'phone-code-1',
+      requestPhoneNumber,
       client: createClient({
         getPublishedProductDetail: vi.fn(async () => ({ product, skus: [sku], serverTime: '2026-05-27T00:00:00.000Z' })),
         createCustomerOrder,
       }),
     })).resolves.toMatchObject({
-      status: 'failed',
-      order: null,
-      message: '请重试验证微信身份',
+      status: 'created',
     })
-    expect(createCustomerOrder).not.toHaveBeenCalled()
+    expect(authService.login).not.toHaveBeenCalled()
+    expect(requestPhoneNumber).not.toHaveBeenCalled()
+    expect(authService.authorizePhoneNumber).not.toHaveBeenCalled()
+    expect(createCustomerOrder).toHaveBeenCalledWith(expect.objectContaining({ session }))
   })
 
   it('keeps out-of-stock SKU selection visible while blocking checkout through mallApi', async () => {

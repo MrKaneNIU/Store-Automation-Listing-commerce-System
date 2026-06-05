@@ -1,7 +1,37 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { CloudBaseMallApiClient } from '../cloudbase/mall-api-client'
-import { createCloudBaseWechatAuthService } from './cloudbase-wechat-auth-service'
+import type { CloudBaseMallApiClient, CustomerOrdersSnapshot } from '../../services/cloudbase/mall-api-client'
+import { getCloudBaseCustomerOrdersView } from './customer-orders'
+
+const snapshot: CustomerOrdersSnapshot = {
+  customerId: 'customer-1',
+  orders: [
+    {
+      id: 'order-1',
+      customerName: 'Wechat Customer',
+      customerPhone: '13800000000',
+      customerId: 'customer-1',
+      customerAuthSource: 'wechat',
+      status: 'pending_merchant_confirm',
+      items: [
+        {
+          skuId: 'sku-1',
+          productId: 'product-1',
+          productName: 'Cotton Shirt',
+          productCode: 'A1023',
+          spec: 'Black/M',
+          salePrice: 129,
+          quantity: 1,
+        },
+      ],
+      totalAmount: 129,
+      createdAt: '2026-06-04T09:00:00.000Z',
+      updatedAt: '2026-06-04T09:00:00.000Z',
+    },
+  ],
+  totalCount: 1,
+  serverTime: '2026-06-04T09:01:00.000Z',
+}
 
 const createClient = (overrides: Partial<CloudBaseMallApiClient>): CloudBaseMallApiClient => {
   const missing = vi.fn(async () => {
@@ -24,12 +54,12 @@ const createClient = (overrides: Partial<CloudBaseMallApiClient>): CloudBaseMall
     deleteDraft: missing,
     confirmBatch: missing,
     listProducts: missing,
-    listOwnerProductCards: missing,
     listPublishedProducts: missing,
     listPublishedProductSummaries: missing,
     getPublishedProductDetail: missing,
-    updateProductBasics: missing,
+    listOwnerProductCards: missing,
     updateProductDescription: missing,
+    updateProductBasics: missing,
     updateSku: missing,
     restockSkus: missing,
     clearSkuStock: missing,
@@ -65,61 +95,30 @@ const createClient = (overrides: Partial<CloudBaseMallApiClient>): CloudBaseMall
   }
 }
 
-const customer = {
-  id: 'customer-1',
-  openid: 'openid-1',
-  appid: 'wxa63c53796488d4d4',
-  authSource: 'wechat' as const,
-  createdAt: '2026-05-11T00:00:00.000Z',
-  updatedAt: '2026-05-11T00:00:00.000Z',
-}
-
-describe('CloudBase WeChat auth service', () => {
-  it('loads the current customer through mallApi without page-level wx.cloud access', async () => {
+describe('CloudBase customer orders facade', () => {
+  it('loads customer-owned orders through the customer-scoped snapshot action', async () => {
     const client = createClient({
-      getCurrentCustomer: vi.fn(async () => ({ customer })),
+      getCustomerOrdersSnapshot: vi.fn(async () => snapshot),
     })
-    const service = createCloudBaseWechatAuthService(client)
 
-    await expect(service.login()).resolves.toMatchObject({
-      customerId: 'customer-1',
-      openid: 'openid-1',
-      authSource: 'wechat',
+    await expect(getCloudBaseCustomerOrdersView(client)).resolves.toMatchObject({
+      totalCount: 1,
+      items: [{ id: 'order-1', totalAmountText: '¥129.00' }],
     })
-    expect(client.getCurrentCustomer).toHaveBeenCalledTimes(1)
+    expect(client.getCustomerOrdersSnapshot).toHaveBeenCalledTimes(1)
   })
 
-  it('does not bind phone when authorization returns no phone number', async () => {
+  it('returns a failure ViewModel without exposing raw infrastructure details', async () => {
     const client = createClient({
-      getCurrentCustomer: vi.fn(async () => ({ customer })),
-      bindCustomerPhone: vi.fn(async () => ({ customer: { ...customer, phoneNumber: '13800000000' } })),
+      getCustomerOrdersSnapshot: vi.fn(async () => {
+        throw new Error('CloudBase unavailable')
+      }),
     })
-    const service = createCloudBaseWechatAuthService(client)
 
-    await service.login()
-    await expect(service.authorizePhoneNumber()).resolves.toBeNull()
-    expect(client.bindCustomerPhone).not.toHaveBeenCalled()
-  })
-
-  it('binds phone through mallApi after login with a WeChat phone code', async () => {
-    const bindCustomerPhone = vi.fn(async () => ({
-      customer: {
-        ...customer,
-        phoneNumber: '13800000000',
-        updatedAt: '2026-05-11T00:01:00.000Z',
-      },
-    }))
-    const service = createCloudBaseWechatAuthService(createClient({
-      getCurrentCustomer: vi.fn(async () => ({ customer })),
-      bindCustomerPhone,
-    }))
-
-    await service.login()
-    await expect(service.authorizePhoneNumber('phone-code-ok')).resolves.toMatchObject({
-      customerId: 'customer-1',
-      phoneNumber: '13800000000',
-      authSource: 'wechat',
+    await expect(getCloudBaseCustomerOrdersView(client)).resolves.toMatchObject({
+      loadingState: 'failed',
+      failureMessage: 'CloudBase unavailable',
+      items: [],
     })
-    expect(bindCustomerPhone).toHaveBeenCalledWith({ phoneCode: 'phone-code-ok' })
   })
 })

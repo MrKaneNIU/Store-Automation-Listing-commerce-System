@@ -225,19 +225,24 @@ describe('mallWorkflow orders', () => {
     expect(mallRepository.listSkus(published.id)[0].stock).toBe(sku.stock - 1)
   })
 
-  it('does not create orders or reserve stock when phone authorization is missing', async () => {
+  it('creates orders after account login when phone authorization is missing', async () => {
     resetMockDb()
     mockWechatAuthService.logout()
     const { published, sku } = await prepareConfirmedBatch()
     const session = await mockWechatAuthService.login()
 
-    expect(() =>
-      mallWorkflow.createAuthorizedOrder(published, sku.id, {
-        session,
-        quantity: 1,
-      }),
-    ).toThrow()
-    expect(mallRepository.listOrders()).toHaveLength(0)
-    expect(mallRepository.listSkus(published.id)[0].stock).toBe(sku.stock)
+    const order = mallWorkflow.createAuthorizedOrder(published, sku.id, {
+      session,
+      quantity: 1,
+    })
+
+    expect(order).toMatchObject({
+      customerPhone: '',
+      customerId: 'mock-customer-001',
+      customerAuthSource: 'mock_wechat',
+      status: 'pending_merchant_confirm',
+    })
+    expect(mallRepository.listOrders()).toHaveLength(1)
+    expect(mallRepository.listSkus(published.id)[0].stock).toBe(sku.stock - 1)
   })
 })
