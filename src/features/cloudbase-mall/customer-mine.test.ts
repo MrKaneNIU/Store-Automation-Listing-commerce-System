@@ -22,11 +22,40 @@ const createSnapshot = (): CustomerMineSnapshot => ({
     statusLabel: 'Phone not bound',
   },
   profile: {
+    nickname: 'Ada',
     avatarUrl: 'cloud://avatars/customer-1.png',
   },
   recentOrders: [],
   recentOrderTotalCount: 0,
   utilities: [
+    {
+      key: 'profile',
+      label: 'Personal information',
+      route: '/pages/customer/profile/index',
+      count: 1,
+      isEnabled: true,
+    },
+    {
+      key: 'wallet',
+      label: 'Wallet',
+      route: '/pages/customer/wallet/index',
+      count: 25,
+      isEnabled: true,
+    },
+    {
+      key: 'address',
+      label: 'Address',
+      route: '/pages/customer/address/index',
+      count: 1,
+      isEnabled: true,
+    },
+    {
+      key: 'orders',
+      label: 'My orders',
+      route: '/pages/customer/orders/index',
+      count: 2,
+      isEnabled: true,
+    },
     {
       key: 'favorites',
       label: 'Favorites',

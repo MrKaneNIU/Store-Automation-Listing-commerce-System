@@ -3,8 +3,9 @@
     <view class="detail-header" :style="{ paddingTop: headerTopPadding }">
       <view class="detail-nav">
         <button class="icon-button plain" aria-label="返回我的" hover-class="press-feedback" @tap="goMine">
-          <text class="chevron">{{ backIcon }}</text>
+          <text class="chevron">‹</text>
         </button>
+        <text class="nav-title">我的订单</text>
         <view class="nav-spacer" />
       </view>
     </view>
@@ -41,7 +42,13 @@
         <button hover-class="press-feedback" @tap="reload">重试</button>
       </view>
 
-      <view v-for="order in viewModel.items" :key="order.id" class="order-item">
+      <view
+        v-for="order in viewModel.items"
+        :key="order.id"
+        class="order-item"
+        hover-class="press-feedback"
+        @tap="openOrderDetail(order.id)"
+      >
         <view class="order-top">
           <text class="order-id">{{ order.id }}</text>
           <text class="status">{{ order.statusLabel }}</text>
@@ -50,6 +57,9 @@
         <view class="order-bottom">
           <text>{{ order.itemCountLabel }}</text>
           <text class="amount">{{ order.totalAmountText }}</text>
+        </view>
+        <view class="detail-link">
+          <text>查看详情</text>
         </view>
       </view>
     </view>
@@ -63,14 +73,13 @@
 <script setup lang="ts">
 import { onShow } from '@dcloudio/uni-app'
 import { onMounted, ref } from 'vue'
-import { redirectTo } from '../../../app/navigation'
+import { navigateTo, redirectTo } from '../../../app/navigation'
 import { routes } from '../../../app/routes'
 import { createCustomerOrdersPageState } from './useCustomerOrdersPageState'
 
 const ordersState = createCustomerOrdersPageState()
 const viewModel = ordersState.viewModel
 const message = ordersState.message
-const backIcon = '<'
 const DEFAULT_HEADER_TOP_PADDING = 'calc(env(safe-area-inset-top) + 28rpx)'
 const HEADER_TOP_OFFSET_RPX = -8
 const STATUS_BAR_FALLBACK_GAP_RPX = 44
@@ -108,6 +117,10 @@ const reload = () => {
   void ordersState.reload()
 }
 
+const openOrderDetail = (orderId: string) => {
+  navigateTo(`${routes.customerOrderDetail}?orderId=${encodeURIComponent(orderId)}`)
+}
+
 const goMine = () => {
   redirectTo(routes.customerMine)
 }
@@ -118,6 +131,7 @@ const goMine = () => {
   min-height: 100vh;
   box-sizing: border-box;
   padding: 0 32rpx 64rpx;
+  overflow-x: hidden;
   background: #f8f8f8;
   color: #222222;
 }
@@ -139,39 +153,53 @@ const goMine = () => {
   min-height: 92rpx;
 }
 
-.nav-spacer {
+.nav-spacer,
+.icon-button {
   width: 76rpx;
   min-width: 76rpx;
   height: 76rpx;
+}
+
+.nav-title {
+  color: #111111;
+  font-size: 34rpx;
+  font-weight: 700;
+}
+
+.icon-button,
+.empty-action,
+.inline-error button {
+  margin: 0;
+  border: 0;
+  transition: opacity 160ms ease, transform 160ms ease, background-color 160ms ease;
+}
+
+.icon-button::after,
+.empty-action::after,
+.inline-error button::after {
+  border: 0;
 }
 
 .icon-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 76rpx;
-  min-width: 76rpx;
-  height: 76rpx;
-  margin: 0;
   padding: 0;
-  border: 0;
   border-radius: 999rpx;
   background: #ffffff;
   color: #050505;
   box-shadow: 0 0 0 1rpx #e8e8e8 inset;
-  transition: opacity 160ms ease, transform 160ms ease, background-color 160ms ease;
-}
-
-.icon-button::after {
-  border: 0;
 }
 
 .chevron {
-  display: block;
   font-size: 44rpx;
   font-weight: 300;
   line-height: 1;
-  transform: translateY(-1rpx);
+}
+
+.press-feedback {
+  opacity: 0.76;
+  transform: scale(0.97);
 }
 
 .orders-header,
@@ -197,7 +225,8 @@ const goMine = () => {
 .count,
 .order-id,
 .order-bottom,
-.empty-copy {
+.empty-copy,
+.detail-link {
   color: #777777;
   font-size: 24rpx;
   line-height: 1.35;
@@ -278,24 +307,12 @@ const goMine = () => {
 .inline-error button {
   align-self: flex-start;
   min-height: 72rpx;
-  margin: 0;
   padding: 0 32rpx;
-  border: 0;
   border-radius: 999rpx;
   background: #050505;
   color: #ffffff;
   font-size: 26rpx;
   line-height: 72rpx;
-}
-
-.empty-action::after,
-.inline-error button::after {
-  border: 0;
-}
-
-.press-feedback {
-  opacity: 0.76;
-  transform: scale(0.97);
 }
 
 .inline-status,
@@ -330,7 +347,8 @@ const goMine = () => {
 }
 
 .order-top,
-.order-bottom {
+.order-bottom,
+.detail-link {
   display: flex;
   align-items: center;
   justify-content: space-between;

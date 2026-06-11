@@ -51,6 +51,7 @@
           @tap="navigateUtility(entry.route)"
         >
           <text class="utility-label">{{ entry.label }}</text>
+          <text class="utility-count">{{ entry.countLabel }}</text>
         </button>
       </view>
 
@@ -516,6 +517,14 @@ const goMine = () => {
   font-size: 30rpx;
   font-weight: 600;
   line-height: 1.35;
+}
+
+.utility-count {
+  max-width: 100%;
+  color: #777777;
+  font-size: 24rpx;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .section-heading {

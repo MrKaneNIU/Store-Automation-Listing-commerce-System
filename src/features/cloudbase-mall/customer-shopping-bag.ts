@@ -148,11 +148,31 @@ export const clearUnavailableCloudBaseCustomerShoppingBagItems = async (
   })
 
 export const checkoutCloudBaseCustomerShoppingBag = async (
+  addressId: string,
   client?: CloudBaseMallApiClient,
   previousView?: CustomerShoppingBagViewModel,
 ): Promise<CloudBaseCustomerShoppingBagCheckoutResult> => {
+  if (!addressId.trim()) {
+    return {
+      status: 'failed',
+      message: '请选择收货地址',
+      invalidatedSnapshotKeys: [],
+      view: previousView ?? createCustomerShoppingBagView({
+        customerId: '',
+        items: [],
+        totalQuantity: 0,
+        selectedQuantity: 0,
+        selectedSubtotal: 0,
+        unavailableCount: 0,
+        serverTime: '',
+      }),
+      order: null,
+      removedItemIds: [],
+    }
+  }
+
   try {
-    const result = await getClient(client).checkoutCustomerShoppingBag()
+    const result = await getClient(client).checkoutCustomerShoppingBag({ addressId })
 
     return {
       status: 'succeeded',

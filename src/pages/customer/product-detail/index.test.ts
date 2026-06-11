@@ -122,6 +122,16 @@ describe('customer product detail real checkout authorization wiring', () => {
     expect(source).toContain('confirmCustomerLoginForOrder')
   })
 
+  it('loads checkout addresses and passes only addressId into product-detail order submission', () => {
+    expect(source).toContain('getCloudBaseCustomerAddressBookView')
+    expect(source).toContain('selectedAddressId')
+    expect(source).toContain('@tap="selectAddress(address.id)"')
+    expect(source).toContain("message.value = '请选择收货地址'")
+    expect(source).toContain('addressId: selectedAddressId.value')
+    expect(source).not.toContain('shippingAddress:')
+    expect(source).not.toContain('contactName: selectedAddress')
+  })
+
   it('does not route favorites through checkout, stock, or shopping-bag commands', () => {
     const toggleSource = source.slice(source.indexOf('const toggleFavorite'), source.indexOf('const selectSku'))
 

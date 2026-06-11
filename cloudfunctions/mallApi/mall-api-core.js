@@ -42,6 +42,14 @@ const SUPPORTED_ACTIONS = [
   'createCustomerOrder',
   'getCustomerOrder',
   'getCustomerOrdersSnapshot',
+  'getCustomerProfileSnapshot',
+  'updateCustomerProfile',
+  'getCustomerWalletSnapshot',
+  'getCustomerAddressBookSnapshot',
+  'createCustomerAddress',
+  'updateCustomerAddress',
+  'deleteCustomerAddress',
+  'setDefaultCustomerAddress',
   'getOwnerOrderSnapshot',
   'getOwnerDashboardSnapshot',
   'getManagerOrderNotificationConfig',
@@ -95,6 +103,8 @@ const COLLECTIONS = [
   'orders',
   'order_items',
   'customers',
+  'customer_addresses',
+  'customer_wallet_ledger',
   'merchant_users',
   'staff_users',
   'role_assignments',
@@ -375,6 +385,7 @@ const parseCustomerOrderInput = (value) => {
     productId: readString(value, 'productId'),
     skuId: readString(value, 'skuId'),
     quantity: readPositiveInteger(value, 'quantity'),
+    addressId: readOptionalString(value, 'addressId'),
     idempotencyKey: readOptionalString(value, 'idempotencyKey'),
     session: {
       customerId: readOptionalString(value.session, 'customerId'),
@@ -382,6 +393,49 @@ const parseCustomerOrderInput = (value) => {
       phoneNumber: readOptionalString(value.session, 'phoneNumber'),
       authSource,
     },
+  }
+}
+
+const parseCustomerProfileInput = (value) => {
+  if (!isRecord(value)) throw validationError('Request body must be a JSON object')
+  const allowed = ['nickname', 'avatarUrl', 'customerId', 'openid']
+  Object.keys(value).forEach((field) => {
+    if (!allowed.includes(field)) throw validationError(`${field} is not a customer profile field`)
+  })
+  const profile = {}
+  if (value.nickname !== undefined) profile.nickname = readString(value, 'nickname').trim()
+  if (value.avatarUrl !== undefined) profile.avatarUrl = readString(value, 'avatarUrl').trim()
+  if (Object.keys(profile).length === 0) throw validationError('At least one profile field is required')
+  return profile
+}
+
+const parseCustomerAddressInput = (value, options = {}) => {
+  if (!isRecord(value)) throw validationError('Request body must be a JSON object')
+  const allowed = ['contactName', 'phoneNumber', 'province', 'city', 'district', 'detail', 'isDefault', 'customerId', 'openid']
+  Object.keys(value).forEach((field) => {
+    if (!allowed.includes(field)) throw validationError(`${field} is not a customer address field`)
+  })
+  const addressFields = ['contactName', 'phoneNumber', 'province', 'city', 'district', 'detail']
+  const required = options.partial === true ? [] : addressFields
+  const address = {}
+  for (const field of required) {
+    address[field] = readString(value, field).trim()
+  }
+  for (const field of addressFields.filter((field) => !required.includes(field))) {
+    if (value[field] !== undefined) address[field] = readString(value, field).trim()
+  }
+  if (value.isDefault !== undefined) {
+    if (typeof value.isDefault !== 'boolean') throw validationError('isDefault must be a boolean')
+    address.isDefault = value.isDefault
+  }
+  if (Object.keys(address).length === 0) throw validationError('At least one address field is required')
+  return address
+}
+
+const parseCheckoutAddressInput = (value) => {
+  if (!isRecord(value)) throw validationError('Request body must be a JSON object')
+  return {
+    addressId: readString(value, 'addressId'),
   }
 }
 
@@ -873,6 +927,7 @@ const toOrderDocument = (order) => ({
   ...(order.customerId ? { customer_id: order.customerId } : {}),
   ...(order.customerAuthSource ? { customer_auth_source: order.customerAuthSource } : {}),
   ...(order.idempotencyKey ? { idempotency_key: order.idempotencyKey } : {}),
+  ...(order.shippingAddress ? { shipping_address: order.shippingAddress } : {}),
   status: order.status,
   total_amount: order.totalAmount,
   created_at: order.createdAt,
@@ -908,6 +963,7 @@ const toOrder = (document, items) => ({
   ...(document.customer_id ? { customerId: document.customer_id } : {}),
   ...(document.customer_auth_source ? { customerAuthSource: document.customer_auth_source } : {}),
   ...(document.idempotency_key ? { idempotencyKey: document.idempotency_key } : {}),
+  ...(isRecord(document.shipping_address) ? { shippingAddress: document.shipping_address } : {}),
   status: document.status,
   items,
   totalAmount: document.total_amount,
@@ -945,6 +1001,7 @@ const toCustomerDocument = (customer) => ({
   ...(customer.appid ? { appid: customer.appid } : {}),
   ...(customer.unionid ? { unionid: customer.unionid } : {}),
   ...(customer.phoneNumber ? { phone_number: customer.phoneNumber } : {}),
+  ...(customer.nickname ? { nickname: customer.nickname } : {}),
   ...(customer.avatarUrl ? { avatar_url: customer.avatarUrl } : {}),
   auth_source: customer.authSource,
   created_at: customer.createdAt,
@@ -957,6 +1014,7 @@ const toCustomer = (document) => ({
   ...(document.appid ? { appid: document.appid } : {}),
   ...(document.unionid ? { unionid: document.unionid } : {}),
   ...(document.phone_number ? { phoneNumber: document.phone_number } : {}),
+  ...(document.nickname ? { nickname: document.nickname } : {}),
   ...(document.avatar_url ? { avatarUrl: document.avatar_url } : {}),
   authSource: document.auth_source,
   createdAt: document.created_at,
@@ -1007,6 +1065,44 @@ const toShoppingBagItem = (document) => ({
   isSelected: document.is_selected !== false,
   createdAt: document.created_at,
   updatedAt: document.updated_at,
+})
+
+const toCustomerAddressDocument = (address) => ({
+  _id: address.id,
+  customer_id: address.customerId,
+  contact_name: address.contactName,
+  phone_number: address.phoneNumber,
+  province: address.province,
+  city: address.city,
+  district: address.district,
+  detail: address.detail,
+  is_default: address.isDefault === true,
+  created_at: address.createdAt,
+  updated_at: address.updatedAt,
+})
+
+const toCustomerAddress = (document) => ({
+  id: document._id,
+  customerId: document.customer_id,
+  contactName: document.contact_name,
+  phoneNumber: document.phone_number,
+  province: document.province,
+  city: document.city,
+  district: document.district,
+  detail: document.detail,
+  isDefault: document.is_default === true,
+  createdAt: document.created_at,
+  updatedAt: document.updated_at,
+})
+
+const toCustomerWalletLedgerEntry = (document) => ({
+  id: document._id,
+  customerId: document.customer_id,
+  amount: document.amount,
+  balanceAfter: document.balance_after,
+  direction: document.direction,
+  reason: document.reason,
+  createdAt: document.created_at,
 })
 
 const toCustomerFavoriteDocument = (favorite) => ({
@@ -1156,6 +1252,18 @@ const maskPhoneNumber = (phoneNumber) => {
   return phoneNumber.replace(/^(\d{3})\d+(\d{4})$/, '$1****$2')
 }
 
+const getCustomerMineDisplayName = (customer) => {
+  const nickname = typeof customer.nickname === 'string' ? customer.nickname.trim() : ''
+  if (nickname) return nickname
+
+  return maskPhoneNumber(customer.phoneNumber) || 'Wechat Customer'
+}
+
+const isCustomerMineProfileComplete = (customer) =>
+  Boolean((customer.nickname || '').trim() && (customer.avatarUrl || '').trim())
+
+const formatCustomerMineMoney = (value) => `¥ ${Number(value || 0).toFixed(2)}`
+
 const createCustomerMineRecentOrderSummary = (order) => ({
   orderId: order.id,
   status: order.status,
@@ -1173,24 +1281,29 @@ const settleCustomerMineList = async (readList) => {
 }
 
 const createCustomerMineSnapshot = async (customer, context) => {
-  const [orders, shoppingBagItems, favorites] = await Promise.all([
+  const [orders, shoppingBagItems, favorites, addresses, walletLedger] = await Promise.all([
     settleCustomerMineList(() => context.repository.listOrders()),
     settleCustomerMineList(() => context.repository.listShoppingBagItems(customer.id)),
     settleCustomerMineList(() => context.repository.listCustomerFavorites(customer.id)),
+    settleCustomerMineList(() => context.repository.listCustomerAddresses(customer.id)),
+    settleCustomerMineList(() => context.repository.listCustomerWalletLedger(customer.id)),
   ])
   const recentOrders = orders
     .filter((order) => order.customerId === customer.id)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  const latestWalletBalance = walletLedger.length > 0 ? walletLedger[walletLedger.length - 1].balanceAfter : 0
+  const profileComplete = isCustomerMineProfileComplete(customer)
 
   return {
     customerId: customer.id,
     identity: {
       isSignedIn: true,
-      displayName: customer.phoneNumber ? maskPhoneNumber(customer.phoneNumber) : 'Wechat Customer',
+      displayName: getCustomerMineDisplayName(customer),
       authSource: customer.authSource,
       openidMasked: maskOpenid(customer.openid),
     },
     profile: {
+      nickname: customer.nickname || '',
       avatarUrl: customer.avatarUrl || '',
     },
     phone: {
@@ -1201,6 +1314,38 @@ const createCustomerMineSnapshot = async (customer, context) => {
     recentOrders: recentOrders.slice(0, 3).map(createCustomerMineRecentOrderSummary),
     recentOrderTotalCount: recentOrders.length,
     utilities: [
+      {
+        key: 'profile',
+        label: 'Personal information',
+        route: '/pages/customer/profile/index',
+        count: profileComplete ? 1 : 0,
+        countLabel: profileComplete ? 'Complete' : 'Incomplete',
+        isEnabled: true,
+      },
+      {
+        key: 'wallet',
+        label: 'Wallet',
+        route: '/pages/customer/wallet/index',
+        count: latestWalletBalance,
+        countLabel: formatCustomerMineMoney(latestWalletBalance),
+        isEnabled: true,
+      },
+      {
+        key: 'address',
+        label: 'Address',
+        route: '/pages/customer/address/index',
+        count: addresses.length,
+        countLabel: `${addresses.length} address${addresses.length === 1 ? '' : 'es'}`,
+        isEnabled: true,
+      },
+      {
+        key: 'orders',
+        label: 'My orders',
+        route: '/pages/customer/orders/index',
+        count: recentOrders.length,
+        countLabel: `${recentOrders.length} order${recentOrders.length === 1 ? '' : 's'}`,
+        isEnabled: true,
+      },
       {
         key: 'favorites',
         label: 'Favorites',
@@ -1417,6 +1562,21 @@ const createRepository = (store) => ({
   },
   saveCustomer: async (customer) => toCustomer(await store.insert('customers', toCustomerDocument(customer))),
   updateCustomer: async (customer) => toCustomer(await store.replace('customers', toCustomerDocument(customer))),
+  listCustomerAddresses: async (customerId) =>
+    (await store.list('customer_addresses', { customer_id: customerId }))
+      .map(toCustomerAddress)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+  saveCustomerAddress: async (address) => toCustomerAddress(await store.insert('customer_addresses', toCustomerAddressDocument(address))),
+  updateCustomerAddress: async (address) => toCustomerAddress(await store.replace('customer_addresses', toCustomerAddressDocument(address))),
+  deleteCustomerAddress: async (addressId) => {
+    const address = (await store.list('customer_addresses', { _id: addressId }))[0]
+    await store.deleteByField('customer_addresses', '_id', addressId)
+    return address ? toCustomerAddress(address) : null
+  },
+  listCustomerWalletLedger: async (customerId) =>
+    (await store.list('customer_wallet_ledger', { customer_id: customerId }))
+      .map(toCustomerWalletLedgerEntry)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
   saveRoleAssignment: async (assignment) => toRoleAssignment(await store.insert('role_assignments', toRoleAssignmentDocument(assignment))),
   updateRoleAssignment: async (assignment) => toRoleAssignment(await store.replace('role_assignments', toRoleAssignmentDocument(assignment))),
   listRoleAssignmentsByOpenid: async (openid) =>
@@ -1635,6 +1795,66 @@ const resolveMineCustomer = async (event, context) => {
   return upsertCustomerFromIdentity(context.repository, identity, context)
 }
 
+const createCustomerProfileSnapshot = (customer, context) => ({
+  customerId: customer.id,
+  profile: {
+    customerId: customer.id,
+    nickname: customer.nickname || '',
+    avatarUrl: customer.avatarUrl || '',
+  },
+  serverTime: context.now(),
+})
+
+const createCustomerWalletSnapshot = async (customer, context) => {
+  const ledger = await context.repository.listCustomerWalletLedger(customer.id)
+  const latestBalance = ledger.length > 0 ? ledger[ledger.length - 1].balanceAfter : 0
+  return {
+    customerId: customer.id,
+    balance: latestBalance,
+    ledger: ledger.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    serverTime: context.now(),
+  }
+}
+
+const createCustomerAddressBookSnapshot = async (customer, context) => {
+  const addresses = await context.repository.listCustomerAddresses(customer.id)
+  return {
+    customerId: customer.id,
+    addresses,
+    defaultAddressId: addresses.find((address) => address.isDefault)?.id || null,
+    serverTime: context.now(),
+  }
+}
+
+const findCustomerAddressForCustomer = async (context, customerId, addressId) => {
+  const address = (await context.repository.listCustomerAddresses(customerId)).find((item) => item.id === addressId)
+  if (!address) throw notFoundError('Customer address not found')
+  return address
+}
+
+const createShippingAddressSnapshot = (address) => ({
+  addressId: address.id,
+  contactName: address.contactName,
+  phoneNumber: address.phoneNumber,
+  province: address.province,
+  city: address.city,
+  district: address.district,
+  detail: address.detail,
+})
+
+const unsetOtherDefaultCustomerAddresses = async (context, customerId, keepAddressId) => {
+  const addresses = await context.repository.listCustomerAddresses(customerId)
+  for (const address of addresses) {
+    if (address.id !== keepAddressId && address.isDefault) {
+      await context.repository.updateCustomerAddress({
+        ...address,
+        isDefault: false,
+        updatedAt: context.now(),
+      })
+    }
+  }
+}
+
 const findShoppingBagItemForCustomer = async (context, customerId, itemId) => {
   const item = (await context.repository.listShoppingBagItems(customerId)).find((current) => current.id === itemId)
   if (!item) throw notFoundError('Shopping-bag item not found')
@@ -1742,6 +1962,7 @@ const savePendingCustomerOrder = async (context, input) => {
     customerId: input.customerId,
     customerAuthSource: input.customerAuthSource,
     ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+    ...(input.shippingAddress ? { shippingAddress: input.shippingAddress } : {}),
     status: 'pending_merchant_confirm',
     items: orderItems,
     totalAmount: orderItems.reduce((sum, item) => sum + item.salePrice * item.quantity, 0),
@@ -2108,6 +2329,95 @@ const apiHandlers = {
     const customer = await resolveShoppingBagCustomer(event, context)
     return createShoppingBagSnapshot(customer.id, context)
   },
+  async getCustomerProfileSnapshot(event, context) {
+    const customer = await resolveMineCustomer(event, context)
+    return createCustomerProfileSnapshot(customer, context)
+  },
+  async updateCustomerProfile(event, context) {
+    const customer = await resolveMineCustomer(event, context)
+    const input = parseCustomerProfileInput(event.payload)
+    const updated = await context.repository.updateCustomer({
+      ...customer,
+      ...input,
+      updatedAt: context.now(),
+    })
+    return createCustomerProfileSnapshot(updated, context)
+  },
+  async getCustomerWalletSnapshot(event, context) {
+    const customer = await resolveMineCustomer(event, context)
+    return createCustomerWalletSnapshot(customer, context)
+  },
+  async getCustomerAddressBookSnapshot(event, context) {
+    const customer = await resolveMineCustomer(event, context)
+    return createCustomerAddressBookSnapshot(customer, context)
+  },
+  async createCustomerAddress(event, context) {
+    const customer = await resolveMineCustomer(event, context)
+    const input = parseCustomerAddressInput(event.payload)
+    const timestamp = context.now()
+    const existingAddresses = await context.repository.listCustomerAddresses(customer.id)
+    const shouldBeDefault = input.isDefault === true || existingAddresses.length === 0
+    const address = await context.repository.saveCustomerAddress({
+      id: context.createId('address'),
+      customerId: customer.id,
+      contactName: input.contactName,
+      phoneNumber: input.phoneNumber,
+      province: input.province,
+      city: input.city,
+      district: input.district,
+      detail: input.detail,
+      isDefault: shouldBeDefault,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+    if (address.isDefault) await unsetOtherDefaultCustomerAddresses(context, customer.id, address.id)
+    return {
+      address,
+      snapshot: await createCustomerAddressBookSnapshot(customer, context),
+      invalidatedSnapshotKeys: [`customer-addresses:${customer.id}:v1`],
+    }
+  },
+  async updateCustomerAddress(event, context) {
+    const customer = await resolveMineCustomer(event, context)
+    const address = await findCustomerAddressForCustomer(context, customer.id, readString(event.params || {}, 'addressId'))
+    const input = parseCustomerAddressInput(event.payload, { partial: true })
+    const updated = await context.repository.updateCustomerAddress({
+      ...address,
+      ...input,
+      updatedAt: context.now(),
+    })
+    if (updated.isDefault) await unsetOtherDefaultCustomerAddresses(context, customer.id, updated.id)
+    return {
+      address: updated,
+      snapshot: await createCustomerAddressBookSnapshot(customer, context),
+      invalidatedSnapshotKeys: [`customer-addresses:${customer.id}:v1`],
+    }
+  },
+  async deleteCustomerAddress(event, context) {
+    const customer = await resolveMineCustomer(event, context)
+    const address = await findCustomerAddressForCustomer(context, customer.id, readString(event.params || {}, 'addressId'))
+    const removed = await context.repository.deleteCustomerAddress(address.id)
+    return {
+      address: removed,
+      snapshot: await createCustomerAddressBookSnapshot(customer, context),
+      invalidatedSnapshotKeys: [`customer-addresses:${customer.id}:v1`],
+    }
+  },
+  async setDefaultCustomerAddress(event, context) {
+    const customer = await resolveMineCustomer(event, context)
+    const address = await findCustomerAddressForCustomer(context, customer.id, readString(event.params || {}, 'addressId'))
+    const updated = await context.repository.updateCustomerAddress({
+      ...address,
+      isDefault: true,
+      updatedAt: context.now(),
+    })
+    await unsetOtherDefaultCustomerAddresses(context, customer.id, updated.id)
+    return {
+      address: updated,
+      snapshot: await createCustomerAddressBookSnapshot(customer, context),
+      invalidatedSnapshotKeys: [`customer-addresses:${customer.id}:v1`],
+    }
+  },
   async getCustomerMineSnapshot(event, context) {
     const customer = await resolveMineCustomer(event, context)
     const snapshot = await createCustomerMineSnapshot(customer, context)
@@ -2207,6 +2517,10 @@ const apiHandlers = {
   },
   async checkoutCustomerShoppingBag(event, context) {
     const customer = await resolveShoppingBagCustomer(event, context)
+    const { addressId } = parseCheckoutAddressInput(event.payload)
+    const shippingAddress = createShippingAddressSnapshot(
+      await findCustomerAddressForCustomer(context, customer.id, addressId),
+    )
 
     const shoppingBagItems = await context.repository.listShoppingBagItems(customer.id)
     const selectedItems = shoppingBagItems.filter((item) => item.isSelected !== false)
@@ -2237,6 +2551,7 @@ const apiHandlers = {
       customerPhone: customer.phoneNumber || '',
       customerId: customer.id,
       customerAuthSource: 'wechat',
+      shippingAddress,
       items: orderInputItems,
     })
     const removedItemIds = []
@@ -2681,6 +2996,10 @@ const apiHandlers = {
     const customer = input.session.authSource === 'wechat'
       ? await resolveWechatCustomerForOrder(event, context)
       : null
+    if (customer && !input.addressId) throw validationError('addressId is required')
+    const shippingAddress = customer
+      ? createShippingAddressSnapshot(await findCustomerAddressForCustomer(context, customer.id, input.addressId))
+      : undefined
     const phoneNumber = customer ? customer.phoneNumber : input.session.phoneNumber
     const product = await findProduct(context.repository, input.productId)
     const sku = (await context.repository.listSkus(product.id)).find((item) => item.id === input.skuId)
@@ -2695,12 +3014,16 @@ const apiHandlers = {
         customerId: customer?.id || input.session.customerId,
         customerAuthSource: customer ? 'wechat' : (input.session.authSource || 'mock_wechat'),
         idempotencyKey: input.idempotencyKey,
+        shippingAddress,
         items: [{ product, sku, quantity: input.quantity }],
       }),
     }
   },
   async getCustomerOrder(event, context) {
-    return { order: await findOrder(context.repository, readString(event.params || {}, 'orderId')) }
+    const customer = await resolveMineCustomer(event, context)
+    const order = await findOrder(context.repository, readString(event.params || {}, 'orderId'))
+    if (order.customerId !== customer.id) throw notFoundError('Order not found')
+    return { order }
   },
   async getCustomerOrdersSnapshot(event, context) {
     const customer = await resolveMineCustomer(event, context)

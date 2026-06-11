@@ -21,6 +21,7 @@ const createSnapshot = (overrides: Partial<CustomerMineSnapshot> = {}): Customer
     statusLabel: 'Phone bound',
   },
   profile: {
+    nickname: '',
     avatarUrl: '',
   },
   recentOrders: [
@@ -37,6 +38,34 @@ const createSnapshot = (overrides: Partial<CustomerMineSnapshot> = {}): Customer
   ],
   recentOrderTotalCount: 1,
   utilities: [
+    {
+      key: 'profile',
+      label: 'Personal information',
+      route: '/pages/customer/profile/index',
+      count: 0,
+      isEnabled: true,
+    },
+    {
+      key: 'wallet',
+      label: 'Wallet',
+      route: '/pages/customer/wallet/index',
+      count: 0,
+      isEnabled: true,
+    },
+    {
+      key: 'address',
+      label: 'Address',
+      route: '/pages/customer/address/index',
+      count: 0,
+      isEnabled: true,
+    },
+    {
+      key: 'orders',
+      label: 'My orders',
+      route: '/pages/customer/orders/index',
+      count: 0,
+      isEnabled: true,
+    },
     {
       key: 'favorites',
       label: 'Favorites',
@@ -70,6 +99,23 @@ describe('customer mine ViewModel', () => {
     expect(view.identityLabel).toBe('已登录')
     expect(view.identityDisplayName).toBe('微信客户')
     expect(view.identityOpenidLabel).toBe('cust...enid')
+  })
+
+  it('shows the persisted profile nickname when the mine snapshot provides it as identity display name', () => {
+    const view = createCustomerMineView(createSnapshot({
+      identity: {
+        isSignedIn: true,
+        displayName: 'Ada',
+        authSource: 'wechat',
+        openidMasked: 'cust...enid',
+      },
+      profile: {
+        nickname: 'Ada',
+        avatarUrl: '',
+      },
+    }))
+
+    expect(view.identityDisplayName).toBe('Ada')
   })
 
   it('maps persisted avatar profile state and stable placeholder text', () => {
@@ -163,25 +209,25 @@ describe('customer mine ViewModel', () => {
         key: 'profile',
         label: '个人信息',
         route: '/pages/customer/profile/index',
-        countLabel: '查看',
+        countLabel: '待完善',
       }),
       expect.objectContaining({
         key: 'wallet',
         label: '钱包',
         route: '/pages/customer/wallet/index',
-        countLabel: '空',
+        countLabel: '¥ 0.00',
       }),
       expect.objectContaining({
         key: 'address',
         label: '地址',
         route: '/pages/customer/address/index',
-        countLabel: '空',
+        countLabel: '待添加',
       }),
       expect.objectContaining({
         key: 'orders',
         label: '我的订单',
         route: '/pages/customer/orders/index',
-        countLabel: '查看',
+        countLabel: '暂无订单',
       }),
       expect.objectContaining({
         key: 'favorites',
@@ -195,6 +241,48 @@ describe('customer mine ViewModel', () => {
         route: '/pages/customer/shopping-bag/index',
         countLabel: '4',
       }),
+    ]))
+  })
+
+  it('maps real profile wallet address and order utility status from the snapshot counts', () => {
+    const view = createCustomerMineView(createSnapshot({
+      utilities: [
+        {
+          key: 'profile',
+          label: 'Personal information',
+          route: '/pages/customer/profile/index',
+          count: 1,
+          isEnabled: true,
+        },
+        {
+          key: 'wallet',
+          label: 'Wallet',
+          route: '/pages/customer/wallet/index',
+          count: 25,
+          isEnabled: true,
+        },
+        {
+          key: 'address',
+          label: 'Address',
+          route: '/pages/customer/address/index',
+          count: 2,
+          isEnabled: true,
+        },
+        {
+          key: 'orders',
+          label: 'My orders',
+          route: '/pages/customer/orders/index',
+          count: 1,
+          isEnabled: true,
+        },
+      ],
+    }))
+
+    expect(view.utilities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'profile', countLabel: '已完善' }),
+      expect.objectContaining({ key: 'wallet', countLabel: '¥ 25.00' }),
+      expect.objectContaining({ key: 'address', countLabel: '2 个地址' }),
+      expect.objectContaining({ key: 'orders', countLabel: '1 个订单' }),
     ]))
   })
 

@@ -416,6 +416,111 @@ describe('CloudBase mall API client', () => {
     ])
   })
 
+  it('maps customer profile wallet address and order detail actions without client identity authority', async () => {
+    const calls: Array<{ name: string; data: unknown }> = []
+    const client = createCloudBaseMallApiClient({
+      call: async (name, data) => {
+        calls.push({ name, data })
+        if ((data as { action: string }).action === 'getCustomerWalletSnapshot') {
+          return { customerId: 'customer-1', balance: 0, ledger: [], serverTime: '2026-06-11T00:00:00.000Z' } as never
+        }
+        if ((data as { action: string }).action === 'getCustomerAddressBookSnapshot') {
+          return { customerId: 'customer-1', addresses: [], defaultAddressId: null, serverTime: '2026-06-11T00:00:00.000Z' } as never
+        }
+        if ((data as { action: string }).action === 'getCustomerOrder') {
+          return { order: { id: 'order-1' } } as never
+        }
+        return { customerId: 'customer-1', profile: { customerId: 'customer-1' }, serverTime: '2026-06-11T00:00:00.000Z' } as never
+      },
+    })
+
+    await client.getCustomerProfileSnapshot!()
+    await client.updateCustomerProfile!({ nickname: 'Ada', avatarUrl: 'cloud://avatar.png' })
+    await client.getCustomerWalletSnapshot!()
+    await client.getCustomerAddressBookSnapshot!()
+    await client.createCustomerAddress!({
+      contactName: 'Ada',
+      phoneNumber: '13800000000',
+      province: 'Shanghai',
+      city: 'Shanghai',
+      district: 'Pudong',
+      detail: 'Lane 1',
+      isDefault: true,
+    })
+    await client.updateCustomerAddress!('address-1', { detail: 'Lane 2' })
+    await client.setDefaultCustomerAddress!('address-1')
+    await client.deleteCustomerAddress!('address-1')
+    await client.getCustomerOrder('order-1')
+
+    expect(calls).toEqual([
+      {
+        name: 'mallApi',
+        data: { action: 'getCustomerProfileSnapshot' },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'updateCustomerProfile',
+          payload: { nickname: 'Ada', avatarUrl: 'cloud://avatar.png' },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: { action: 'getCustomerWalletSnapshot' },
+      },
+      {
+        name: 'mallApi',
+        data: { action: 'getCustomerAddressBookSnapshot' },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'createCustomerAddress',
+          payload: {
+            contactName: 'Ada',
+            phoneNumber: '13800000000',
+            province: 'Shanghai',
+            city: 'Shanghai',
+            district: 'Pudong',
+            detail: 'Lane 1',
+            isDefault: true,
+          },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'updateCustomerAddress',
+          params: { addressId: 'address-1' },
+          payload: { detail: 'Lane 2' },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'setDefaultCustomerAddress',
+          params: { addressId: 'address-1' },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'deleteCustomerAddress',
+          params: { addressId: 'address-1' },
+        },
+      },
+      {
+        name: 'mallApi',
+        data: {
+          action: 'getCustomerOrder',
+          params: { orderId: 'order-1' },
+        },
+      },
+    ])
+    expect(JSON.stringify(calls)).not.toContain('customerId')
+    expect(JSON.stringify(calls)).not.toContain('openid')
+  })
+
   it('maps manager order notification config and subscription through mallApi', async () => {
     const calls: Array<{ name: string; data: unknown }> = []
     createAdminWorkbenchSession({
@@ -524,7 +629,7 @@ describe('CloudBase mall API client', () => {
     await client.selectCustomerShoppingBagItem('bag-item-1', { isSelected: false })
     await client.removeCustomerShoppingBagItem('bag-item-1')
     await client.clearUnavailableCustomerShoppingBagItems()
-    await client.checkoutCustomerShoppingBag()
+    await client.checkoutCustomerShoppingBag({ addressId: 'address-1' })
 
     expect(calls).toEqual([
       {
@@ -573,6 +678,7 @@ describe('CloudBase mall API client', () => {
         name: 'mallApi',
         data: {
           action: 'checkoutCustomerShoppingBag',
+          payload: { addressId: 'address-1' },
         },
       },
     ])

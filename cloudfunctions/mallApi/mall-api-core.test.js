@@ -271,6 +271,21 @@ const createProductFixture = async (handler, adminToken) => {
   }
 }
 
+const createCustomerAddressFixture = (handler, identity = customerIdentity, input = {}) =>
+  handler({
+    action: 'createCustomerAddress',
+    identity,
+    payload: {
+      contactName: input.contactName || 'Ada',
+      phoneNumber: input.phoneNumber || '13800000000',
+      province: input.province || 'Shanghai',
+      city: input.city || 'Shanghai',
+      district: input.district || 'Pudong',
+      detail: input.detail || 'Lane 1',
+      isDefault: input.isDefault !== false,
+    },
+  })
+
 describe('mallApi Phase 4 auth and role permissions', () => {
   it('rejects admin-only actions without a server admin token', async () => {
     const handler = createProductionRoleHandler()
@@ -503,6 +518,7 @@ describe('mallApi Phase 4 auth and role permissions', () => {
     const tracedStore = createTracedStore()
     const handler = createTracedHandler(tracedStore)
     const { product, sku } = await createProductFixture(handler)
+    const address = await createCustomerAddressFixture(handler)
     const detailBefore = await handler({
       action: 'getPublishedProductDetail',
       identity: customerIdentity,
@@ -519,6 +535,7 @@ describe('mallApi Phase 4 auth and role permissions', () => {
         productId: product.id,
         skuId: sku.id,
         quantity: 1,
+        addressId: address.data.address.id,
         session: {
           customerId: 'client-forged-customer',
           authSource: 'wechat',
@@ -615,6 +632,7 @@ describe('mallApi Phase 4 auth and role permissions', () => {
       identity: customerIdentity,
       payload: { phoneCode: 'phone-code-ok' },
     })
+    const address = await createCustomerAddressFixture(handler)
 
     const result = await handler({
       action: 'createCustomerOrder',
@@ -623,6 +641,7 @@ describe('mallApi Phase 4 auth and role permissions', () => {
         productId: product.id,
         skuId: sku.id,
         quantity: 1,
+        addressId: address.data.address.id,
         session: {
           customerId: 'client-forged-customer',
           openid: 'client-forged-openid',
@@ -649,6 +668,7 @@ describe('mallApi Phase 4 auth and role permissions', () => {
       identity: customerIdentity,
       payload: { phoneCode: 'phone-code-ok' },
     })
+    const address = await createCustomerAddressFixture(handler)
     const detailBefore = await handler({
       action: 'getPublishedProductDetail',
       params: { productId: product.id },
@@ -661,6 +681,7 @@ describe('mallApi Phase 4 auth and role permissions', () => {
         productId: product.id,
         skuId: sku.id,
         quantity: sku.stock + 1,
+        addressId: address.data.address.id,
         session: {
           authSource: 'wechat',
         },
@@ -751,6 +772,7 @@ describe('mallApi Phase 4 auth and role permissions', () => {
       identity: customerIdentity,
       payload: { phoneCode: 'phone-code-ok' },
     })
+    const address = await createCustomerAddressFixture(handler)
     const detailBefore = await handler({
       action: 'getPublishedProductDetail',
       params: { productId: product.id },
@@ -762,6 +784,7 @@ describe('mallApi Phase 4 auth and role permissions', () => {
         productId: product.id,
         skuId: sku.id,
         quantity: 1,
+        addressId: address.data.address.id,
         session: {
           authSource: 'wechat',
         },
@@ -1860,6 +1883,7 @@ describe('mallApi Phase 4 auth and role permissions', () => {
       identity: customerIdentity,
       payload: { phoneCode: 'phone-code-ok' },
     })
+    const address = await createCustomerAddressFixture(handler)
     const created = await handler({
       action: 'createCustomerOrder',
       identity: customerIdentity,
@@ -1867,6 +1891,7 @@ describe('mallApi Phase 4 auth and role permissions', () => {
         productId: product.id,
         skuId: sku.id,
         quantity: 1,
+        addressId: address.data.address.id,
         session: {
           authSource: 'wechat',
         },
@@ -2660,10 +2685,20 @@ describe('mallApi customer mine actions', () => {
       openid: 'customer-openid',
       appid: 'wxa63c53796488d4d4',
       phone_number: '13800000000',
+      nickname: 'Ada',
       avatar_url: 'cloud://avatars/customer-1.png',
       auth_source: 'wechat',
       created_at: '2026-05-11T00:00:00.000Z',
       updated_at: '2026-05-11T00:00:00.000Z',
+    })
+    await store.insert('customer_wallet_ledger', {
+      _id: 'wallet-ledger-1',
+      customer_id: bound.data.customer.id,
+      amount: 25,
+      balance_after: 25,
+      direction: 'credit',
+      reason: 'test credit',
+      created_at: '2026-05-10T00:00:00.000Z',
     })
     await handler({
       action: 'addCustomerShoppingBagItem',
@@ -2679,6 +2714,7 @@ describe('mallApi customer mine actions', () => {
       identity: customerIdentity,
       payload: { productId: product.id },
     })
+    const ownAddress = await createCustomerAddressFixture(handler)
     const ownOrder = await handler({
       action: 'createCustomerOrder',
       identity: customerIdentity,
@@ -2686,6 +2722,7 @@ describe('mallApi customer mine actions', () => {
         productId: product.id,
         skuId: sku.id,
         quantity: 1,
+        addressId: ownAddress.data.address.id,
         session: {
           customerId: 'forged-customer',
           openid: 'forged-openid',
@@ -2698,6 +2735,7 @@ describe('mallApi customer mine actions', () => {
       identity: otherCustomerIdentity,
       payload: { phoneCode: 'phone-code-ok' },
     })
+    const otherAddress = await createCustomerAddressFixture(handler, otherCustomerIdentity)
     const otherOrder = await handler({
       action: 'createCustomerOrder',
       identity: otherCustomerIdentity,
@@ -2705,6 +2743,7 @@ describe('mallApi customer mine actions', () => {
         productId: product.id,
         skuId: sku.id,
         quantity: 1,
+        addressId: otherAddress.data.address.id,
         session: {
           customerId: 'other-forged-customer',
           openid: 'other-forged-openid',
@@ -2727,11 +2766,12 @@ describe('mallApi customer mine actions', () => {
         customerId: bound.data.customer.id,
         identity: {
           isSignedIn: true,
-          displayName: '138****0000',
+          displayName: 'Ada',
           authSource: 'wechat',
           openidMasked: 'cust...enid',
         },
         profile: {
+          nickname: 'Ada',
           avatarUrl: 'cloud://avatars/customer-1.png',
         },
         phone: {
@@ -2741,6 +2781,34 @@ describe('mallApi customer mine actions', () => {
         },
         recentOrderTotalCount: 1,
         utilities: [
+          {
+            key: 'profile',
+            route: '/pages/customer/profile/index',
+            count: 1,
+            countLabel: 'Complete',
+            isEnabled: true,
+          },
+          {
+            key: 'wallet',
+            route: '/pages/customer/wallet/index',
+            count: 25,
+            countLabel: '¥ 25.00',
+            isEnabled: true,
+          },
+          {
+            key: 'address',
+            route: '/pages/customer/address/index',
+            count: 1,
+            countLabel: '1 address',
+            isEnabled: true,
+          },
+          {
+            key: 'orders',
+            route: '/pages/customer/orders/index',
+            count: 1,
+            countLabel: '1 order',
+            isEnabled: true,
+          },
           {
             key: 'favorites',
             route: '/pages/customer/favorites/index',
@@ -2780,6 +2848,7 @@ describe('mallApi customer mine actions', () => {
       identity: otherCustomerIdentity,
       payload: { phoneCode: 'phone-code-ok' },
     })
+    const otherAddress = await createCustomerAddressFixture(handler, otherCustomerIdentity)
     const otherOrder = await handler({
       action: 'createCustomerOrder',
       identity: otherCustomerIdentity,
@@ -2787,6 +2856,7 @@ describe('mallApi customer mine actions', () => {
         productId: product.id,
         skuId: sku.id,
         quantity: 1,
+        addressId: otherAddress.data.address.id,
         session: {
           customerId: 'other-forged-customer',
           openid: 'other-forged-openid',
@@ -2817,10 +2887,14 @@ describe('mallApi customer mine actions', () => {
     expect(result.success).toBe(true)
     expect(result.data.recentOrders).toEqual([])
     expect(result.data.recentOrderTotalCount).toBe(0)
-    expect(result.data.utilities).toEqual([
+    expect(result.data.utilities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'profile', count: 0, countLabel: 'Incomplete' }),
+      expect.objectContaining({ key: 'wallet', count: 0, countLabel: '¥ 0.00' }),
+      expect.objectContaining({ key: 'address', count: 0, countLabel: '0 addresses' }),
+      expect.objectContaining({ key: 'orders', count: 0, countLabel: '0 orders' }),
       expect.objectContaining({ key: 'favorites', count: 0 }),
       expect.objectContaining({ key: 'shoppingBag', count: 0 }),
-    ])
+    ]))
     expect(result.data.recentOrders.map((order) => order.orderId)).not.toContain(otherOrder.data.order.id)
   })
 
@@ -2832,6 +2906,7 @@ describe('mallApi customer mine actions', () => {
       identity: customerIdentity,
       payload: { phoneCode: 'phone-code-ok' },
     })
+    const ownAddress = await createCustomerAddressFixture(handler)
     const ownOrder = await handler({
       action: 'createCustomerOrder',
       identity: customerIdentity,
@@ -2839,6 +2914,7 @@ describe('mallApi customer mine actions', () => {
         productId: product.id,
         skuId: sku.id,
         quantity: 1,
+        addressId: ownAddress.data.address.id,
         session: {
           customerId: 'forged-customer',
           openid: 'forged-openid',
@@ -2852,6 +2928,7 @@ describe('mallApi customer mine actions', () => {
       identity: otherCustomerIdentity,
       payload: { phoneCode: 'phone-code-ok' },
     })
+    const otherAddress = await createCustomerAddressFixture(handler, otherCustomerIdentity)
     const otherOrder = await handler({
       action: 'createCustomerOrder',
       identity: otherCustomerIdentity,
@@ -2859,6 +2936,7 @@ describe('mallApi customer mine actions', () => {
         productId: product.id,
         skuId: sku.id,
         quantity: 1,
+        addressId: otherAddress.data.address.id,
         session: {
           customerId: 'other-forged-customer',
           openid: 'other-forged-openid',
@@ -2941,6 +3019,7 @@ describe('mallApi customer mine actions', () => {
       identity: customerIdentity,
       payload: { phoneCode: 'phone-code-ok' },
     })
+    const address = await createCustomerAddressFixture(handler)
     await handler({
       action: 'createCustomerOrder',
       identity: customerIdentity,
@@ -2948,6 +3027,7 @@ describe('mallApi customer mine actions', () => {
         productId: product.id,
         skuId: sku.id,
         quantity: 1,
+        addressId: address.data.address.id,
         session: {
           customerId: 'forged-customer',
           openid: 'forged-openid',
@@ -3016,10 +3096,14 @@ describe('mallApi customer mine actions', () => {
         },
         recentOrders: [],
         recentOrderTotalCount: 0,
-        utilities: [
+        utilities: expect.arrayContaining([
+          expect.objectContaining({ key: 'profile', count: 0 }),
+          expect.objectContaining({ key: 'wallet', count: 0 }),
+          expect.objectContaining({ key: 'address', count: 0 }),
+          expect.objectContaining({ key: 'orders', count: 0 }),
           expect.objectContaining({ key: 'favorites', count: 0 }),
           expect.objectContaining({ key: 'shoppingBag', count: 0 }),
-        ],
+        ]),
       },
     })
   })
@@ -3289,12 +3373,14 @@ describe('mallApi customer shopping bag actions', () => {
         quantity: 1,
       },
     })
+    const address = await createCustomerAddressFixture(handler)
     tracedStore.insertCalls.length = 0
     tracedStore.replaceCalls.length = 0
 
     const checkedOut = await handler({
       action: 'checkoutCustomerShoppingBag',
       identity: customerIdentity,
+      payload: { addressId: address.data.address.id },
     })
     const customerSnapshot = await handler({
       action: 'getCustomerShoppingBagSnapshot',
@@ -3384,6 +3470,7 @@ describe('mallApi customer shopping bag actions', () => {
         quantity: 1,
       },
     })
+    const address = await createCustomerAddressFixture(handler)
     const before = await handler({
       action: 'getPublishedProductDetail',
       identity: customerIdentity,
@@ -3409,6 +3496,7 @@ describe('mallApi customer shopping bag actions', () => {
     const unavailable = await handler({
       action: 'checkoutCustomerShoppingBag',
       identity: customerIdentity,
+      payload: { addressId: address.data.address.id },
     })
     const snapshotAfter = await handler({
       action: 'getCustomerShoppingBagSnapshot',
@@ -3468,6 +3556,383 @@ describe('mallApi customer shopping bag actions', () => {
 
     expect(cleared.data.removedItemIds).toHaveLength(1)
     expect(cleared.data.snapshot.items).toEqual([])
+  })
+})
+
+describe('mallApi customer private profile wallet address and order contracts', () => {
+  it('advertises customer-private account actions through listContracts', async () => {
+    const handler = createHandler()
+
+    const result = await handler({ action: 'listContracts' })
+
+    expect(result.data.actions).toEqual(expect.arrayContaining([
+      'getCustomerProfileSnapshot',
+      'updateCustomerProfile',
+      'getCustomerWalletSnapshot',
+      'getCustomerAddressBookSnapshot',
+      'createCustomerAddress',
+      'updateCustomerAddress',
+      'deleteCustomerAddress',
+      'setDefaultCustomerAddress',
+      'getCustomerOrder',
+    ]))
+    expect(result.data.actions).not.toEqual(expect.arrayContaining([
+      'rechargeCustomerWallet',
+      'withdrawCustomerWallet',
+      'payCustomerOrder',
+    ]))
+  })
+
+  it('keeps profile wallet and address snapshots scoped to verified runtime identity', async () => {
+    const store = createStore()
+    await store.insert('customer_wallet_ledger', {
+      _id: 'wallet-ledger-1',
+      customer_id: 'customer-1',
+      amount: 25,
+      balance_after: 25,
+      direction: 'credit',
+      reason: 'test credit',
+      created_at: '2026-05-10T00:00:00.000Z',
+    })
+    const handler = createMallApiHandler(store, {
+      createId: (() => {
+        let index = 0
+        return (prefix) => `${prefix}-${++index}`
+      })(),
+      now: () => '2026-05-11T00:00:00.000Z',
+      allowTestIdentityRoles: true,
+      allowMockCustomerOrder: true,
+    })
+
+    const updatedProfile = await handler({
+      action: 'updateCustomerProfile',
+      identity: customerIdentity,
+      payload: {
+        customerId: 'forged-customer',
+        openid: 'forged-openid',
+        nickname: 'Ada',
+        avatarUrl: 'cloud://avatar.png',
+      },
+    })
+    const createdAddress = await handler({
+      action: 'createCustomerAddress',
+      identity: customerIdentity,
+      payload: {
+        customerId: 'forged-customer',
+        contactName: 'Ada',
+        phoneNumber: '13800000000',
+        province: 'Shanghai',
+        city: 'Shanghai',
+        district: 'Pudong',
+        detail: 'Lane 1',
+        isDefault: true,
+      },
+    })
+    const ownProfile = await handler({
+      action: 'getCustomerProfileSnapshot',
+      identity: customerIdentity,
+      payload: { customerId: 'forged-customer' },
+    })
+    const ownWallet = await handler({
+      action: 'getCustomerWalletSnapshot',
+      identity: customerIdentity,
+      payload: { customerId: 'forged-customer' },
+    })
+    const ownAddresses = await handler({
+      action: 'getCustomerAddressBookSnapshot',
+      identity: customerIdentity,
+      payload: { customerId: 'forged-customer' },
+    })
+    const otherAddresses = await handler({
+      action: 'getCustomerAddressBookSnapshot',
+      identity: otherCustomerIdentity,
+    })
+
+    expect(updatedProfile).toMatchObject({
+      success: true,
+      data: {
+        profile: {
+          customerId: updatedProfile.data.customerId,
+          nickname: 'Ada',
+          avatarUrl: 'cloud://avatar.png',
+        },
+      },
+    })
+    expect(createdAddress.data.address).toMatchObject({
+      customerId: updatedProfile.data.customerId,
+      contactName: 'Ada',
+      isDefault: true,
+    })
+    expect(ownProfile.data.customerId).toBe(updatedProfile.data.customerId)
+    expect(ownWallet.data).toMatchObject({
+      customerId: updatedProfile.data.customerId,
+      balance: 25,
+      ledger: [
+        {
+          id: 'wallet-ledger-1',
+          amount: 25,
+          balanceAfter: 25,
+          direction: 'credit',
+        },
+      ],
+    })
+    expect(ownAddresses.data.addresses).toEqual([
+      expect.objectContaining({ id: createdAddress.data.address.id, customerId: updatedProfile.data.customerId }),
+    ])
+    expect(otherAddresses.data).toMatchObject({
+      customerId: expect.any(String),
+      addresses: [],
+    })
+    expect(otherAddresses.data.customerId).not.toBe(updatedProfile.data.customerId)
+  })
+
+  it('requires a current-customer address and copies a shipping snapshot for direct orders', async () => {
+    const tracedStore = createTracedStore()
+    const handler = createTracedHandler(tracedStore)
+    const { product, sku } = await createProductFixture(handler)
+    const address = await handler({
+      action: 'createCustomerAddress',
+      identity: customerIdentity,
+      payload: {
+        contactName: 'Ada',
+        phoneNumber: '13800000000',
+        province: 'Shanghai',
+        city: 'Shanghai',
+        district: 'Pudong',
+        detail: 'Lane 1',
+        isDefault: true,
+      },
+    })
+    await handler({
+      action: 'bindCustomerPhone',
+      identity: customerIdentity,
+      payload: { phoneCode: 'phone-code-ok' },
+    })
+    tracedStore.insertCalls.length = 0
+    tracedStore.replaceCalls.length = 0
+
+    const missingAddress = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: { authSource: 'wechat' },
+      },
+    })
+    const otherCustomerAddress = await handler({
+      action: 'createCustomerAddress',
+      identity: otherCustomerIdentity,
+      payload: {
+        contactName: 'Other',
+        phoneNumber: '13900000000',
+        province: 'Beijing',
+        city: 'Beijing',
+        district: 'Chaoyang',
+        detail: 'Road 9',
+      },
+    })
+    const wrongOwnerAddress = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        addressId: otherCustomerAddress.data.address.id,
+        session: { authSource: 'wechat' },
+      },
+    })
+    const created = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        addressId: address.data.address.id,
+        session: {
+          customerId: 'forged-customer',
+          openid: 'forged-openid',
+          authSource: 'wechat',
+        },
+      },
+    })
+
+    expect(missingAddress).toMatchObject({
+      success: false,
+      error: { code: 'VALIDATION_ERROR' },
+    })
+    expect(wrongOwnerAddress).toMatchObject({
+      success: false,
+      error: { code: 'NOT_FOUND' },
+    })
+    expect(created).toMatchObject({
+      success: true,
+      data: {
+        order: {
+          customerId: address.data.address.customerId,
+          shippingAddress: {
+            addressId: address.data.address.id,
+            contactName: 'Ada',
+            phoneNumber: '13800000000',
+            province: 'Shanghai',
+            city: 'Shanghai',
+            district: 'Pudong',
+            detail: 'Lane 1',
+          },
+        },
+      },
+    })
+    expect(tracedStore.insertCalls.filter((call) => call.name === 'orders')).toHaveLength(1)
+  })
+
+  it('keeps getCustomerOrder isolated to the verified customer and preserves legacy orders without an address', async () => {
+    const handler = createHandler()
+    const { product, sku } = await createProductFixture(handler)
+    const address = await handler({
+      action: 'createCustomerAddress',
+      identity: customerIdentity,
+      payload: {
+        contactName: 'Ada',
+        phoneNumber: '13800000000',
+        province: 'Shanghai',
+        city: 'Shanghai',
+        district: 'Pudong',
+        detail: 'Lane 1',
+      },
+    })
+    const ownOrder = await handler({
+      action: 'createCustomerOrder',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        addressId: address.data.address.id,
+        session: { authSource: 'wechat' },
+      },
+    })
+    const legacyCustomer = await handler({
+      action: 'getCurrentCustomer',
+      identity: otherCustomerIdentity,
+    })
+    const legacyOrder = await handler({
+      action: 'createCustomerOrder',
+      identity: otherCustomerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+        session: {
+          customerId: legacyCustomer.data.customer.id,
+          phoneNumber: '13999999999',
+          authSource: 'mock_wechat',
+        },
+      },
+    })
+
+    const ownDetail = await handler({
+      action: 'getCustomerOrder',
+      identity: customerIdentity,
+      params: { orderId: ownOrder.data.order.id },
+    })
+    const leakedDetail = await handler({
+      action: 'getCustomerOrder',
+      identity: otherCustomerIdentity,
+      params: { orderId: ownOrder.data.order.id },
+    })
+    const legacyDetail = await handler({
+      action: 'getCustomerOrder',
+      identity: otherCustomerIdentity,
+      params: { orderId: legacyOrder.data.order.id },
+    })
+
+    expect(ownDetail).toMatchObject({
+      success: true,
+      data: {
+        order: {
+          id: ownOrder.data.order.id,
+          customerId: address.data.address.customerId,
+          shippingAddress: expect.objectContaining({ contactName: 'Ada' }),
+        },
+      },
+    })
+    expect(leakedDetail).toMatchObject({
+      success: false,
+      error: { code: 'NOT_FOUND' },
+    })
+    expect(legacyDetail).toMatchObject({
+      success: true,
+      data: {
+        order: {
+          id: legacyOrder.data.order.id,
+        },
+      },
+    })
+    expect(legacyDetail.data.order.shippingAddress).toBeUndefined()
+  })
+
+  it('requires a current-customer address and copies a shipping snapshot for shopping-bag checkout', async () => {
+    const tracedStore = createTracedStore()
+    const handler = createTracedHandler(tracedStore)
+    const { product, sku } = await createProductFixture(handler)
+    await handler({
+      action: 'addCustomerShoppingBagItem',
+      identity: customerIdentity,
+      payload: {
+        productId: product.id,
+        skuId: sku.id,
+        quantity: 1,
+      },
+    })
+    const address = await handler({
+      action: 'createCustomerAddress',
+      identity: customerIdentity,
+      payload: {
+        contactName: 'Ada',
+        phoneNumber: '13800000000',
+        province: 'Shanghai',
+        city: 'Shanghai',
+        district: 'Pudong',
+        detail: 'Lane 1',
+      },
+    })
+    tracedStore.insertCalls.length = 0
+    tracedStore.replaceCalls.length = 0
+
+    const missingAddress = await handler({
+      action: 'checkoutCustomerShoppingBag',
+      identity: customerIdentity,
+    })
+    const checkedOut = await handler({
+      action: 'checkoutCustomerShoppingBag',
+      identity: customerIdentity,
+      payload: {
+        addressId: address.data.address.id,
+        customerId: 'forged-customer',
+      },
+    })
+
+    expect(missingAddress).toMatchObject({
+      success: false,
+      error: { code: 'VALIDATION_ERROR' },
+    })
+    expect(checkedOut).toMatchObject({
+      success: true,
+      data: {
+        order: {
+          customerId: address.data.address.customerId,
+          shippingAddress: expect.objectContaining({
+            addressId: address.data.address.id,
+            contactName: 'Ada',
+          }),
+        },
+        removedItemIds: [expect.any(String)],
+      },
+    })
+    expect(tracedStore.insertCalls.filter((call) => call.name === 'orders')).toHaveLength(1)
   })
 })
 

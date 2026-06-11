@@ -858,6 +858,7 @@ describe('CloudBase mall facades', () => {
       productId: product.id,
       skuId: sku.id,
       quantity: 1,
+      addressId: 'address-1',
       authService,
       confirmLogin,
       client: createClient({
@@ -872,8 +873,40 @@ describe('CloudBase mall facades', () => {
     expect(createCustomerOrder).toHaveBeenCalledWith(expect.objectContaining({
       productId: 'product-1',
       skuId: 'sku-1',
+      addressId: 'address-1',
       session,
     }))
+  })
+
+  it('blocks product-detail checkout before login when no address is selected', async () => {
+    const createCustomerOrder = vi.fn(async () => ({ order }))
+    const confirmLogin = vi.fn(async () => true)
+    const authService = {
+      getCurrentSession: vi.fn(),
+      login: vi.fn(),
+      authorizePhoneNumber: vi.fn(),
+      logout: vi.fn(),
+    }
+
+    await expect(submitCloudBaseCustomerProductDetailOrder({
+      productId: product.id,
+      skuId: sku.id,
+      quantity: 1,
+      authService,
+      confirmLogin,
+      client: createClient({
+        getPublishedProductDetail: vi.fn(async () => ({ product, skus: [sku], serverTime: '2026-05-27T00:00:00.000Z' })),
+        createCustomerOrder,
+      }),
+    })).resolves.toMatchObject({
+      status: 'blocked',
+      order: null,
+      message: '请选择收货地址',
+    })
+
+    expect(confirmLogin).not.toHaveBeenCalled()
+    expect(authService.login).not.toHaveBeenCalled()
+    expect(createCustomerOrder).not.toHaveBeenCalled()
   })
 
   it('submits customer orders after real WeChat account login without requesting phone authorization', async () => {
@@ -898,6 +931,7 @@ describe('CloudBase mall facades', () => {
       productId: product.id,
       skuId: sku.id,
       quantity: 1,
+      addressId: 'address-1',
       authService,
       confirmLogin,
       requestPhoneNumber,
@@ -940,6 +974,7 @@ describe('CloudBase mall facades', () => {
       productId: product.id,
       skuId: sku.id,
       quantity: 1,
+      addressId: 'address-1',
       authService,
       confirmLogin,
       requestPhoneNumber,
@@ -981,6 +1016,7 @@ describe('CloudBase mall facades', () => {
       productId: product.id,
       skuId: sku.id,
       quantity: 1,
+      addressId: 'address-1',
       authService,
       requestPhoneNumber,
       client: createClient({
@@ -1015,6 +1051,7 @@ describe('CloudBase mall facades', () => {
       productId: product.id,
       skuId: sku.id,
       quantity: 1,
+      addressId: 'address-1',
       authService,
       confirmLogin: async () => true,
       client: createClient({
@@ -1050,6 +1087,7 @@ describe('CloudBase mall facades', () => {
       productId: product.id,
       skuId: sku.id,
       quantity: 1,
+      addressId: 'address-1',
       authService,
       confirmLogin: async () => true,
       requestPhoneNumber,

@@ -61,11 +61,40 @@ const createEmptySnapshot = (): CustomerMineSnapshot => ({
     statusLabel: 'Phone not bound',
   },
   profile: {
+    nickname: '',
     avatarUrl: '',
   },
   recentOrders: [],
   recentOrderTotalCount: 0,
   utilities: [
+    {
+      key: 'profile',
+      label: 'Personal information',
+      route: '/pages/customer/profile/index',
+      count: 0,
+      isEnabled: true,
+    },
+    {
+      key: 'wallet',
+      label: 'Wallet',
+      route: '/pages/customer/wallet/index',
+      count: 0,
+      isEnabled: true,
+    },
+    {
+      key: 'address',
+      label: 'Address',
+      route: '/pages/customer/address/index',
+      count: 0,
+      isEnabled: true,
+    },
+    {
+      key: 'orders',
+      label: 'My orders',
+      route: '/pages/customer/orders/index',
+      count: 0,
+      isEnabled: true,
+    },
     {
       key: 'favorites',
       label: '收藏',
@@ -99,37 +128,6 @@ const utilityLabelMap: Record<CustomerMineUtilityEntry['key'], string> = {
   shoppingBag: '购物袋',
 }
 
-const accountUtilityEntries: CustomerMineUtilityEntry[] = [
-  {
-    key: 'profile',
-    label: 'Personal information',
-    route: '/pages/customer/profile/index',
-    count: 0,
-    isEnabled: true,
-  },
-  {
-    key: 'wallet',
-    label: 'Wallet',
-    route: '/pages/customer/wallet/index',
-    count: 0,
-    isEnabled: true,
-  },
-  {
-    key: 'address',
-    label: 'Address',
-    route: '/pages/customer/address/index',
-    count: 0,
-    isEnabled: true,
-  },
-  {
-    key: 'orders',
-    label: 'My orders',
-    route: '/pages/customer/orders/index',
-    count: 0,
-    isEnabled: true,
-  },
-]
-
 const normalizePhoneStatusLabel = (label: string): string => {
   if (label === 'Phone bound') return '已绑定手机'
   if (label === 'Phone not bound') return '未绑定手机'
@@ -151,14 +149,19 @@ const toRecentOrderView = (order: CustomerMineRecentOrderSummary): CustomerMineR
   itemCountLabel: formatItemCount(order.itemCount),
 })
 
+const formatUtilityCountLabel = (entry: CustomerMineUtilityEntry): string => {
+  if (entry.key === 'profile') return entry.count > 0 ? '已完善' : '待完善'
+  if (entry.key === 'wallet') return formatMoney(entry.count)
+  if (entry.key === 'address') return entry.count > 0 ? `${entry.count} 个地址` : '待添加'
+  if (entry.key === 'orders') return entry.count > 0 ? `${entry.count} 个订单` : '暂无订单'
+
+  return entry.countLabel?.trim() || String(entry.count)
+}
+
 const toUtilityView = (entry: CustomerMineUtilityEntry): CustomerMineUtilityView => ({
   ...entry,
   label: utilityLabelMap[entry.key],
-  countLabel: entry.key === 'profile' || entry.key === 'orders'
-    ? '查看'
-    : entry.key === 'wallet' || entry.key === 'address'
-    ? '空'
-    : String(entry.count),
+  countLabel: formatUtilityCountLabel(entry),
 })
 
 export const createCustomerMineView = (
@@ -189,7 +192,7 @@ export const createCustomerMineView = (
     recentOrders,
     recentOrderTotalCount: snapshot.recentOrderTotalCount,
     recentOrdersEmptyMessage: recentOrders.length === 0 ? RECENT_ORDERS_EMPTY_MESSAGE : '',
-    utilities: [...accountUtilityEntries, ...snapshot.utilities].map(toUtilityView),
+    utilities: snapshot.utilities.map(toUtilityView),
     emptyMessage: isLoading ? LOADING_MESSAGE : (recentOrders.length === 0 && snapshot.utilities.length === 0 ? EMPTY_MESSAGE : ''),
     loadingState,
     failureMessage: options.failureMessage ?? '',

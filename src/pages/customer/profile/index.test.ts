@@ -1,28 +1,50 @@
-import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
+import { describe, expect, it } from 'vitest'
 
 const source = readFileSync(path.resolve(__dirname, 'index.vue'), 'utf8')
 
-describe('customer profile placeholder page', () => {
-  it('renders a safe personal-info placeholder without direct persistence', () => {
+describe('customer profile edit page', () => {
+  it('renders the approved profile edit UI states without direct persistence', () => {
     expect(source).toContain('个人信息')
-    expect(source).toContain('资料完善将在后续阶段开放')
+    expect(source).toContain('正在加载个人信息')
+    expect(source).toContain('正在同步个人信息')
+    expect(source).toContain('昵称')
+    expect(source).toContain('头像地址')
+    expect(source).toContain('选择微信头像')
+    expect(source).not.toContain('閫夋嫨寰俊澶村儚')
+    expect(source).toContain('还没有完善个人资料')
+    expect(source).toContain('保存资料')
+    expect(source).toContain('保存中')
+    expect(source).toContain('@tap="retry"')
+    expect(source).toContain('@tap="save"')
+    expect(source).toContain('fieldErrors.nickname')
+    expect(source).toContain('fieldErrors.avatarUrl')
+    expect(source).toContain('open-type="chooseAvatar"')
+    expect(source).toContain('@chooseavatar="onChooseAvatar"')
+    expect(source).toContain('const onChooseAvatar')
+    expect(source).toContain('profileState.updateAvatarUrl(selectedAvatarUrl)')
     expect(source).toContain('class="detail-header"')
     expect(source).toContain('class="icon-button plain"')
     expect(source).toContain('class="chevron"')
     expect(source).toContain('@tap="goMine"')
-    expect(source).toContain('{{ backIcon }}')
-    expect(source).toContain("const backIcon = '<'")
+    expect(source).toContain('<text class="chevron">‹</text>')
     expect(source).toContain(':style="{ paddingTop: headerTopPadding }"')
     expect(source).toContain('const HEADER_TOP_OFFSET_RPX = -8')
     expect(source).toContain('uni.getMenuButtonBoundingClientRect?.()')
     expect(source).toContain('redirectTo(routes.customerMine)')
+    expect(source).toContain('createCustomerProfilePageState')
+    expect(source).toContain(':disabled="isSaveDisabled"')
+    expect(source).toContain('hover-class="press-feedback"')
     expect(source).not.toContain('&lt;')
     expect(source).not.toContain('back-button')
     expect(source).not.toContain('collection')
     expect(source).not.toContain('repository')
-    expect(source).not.toContain('cloudbase')
+    expect(source).not.toContain('wx.cloud')
+    expect(source).not.toContain('getRuntimeCloudBaseMallApiClient')
     expect(source).not.toContain('mallApi')
+    expect(source).not.toContain('wallet')
+    expect(source).not.toContain('address/index')
+    expect(source).not.toContain('orders/index')
   })
 })

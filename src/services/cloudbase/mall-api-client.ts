@@ -224,6 +224,77 @@ export type CustomerOrdersSnapshot = {
   serverTime: string
 }
 
+export type CustomerProfileSnapshot = {
+  customerId: string
+  profile: {
+    customerId: string
+    nickname: string
+    avatarUrl: string
+  }
+  serverTime: string
+}
+
+type UpdateCustomerProfileInput = Partial<{
+  nickname: string
+  avatarUrl: string
+}>
+
+export type CustomerWalletLedgerEntry = {
+  id: string
+  customerId: string
+  amount: number
+  balanceAfter: number
+  direction: 'credit' | 'debit'
+  reason: string
+  createdAt: string
+}
+
+export type CustomerWalletSnapshot = {
+  customerId: string
+  balance: number
+  ledger: CustomerWalletLedgerEntry[]
+  serverTime: string
+}
+
+export type CustomerAddress = {
+  id: string
+  customerId: string
+  contactName: string
+  phoneNumber: string
+  province: string
+  city: string
+  district: string
+  detail: string
+  isDefault: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export type CustomerAddressInput = {
+  contactName: string
+  phoneNumber: string
+  province: string
+  city: string
+  district: string
+  detail: string
+  isDefault?: boolean
+}
+
+export type CustomerAddressPatchInput = Partial<CustomerAddressInput>
+
+export type CustomerAddressBookSnapshot = {
+  customerId: string
+  addresses: CustomerAddress[]
+  defaultAddressId: string | null
+  serverTime: string
+}
+
+type CustomerAddressCommandResult = {
+  address: CustomerAddress | null
+  snapshot: CustomerAddressBookSnapshot
+  invalidatedSnapshotKeys: string[]
+}
+
 export type ManagerOrderNotificationConfig = {
   isConfigured: boolean
   templateId: string
@@ -260,6 +331,7 @@ type CreateCustomerOrderInput = {
   productId: string
   skuId: string
   quantity: number
+  addressId?: string
   session: CustomerSession
 }
 
@@ -360,6 +432,7 @@ export type CustomerMineUtilityEntry = {
   label: string
   route: string
   count: number
+  countLabel?: string
   isEnabled: boolean
 }
 
@@ -372,6 +445,7 @@ export type CustomerMineSnapshot = {
     openidMasked: string
   }
   profile: {
+    nickname?: string
     avatarUrl: string
   }
   phone: {
@@ -415,6 +489,10 @@ type CheckoutCustomerShoppingBagResult = {
   removedItemIds: string[]
   snapshot: CustomerShoppingBagSnapshot
   invalidatedSnapshotKeys: string[]
+}
+
+type CheckoutCustomerShoppingBagInput = {
+  addressId: string
 }
 
 export type CloudBaseMallApiClient = {
@@ -462,6 +540,14 @@ export type CloudBaseMallApiClient = {
   createCustomerOrder: (input: CreateCustomerOrderInput) => Promise<{ order: Order }>
   getCustomerOrder: (orderId: string) => Promise<{ order: Order }>
   getCustomerOrdersSnapshot: () => Promise<CustomerOrdersSnapshot>
+  getCustomerProfileSnapshot?: () => Promise<CustomerProfileSnapshot>
+  updateCustomerProfile?: (input: UpdateCustomerProfileInput) => Promise<CustomerProfileSnapshot>
+  getCustomerWalletSnapshot?: () => Promise<CustomerWalletSnapshot>
+  getCustomerAddressBookSnapshot?: () => Promise<CustomerAddressBookSnapshot>
+  createCustomerAddress?: (input: CustomerAddressInput) => Promise<CustomerAddressCommandResult>
+  updateCustomerAddress?: (addressId: string, input: CustomerAddressPatchInput) => Promise<CustomerAddressCommandResult>
+  deleteCustomerAddress?: (addressId: string) => Promise<CustomerAddressCommandResult>
+  setDefaultCustomerAddress?: (addressId: string) => Promise<CustomerAddressCommandResult>
   getOwnerOrderSnapshot: () => Promise<OwnerOrderSnapshot>
   getManagerOrderNotificationConfig: () => Promise<ManagerOrderNotificationConfig>
   subscribeManagerOrderNotifications: (
@@ -481,7 +567,7 @@ export type CloudBaseMallApiClient = {
   ) => Promise<CustomerShoppingBagCommandResult>
   removeCustomerShoppingBagItem: (itemId: string) => Promise<CustomerShoppingBagCommandResult>
   clearUnavailableCustomerShoppingBagItems: () => Promise<ClearUnavailableCustomerShoppingBagItemsResult>
-  checkoutCustomerShoppingBag: () => Promise<CheckoutCustomerShoppingBagResult>
+  checkoutCustomerShoppingBag: (input?: CheckoutCustomerShoppingBagInput) => Promise<CheckoutCustomerShoppingBagResult>
   getCustomerFavoriteProductsSnapshot: () => Promise<CustomerFavoriteProductsSnapshot>
   favoriteCustomerProduct: (productId: string) => Promise<CustomerFavoriteProductCommandResult>
   unfavoriteCustomerProduct: (productId: string) => Promise<CustomerFavoriteProductCommandResult>
@@ -644,6 +730,30 @@ export const createCloudBaseMallApiClient = (
   getCustomerOrdersSnapshot() {
     return callMallApi(functionClient, { action: 'getCustomerOrdersSnapshot' })
   },
+  getCustomerProfileSnapshot() {
+    return callMallApi(functionClient, { action: 'getCustomerProfileSnapshot' })
+  },
+  updateCustomerProfile(input) {
+    return callMallApi(functionClient, { action: 'updateCustomerProfile', payload: input })
+  },
+  getCustomerWalletSnapshot() {
+    return callMallApi(functionClient, { action: 'getCustomerWalletSnapshot' })
+  },
+  getCustomerAddressBookSnapshot() {
+    return callMallApi(functionClient, { action: 'getCustomerAddressBookSnapshot' })
+  },
+  createCustomerAddress(input) {
+    return callMallApi(functionClient, { action: 'createCustomerAddress', payload: input })
+  },
+  updateCustomerAddress(addressId, input) {
+    return callMallApi(functionClient, { action: 'updateCustomerAddress', params: { addressId }, payload: input })
+  },
+  deleteCustomerAddress(addressId) {
+    return callMallApi(functionClient, { action: 'deleteCustomerAddress', params: { addressId } })
+  },
+  setDefaultCustomerAddress(addressId) {
+    return callMallApi(functionClient, { action: 'setDefaultCustomerAddress', params: { addressId } })
+  },
   getOwnerOrderSnapshot() {
     return callMallApi(functionClient, { action: 'getOwnerOrderSnapshot' })
   },
@@ -685,8 +795,8 @@ export const createCloudBaseMallApiClient = (
   clearUnavailableCustomerShoppingBagItems() {
     return callMallApi(functionClient, { action: 'clearUnavailableCustomerShoppingBagItems' })
   },
-  checkoutCustomerShoppingBag() {
-    return callMallApi(functionClient, { action: 'checkoutCustomerShoppingBag' })
+  checkoutCustomerShoppingBag(input) {
+    return callMallApi(functionClient, { action: 'checkoutCustomerShoppingBag', payload: input })
   },
   getCustomerFavoriteProductsSnapshot() {
     return callMallApi(functionClient, { action: 'getCustomerFavoriteProductsSnapshot' })

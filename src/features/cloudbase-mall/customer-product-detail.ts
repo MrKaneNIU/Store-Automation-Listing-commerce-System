@@ -92,6 +92,7 @@ export const selectCloudBaseCustomerProductSku = async (
 export const submitCloudBaseCustomerProductDetailOrder = async (params: {
   productId: string
   skuId: string
+  addressId?: string
   quantity?: number
   authService?: WechatAuthService
   confirmLogin?: () => Promise<boolean>
@@ -107,6 +108,9 @@ export const submitCloudBaseCustomerProductDetailOrder = async (params: {
   }
   if (!sku || sku.isDisabled) {
     return { status: 'blocked', order: null, message: selectAvailableSkuMessage }
+  }
+  if (!params.addressId) {
+    return { status: 'blocked', order: null, message: '请选择收货地址' }
   }
 
   try {
@@ -126,6 +130,7 @@ export const submitCloudBaseCustomerProductDetailOrder = async (params: {
       productId: view.product.id,
       skuId: sku.id,
       quantity: params.quantity ?? 1,
+      addressId: params.addressId,
       session,
     })
 

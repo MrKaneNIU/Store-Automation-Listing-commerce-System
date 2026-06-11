@@ -58,6 +58,21 @@ describe('owner orders page state contract', () => {
     expect(source).toContain('@tap.stop="confirm(order.id)"')
   })
 
+  it('shows the shipping address snapshot in details while keeping legacy fallback visible', () => {
+    const source = ownerOrdersPageSource()
+
+    expect(source).toContain('class="shipping-panel"')
+    expect(source).toContain('收货地址')
+    expect(source).toContain('order.shippingAddress')
+    expect(source).toContain('order.shippingAddress.contactName')
+    expect(source).toContain('order.shippingAddress.phoneNumber')
+    expect(source).toContain('order.shippingAddress.province')
+    expect(source).toContain('order.shippingAddress.city')
+    expect(source).toContain('order.shippingAddress.district')
+    expect(source).toContain('order.shippingAddress.detail')
+    expect(source).toContain('未记录收货地址')
+  })
+
   it('keeps manager order notification opt-in on the facade and WeChat subscribe API', () => {
     const source = ownerOrdersPageSource()
 

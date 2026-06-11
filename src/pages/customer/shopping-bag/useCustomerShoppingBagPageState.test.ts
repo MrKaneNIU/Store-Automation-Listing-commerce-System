@@ -9,6 +9,10 @@ import type {
 import type { CustomerShoppingBagSnapshot } from '../../../services/cloudbase/mall-api-client'
 import { createCustomerShoppingBagPageState } from './useCustomerShoppingBagPageState'
 import type { CustomerRuntimeRequestLogEntry } from '../../../services/performance/customer-runtime-request-log'
+import {
+  createCustomerAddressBookView,
+  type CustomerAddressBookView,
+} from '../../../features/customer-address/customer-address'
 
 const pageSource = readFileSync(path.resolve(__dirname, 'index.vue'), 'utf8')
 const legacyVisualEntryCopy = '视觉' + '入口'
@@ -77,6 +81,26 @@ const createCheckoutResult = (view: CustomerShoppingBagViewModel): CloudBaseCust
   },
   removedItemIds: ['bag-item-1'],
 })
+
+const createAddressView = (): CustomerAddressBookView =>
+  createCustomerAddressBookView({
+    customerId: 'customer-1',
+    addresses: [{
+      id: 'address-1',
+      customerId: 'customer-1',
+      contactName: 'Ada',
+      phoneNumber: '13800000000',
+      province: '上海',
+      city: '上海市',
+      district: '静安区',
+      detail: '南京西路 1 号',
+      isDefault: true,
+      createdAt: '2026-06-11T00:00:00.000Z',
+      updatedAt: '2026-06-11T00:00:00.000Z',
+    }],
+    defaultAddressId: 'address-1',
+    serverTime: '2026-06-11T00:00:00.000Z',
+  })
 
 describe('customer shopping bag page state', () => {
   it('deduplicates concurrent snapshot loads', async () => {
@@ -213,7 +237,7 @@ describe('customer shopping bag page state', () => {
     expect(state.viewModel.value.selectedSubtotalText).toBe('¥258.00')
   })
 
-  it('submits selected shopping-bag items through the backend checkout command', async () => {
+  it('submits selected shopping-bag items through the backend checkout command with addressId', async () => {
     const initialView = createCustomerShoppingBagView(createSnapshot(1))
     const checkedOutView = createCustomerShoppingBagView({
       ...createSnapshot(1),
@@ -229,21 +253,47 @@ describe('customer shopping bag page state', () => {
     })
 
     await state.handlePageShow()
+    state.selectAddress('address-1')
     await expect(state.submitSelectedItems()).resolves.toMatchObject({
       status: 'succeeded',
       order: { id: 'order-1' },
       removedItemIds: ['bag-item-1'],
     })
 
-    expect(checkoutSelectedItems).toHaveBeenCalledWith(initialView)
+    expect(checkoutSelectedItems).toHaveBeenCalledWith('address-1', initialView)
     expect(state.message.value).toBe('Order submitted')
     expect(state.invalidatedSnapshotKeys.value).toEqual(['customer-shopping-bag:customer-1:v1', 'customer-mine:customer-1:v1'])
     expect(state.viewModel.value.items).toEqual([])
   })
 
+  it('loads checkout addresses and blocks backend checkout when no address is selected', async () => {
+    const initialView = createCustomerShoppingBagView(createSnapshot(1))
+    const checkoutSelectedItems = vi.fn(async () => createCheckoutResult(initialView))
+    const state = createCustomerShoppingBagPageState({
+      loadView: vi.fn(async () => initialView),
+      loadAddressView: vi.fn(async () => createAddressView()),
+      checkoutSelectedItems,
+    })
+
+    await state.handlePageShow()
+    await state.loadAddressBook({ showLoading: true })
+    state.selectAddress('')
+    await expect(state.submitSelectedItems()).resolves.toMatchObject({
+      status: 'blocked',
+      message: '请选择收货地址',
+      checkoutItems: [],
+    })
+
+    expect(state.addressBookView.value.items).toHaveLength(1)
+    expect(checkoutSelectedItems).not.toHaveBeenCalled()
+  })
+
   it('keeps shopping-bag checkout on the backend order path instead of product-detail navigation', () => {
     expect(pageSource).toContain('const submitCheckout = async () =>')
     expect(pageSource).toContain('shoppingBagState.submitSelectedItems()')
+    expect(pageSource).toContain('shoppingBagState.loadAddressBook({ showLoading: true })')
+    expect(pageSource).toContain('@tap="selectCheckoutAddress(item.id)"')
+    expect(pageSource).toContain('selectedAddressId')
     expect(pageSource).not.toContain('routes.customerProductDetail')
     expect(pageSource).not.toContain('result.checkoutItems[0]')
   })

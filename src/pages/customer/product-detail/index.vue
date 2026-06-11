@@ -125,6 +125,28 @@
           </view>
         </view>
 
+        <view class="address-panel">
+          <view class="address-title-row">
+            <text class="address-title">收货地址</text>
+            <button class="address-refresh" hover-class="press-feedback" @tap="loadAddresses">刷新</button>
+          </view>
+          <view v-if="addressView.loadingState === 'loading'" class="address-hint">正在加载地址</view>
+          <view v-else-if="addressView.items.length === 0" class="address-hint danger">请先新增收货地址后再下单</view>
+          <view v-else class="address-options">
+            <button
+              v-for="address in addressView.items"
+              :key="address.id"
+              class="address-option"
+              :class="{ selected: selectedAddressId === address.id }"
+              hover-class="press-feedback"
+              @tap="selectAddress(address.id)"
+            >
+              <text class="address-recipient">{{ address.recipientLine }}</text>
+              <text class="address-detail">{{ address.regionLine }} {{ address.detailLine }}</text>
+            </button>
+          </view>
+        </view>
+
         <view v-if="message" class="auth-feedback">
           <text>{{ message }}</text>
           <text>若未完成登录，系统不会创建订单。</text>
@@ -147,8 +169,8 @@
         </button>
         <button
           class="primary-button"
-          :class="{ disabledButton: !viewModel.canSubmitOrder }"
-          :disabled="!viewModel.canSubmitOrder"
+          :class="{ disabledButton: !canSubmitOrder }"
+          :disabled="!canSubmitOrder"
           @tap="submitOrder"
         >
           <text>立即下单</text>
@@ -180,6 +202,11 @@ import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { redirectTo } from '../../../app/navigation'
 import { routes } from '../../../app/routes'
+import { getCloudBaseCustomerAddressBookView } from '../../../features/cloudbase-mall/customer-address'
+import {
+  createCustomerAddressBookLoadingView,
+  type CustomerAddressBookView,
+} from '../../../features/customer-address/customer-address'
 import {
   type CustomerProductDetailViewModel,
 } from '../../../features/customer-product-detail/customer-product-detail'
@@ -210,6 +237,8 @@ const isBackNavigating = ref(false)
 const isAddingToBag = ref(false)
 const isFavoriteBusy = ref(false)
 const hasRetriedProductImage = ref(false)
+const addressView = ref<CustomerAddressBookView>(createCustomerAddressBookLoadingView())
+const selectedAddressId = ref('')
 const customerAuthService = createCloudBaseWechatAuthService()
 const viewModel = ref<CustomerProductDetailViewModel>({
   product: null,
@@ -222,6 +251,7 @@ const viewModel = ref<CustomerProductDetailViewModel>({
 const favoriteProductsView = ref<CustomerFavoriteProductsView>(createCustomerFavoriteProductsLoadingView())
 
 const selectedSku = computed(() => viewModel.value.skus.find((sku) => sku.isSelected))
+const canSubmitOrder = computed(() => viewModel.value.canSubmitOrder && Boolean(selectedAddressId.value))
 
 const isFavorite = computed(() =>
   favoriteProductsView.value.items.some((item) => item.productId === productId.value),
@@ -320,8 +350,16 @@ const loadFavoriteState = async () => {
   favoriteMessage.value = ''
 }
 
+const loadAddresses = async () => {
+  addressView.value = createCustomerAddressBookLoadingView(addressView.value)
+  const nextView = await getCloudBaseCustomerAddressBookView()
+  addressView.value = nextView
+  selectedAddressId.value = selectedAddressId.value || nextView.defaultAddressId || nextView.items[0]?.id || ''
+}
+
 const loadInitialView = async () => {
   await refreshView()
+  void loadAddresses()
   void loadFavoriteState()
 }
 
@@ -367,9 +405,15 @@ const submitOrder = async () => {
     return
   }
 
+  if (!selectedAddressId.value) {
+    message.value = '请选择收货地址'
+    return
+  }
+
   const result = await submitCloudBaseCustomerProductDetailOrder({
     productId: productId.value,
     skuId: selectedSkuId.value,
+    addressId: selectedAddressId.value,
     quantity: 1,
     authService: customerAuthService,
     confirmLogin: confirmCustomerLoginForOrder,
@@ -419,6 +463,10 @@ const addToShoppingBag = async () => {
   } finally {
     isAddingToBag.value = false
   }
+}
+
+const selectAddress = (addressId: string) => {
+  selectedAddressId.value = addressId
 }
 
 const goBack = () => {
@@ -898,6 +946,94 @@ const showVisualOnlyToast = (title: string) => {
   color: #666666;
   font-size: 26rpx;
   line-height: 1.45;
+}
+
+.address-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-top: 28rpx;
+  padding: 24rpx;
+  border-radius: 28rpx;
+  background: #ffffff;
+  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.06);
+}
+
+.address-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.address-title {
+  color: #111111;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.address-refresh,
+.address-option {
+  margin: 0;
+  border: 0;
+}
+
+.address-refresh::after,
+.address-option::after {
+  border: 0;
+}
+
+.address-refresh {
+  min-height: 58rpx;
+  padding: 0 22rpx;
+  border-radius: 999rpx;
+  background: #f2f2f2;
+  color: #111111;
+  font-size: 24rpx;
+}
+
+.address-hint {
+  color: #666666;
+  font-size: 25rpx;
+  line-height: 1.45;
+}
+
+.address-hint.danger {
+  color: #c21f16;
+}
+
+.address-options {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+
+.address-option {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  min-height: 94rpx;
+  padding: 18rpx 20rpx;
+  border-radius: 22rpx;
+  background: #f6f6f6;
+  color: #222222;
+  text-align: left;
+}
+
+.address-option.selected {
+  box-shadow: 0 0 0 2rpx #111111 inset;
+}
+
+.address-recipient {
+  color: #111111;
+  font-size: 27rpx;
+  font-weight: 700;
+}
+
+.address-detail {
+  color: #666666;
+  font-size: 24rpx;
+  line-height: 1.4;
 }
 
 .auth-feedback {

@@ -88,6 +88,7 @@ describe('customer mine UI integration', () => {
     expect(source).toContain('const visibleUtilities = computed(() =>')
     expect(source).toContain("entry.key !== 'favorites' && entry.key !== 'shoppingBag'")
     expect(source).toContain('v-for="entry in visibleUtilities"')
+    expect(source).toContain('entry.countLabel')
     expect(source).toContain('@tap="navigateUtility(entry.route)"')
     expect(source).not.toContain('route === customerBottomNavRoutes.favorites')
     expect(source).not.toContain('route === customerBottomNavRoutes.shoppingBag')
@@ -95,7 +96,7 @@ describe('customer mine UI integration', () => {
     expect(source).not.toContain('goShoppingBag()')
     expect(source).not.toContain('class="mine-count"')
     expect(source).not.toContain('class="identity-label"')
-    expect(source).not.toContain('class="utility-count"')
+    expect(source).toContain('class="utility-count"')
   })
 
   it('registers account utility routes for profile, wallet, address, and customer orders', () => {

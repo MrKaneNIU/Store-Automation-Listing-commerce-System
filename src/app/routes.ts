@@ -20,6 +20,7 @@ export const routes = {
   customerWallet: '/pages/customer/wallet/index',
   customerAddress: '/pages/customer/address/index',
   customerOrders: '/pages/customer/orders/index',
+  customerOrderDetail: '/pages/customer/order-detail/index',
   customerProductDetail: '/pages/customer/product-detail/index',
 } as const
 

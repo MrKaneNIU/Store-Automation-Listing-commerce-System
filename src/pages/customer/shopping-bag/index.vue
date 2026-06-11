@@ -53,6 +53,28 @@
         <button hover-class="press-feedback" @tap="clearUnavailableItems">清理失效</button>
       </view>
 
+      <view class="address-panel">
+        <view class="address-title-row">
+          <text class="address-title">收货地址</text>
+          <button class="address-refresh" hover-class="press-feedback" @tap="loadAddresses">刷新</button>
+        </view>
+        <view v-if="addressView.loadingState === 'loading'" class="address-hint">正在加载地址</view>
+        <view v-else-if="addressView.items.length === 0" class="address-hint danger">请先新增收货地址后再结算</view>
+        <view v-else class="address-options">
+          <button
+            v-for="item in addressView.items"
+            :key="item.id"
+            class="address-option"
+            :class="{ selected: selectedAddressId === item.id }"
+            hover-class="press-feedback"
+            @tap="selectCheckoutAddress(item.id)"
+          >
+            <text class="address-recipient">{{ item.recipientLine }}</text>
+            <text class="address-detail">{{ item.regionLine }} {{ item.detailLine }}</text>
+          </button>
+        </view>
+      </view>
+
       <view
         v-for="item in viewModel.items"
         :key="item.id"
@@ -126,8 +148,8 @@
       </view>
       <button
         class="primary-button"
-        :class="{ disabledButton: !viewModel.canCheckoutSelectedItems }"
-        :disabled="!viewModel.canCheckoutSelectedItems"
+        :class="{ disabledButton: !canCheckout }"
+        :disabled="!canCheckout"
         hover-class="press-feedback"
         @tap="submitCheckout"
       >
@@ -185,7 +207,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { redirectTo } from '../../../app/navigation'
 import type { AppRoute } from '../../../app/routes'
@@ -194,6 +216,8 @@ import { createCustomerShoppingBagPageState } from './useCustomerShoppingBagPage
 
 const shoppingBagState = createCustomerShoppingBagPageState()
 const viewModel = shoppingBagState.viewModel
+const addressView = shoppingBagState.addressBookView
+const selectedAddressId = shoppingBagState.selectedAddressId
 const message = shoppingBagState.message
 const failedImageIds = ref<string[]>([])
 const navigatingRoute = ref<AppRoute | ''>('')
@@ -202,6 +226,11 @@ const HEADER_TOP_OFFSET_RPX = -8
 const STATUS_BAR_FALLBACK_GAP_RPX = 44
 const headerTopPadding = ref(DEFAULT_HEADER_TOP_PADDING)
 let navigationFallbackTimer: ReturnType<typeof setTimeout> | null = null
+const canCheckout = computed(() => viewModel.value.canCheckoutSelectedItems && Boolean(selectedAddressId.value))
+
+const loadAddresses = async () => {
+  await shoppingBagState.loadAddressBook({ showLoading: true })
+}
 
 const clearNavigationLocks = () => {
   navigatingRoute.value = ''
@@ -243,6 +272,7 @@ onMounted(syncHeaderTopPadding)
 onShow(() => {
   clearNavigationLocks()
   void shoppingBagState.handlePageShow()
+  void shoppingBagState.loadAddressBook({ showLoading: true })
 })
 
 const reload = () => {
@@ -274,7 +304,16 @@ const clearUnavailableItems = () => {
 }
 
 const submitCheckout = async () => {
+  if (!selectedAddressId.value) {
+    message.value = '请选择收货地址'
+    return
+  }
+
   await shoppingBagState.submitSelectedItems()
+}
+
+const selectCheckoutAddress = (addressId: string) => {
+  shoppingBagState.selectAddress(addressId)
 }
 
 const markImageFailed = (itemId: string) => {
@@ -562,6 +601,94 @@ const goMine = () => {
   color: #ffffff;
   font-size: 24rpx;
   line-height: 58rpx;
+}
+
+.address-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  box-sizing: border-box;
+  padding: 24rpx;
+  border-radius: 30rpx;
+  background: #ffffff;
+  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.06);
+}
+
+.address-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.address-title {
+  color: #111111;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.address-refresh,
+.address-option {
+  margin: 0;
+  border: 0;
+}
+
+.address-refresh::after,
+.address-option::after {
+  border: 0;
+}
+
+.address-refresh {
+  min-height: 58rpx;
+  padding: 0 22rpx;
+  border-radius: 999rpx;
+  background: #f2f2f2;
+  color: #111111;
+  font-size: 24rpx;
+}
+
+.address-hint {
+  color: #666666;
+  font-size: 25rpx;
+  line-height: 1.45;
+}
+
+.address-hint.danger {
+  color: #c21f16;
+}
+
+.address-options {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+
+.address-option {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  min-height: 94rpx;
+  padding: 18rpx 20rpx;
+  border-radius: 22rpx;
+  background: #f6f6f6;
+  color: #222222;
+  text-align: left;
+}
+
+.address-option.selected {
+  box-shadow: 0 0 0 2rpx #111111 inset;
+}
+
+.address-recipient {
+  color: #111111;
+  font-size: 27rpx;
+  font-weight: 700;
+}
+
+.address-detail {
+  color: #666666;
+  font-size: 24rpx;
+  line-height: 1.4;
 }
 
 .bag-item {

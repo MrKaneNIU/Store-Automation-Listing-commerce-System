@@ -10,6 +10,16 @@ export type OrderItem = {
   quantity: number
 }
 
+export type ShippingAddressSnapshot = {
+  addressId: string
+  contactName: string
+  phoneNumber: string
+  province: string
+  city: string
+  district: string
+  detail: string
+}
+
 export type Order = {
   id: string
   customerName: string
@@ -17,6 +27,7 @@ export type Order = {
   customerId?: string
   customerAuthSource?: 'mock_wechat' | 'wechat'
   idempotencyKey?: string
+  shippingAddress?: ShippingAddressSnapshot
   status: OrderStatus
   items: OrderItem[]
   totalAmount: number

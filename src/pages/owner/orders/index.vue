@@ -146,6 +146,17 @@
             </view>
           </view>
 
+          <view class="shipping-panel">
+            <text class="detail-section-title">收货地址</text>
+            <template v-if="order.shippingAddress">
+              <text class="shipping-recipient">{{ order.shippingAddress.contactName }} {{ order.shippingAddress.phoneNumber }}</text>
+              <text class="shipping-address">
+                {{ order.shippingAddress.province }} {{ order.shippingAddress.city }} {{ order.shippingAddress.district }} {{ order.shippingAddress.detail }}
+              </text>
+            </template>
+            <text v-else class="shipping-address">未记录收货地址</text>
+          </view>
+
           <view class="detail-items">
             <text class="detail-section-title">商品明细</text>
             <view v-for="item in order.items" :key="`detail-${item.skuId}`" class="detail-item">
@@ -914,10 +925,30 @@ const cancel = async (orderId: string) => {
   white-space: nowrap;
 }
 
+.shipping-panel,
 .detail-items {
   display: flex;
   flex-direction: column;
   gap: 14rpx;
+}
+
+.shipping-panel {
+  padding: 22rpx;
+  border-radius: 24rpx;
+  background: #f8f8f8;
+}
+
+.shipping-recipient {
+  color: #111111;
+  font-size: 27rpx;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.shipping-address {
+  color: #666666;
+  font-size: 25rpx;
+  line-height: 1.45;
 }
 
 .detail-section-title {

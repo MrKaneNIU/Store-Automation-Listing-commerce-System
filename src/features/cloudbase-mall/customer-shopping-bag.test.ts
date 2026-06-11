@@ -188,7 +188,7 @@ describe('CloudBase customer shopping bag facade', () => {
     await updateCloudBaseCustomerShoppingBagItemQuantity('bag-item-1', 2, client)
     await selectCloudBaseCustomerShoppingBagItem('bag-item-1', false, client)
     await removeCloudBaseCustomerShoppingBagItem('bag-item-1', client)
-    await expect(checkoutCloudBaseCustomerShoppingBag(client)).resolves.toMatchObject({
+    await expect(checkoutCloudBaseCustomerShoppingBag('address-1', client)).resolves.toMatchObject({
       status: 'succeeded',
       message: 'Order submitted',
       order: { id: 'order-1' },
@@ -205,8 +205,27 @@ describe('CloudBase customer shopping bag facade', () => {
     expect(client.updateCustomerShoppingBagItemQuantity).toHaveBeenCalledWith('bag-item-1', { quantity: 2 })
     expect(client.selectCustomerShoppingBagItem).toHaveBeenCalledWith('bag-item-1', { isSelected: false })
     expect(client.removeCustomerShoppingBagItem).toHaveBeenCalledWith('bag-item-1')
-    expect(client.checkoutCustomerShoppingBag).toHaveBeenCalledTimes(1)
+    expect(client.checkoutCustomerShoppingBag).toHaveBeenCalledWith({ addressId: 'address-1' })
     expect(client.clearUnavailableCustomerShoppingBagItems).toHaveBeenCalledTimes(1)
+  })
+
+  it('blocks shopping-bag checkout before calling mallApi when no address is selected', async () => {
+    const previousView = await getCloudBaseCustomerShoppingBagView(createClient({
+      getCustomerShoppingBagSnapshot: vi.fn(async () => snapshot),
+    }))
+    const client = createClient({
+      checkoutCustomerShoppingBag: vi.fn(async () => checkoutResult),
+    })
+
+    await expect(checkoutCloudBaseCustomerShoppingBag('', client, previousView)).resolves.toMatchObject({
+      status: 'failed',
+      message: '请选择收货地址',
+      order: null,
+      removedItemIds: [],
+      view: previousView,
+    })
+
+    expect(client.checkoutCustomerShoppingBag).not.toHaveBeenCalled()
   })
 
   it('returns a failed command result without replacing the previous usable view', async () => {

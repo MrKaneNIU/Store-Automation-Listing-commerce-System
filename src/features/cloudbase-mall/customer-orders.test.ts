@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { CloudBaseMallApiClient, CustomerOrdersSnapshot } from '../../services/cloudbase/mall-api-client'
-import { getCloudBaseCustomerOrdersView } from './customer-orders'
+import {
+  getCloudBaseCustomerOrderDetailView,
+  getCloudBaseCustomerOrdersView,
+} from './customer-orders'
 
 const snapshot: CustomerOrdersSnapshot = {
   customerId: 'customer-1',
@@ -103,15 +106,35 @@ describe('CloudBase customer orders facade', () => {
 
     await expect(getCloudBaseCustomerOrdersView(client)).resolves.toMatchObject({
       totalCount: 1,
-      items: [{ id: 'order-1', totalAmountText: '¥129.00' }],
+      items: [{ id: 'order-1', totalAmountText: '¥ 129.00' }],
     })
     expect(client.getCustomerOrdersSnapshot).toHaveBeenCalledTimes(1)
   })
 
-  it('returns a failure ViewModel without exposing raw infrastructure details', async () => {
+  it('loads customer order detail through the backend customer-scoped detail action', async () => {
+    const client = createClient({
+      getCustomerOrder: vi.fn(async () => ({ order: snapshot.orders[0] })),
+    })
+
+    await expect(getCloudBaseCustomerOrderDetailView('order-1', client)).resolves.toMatchObject({
+      order: {
+        id: 'order-1',
+        statusLabel: '待商家确认',
+        totalAmountText: '¥ 129.00',
+      },
+    })
+    expect(client.getCustomerOrder).toHaveBeenCalledWith('order-1')
+    expect(JSON.stringify((client.getCustomerOrder as ReturnType<typeof vi.fn>).mock.calls)).not.toContain('customerId')
+    expect(JSON.stringify((client.getCustomerOrder as ReturnType<typeof vi.fn>).mock.calls)).not.toContain('openid')
+  })
+
+  it('returns failure ViewModels without exposing mutation affordances', async () => {
     const client = createClient({
       getCustomerOrdersSnapshot: vi.fn(async () => {
         throw new Error('CloudBase unavailable')
+      }),
+      getCustomerOrder: vi.fn(async () => {
+        throw new Error('detail unavailable')
       }),
     })
 
@@ -119,6 +142,11 @@ describe('CloudBase customer orders facade', () => {
       loadingState: 'failed',
       failureMessage: 'CloudBase unavailable',
       items: [],
+    })
+    await expect(getCloudBaseCustomerOrderDetailView('order-1', client)).resolves.toMatchObject({
+      loadingState: 'failed',
+      failureMessage: 'detail unavailable',
+      order: null,
     })
   })
 })
