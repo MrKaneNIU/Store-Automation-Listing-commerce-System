@@ -47,20 +47,41 @@
         <text>排序</text>
       </button>
       <view class="view-toggle" aria-label="展示方式">
-        <button class="toggle-button active" aria-label="网格展示" hover-class="press-feedback">
-          <text class="grid-icon">
-            <text />
-            <text />
-            <text />
-            <text />
-          </text>
+        <button
+          class="toggle-button"
+          :class="{ active: displayMode === 'grid' }"
+          aria-label="网格展示"
+          hover-class="press-feedback"
+          @tap="showGridView"
+        >
+          <view class="grid-icon">
+            <view />
+            <view />
+            <view />
+            <view />
+          </view>
         </button>
-        <button class="toggle-button" aria-label="列表展示" hover-class="press-feedback" @tap="showVisualOnlyToast('列表展示将在后续模块接入')">
-          <text class="list-icon">
-            <text />
-            <text />
-            <text />
-          </text>
+        <button
+          class="toggle-button"
+          :class="{ active: displayMode === 'list' }"
+          aria-label="列表展示"
+          hover-class="press-feedback"
+          @tap="showListView"
+        >
+          <view class="list-icon">
+            <view class="list-row">
+              <view class="list-thumb" />
+              <view class="list-line" />
+            </view>
+            <view class="list-row">
+              <view class="list-thumb" />
+              <view class="list-line" />
+            </view>
+            <view class="list-row">
+              <view class="list-thumb" />
+              <view class="list-line" />
+            </view>
+          </view>
         </button>
       </view>
     </view>
@@ -83,7 +104,7 @@
       <button class="empty-action" hover-class="press-feedback" @tap="reloadView">重新加载</button>
     </view>
 
-    <view v-else class="catalog-grid">
+    <view v-else :class="displayMode === 'list' ? 'catalog-list' : 'catalog-grid'">
       <view
         v-for="product in products"
         :key="product.id"
@@ -201,6 +222,7 @@ const products = ref<CustomerProductListItem[]>([])
 const emptyMessage = ref('暂无已上架商品')
 const favoriteMessage = ref('')
 const isLoading = ref(false)
+const displayMode = ref<'grid' | 'list'>('grid')
 const navigatingRoute = ref<AppRoute | ''>('')
 const navigatingProductId = ref('')
 const favoriteBusyProductId = ref('')
@@ -279,6 +301,14 @@ const refreshView = (options: RefreshOptions): Promise<void> => {
 
 const reloadView = () => {
   void refreshView({ showLoading: true })
+}
+
+const showGridView = () => {
+  displayMode.value = 'grid'
+}
+
+const showListView = () => {
+  displayMode.value = 'list'
 }
 
 const handleProductImageError = (productId: string) => {
@@ -664,9 +694,9 @@ const getVisualClass = (productCode: string) => {
 .view-toggle {
   display: flex;
   flex: 0 0 auto;
-  gap: 6rpx;
-  min-height: 88rpx;
-  padding: 6rpx;
+  gap: 8rpx;
+  min-height: 80rpx;
+  padding: 8rpx;
   border-radius: 999rpx;
   background: #ffffff;
   box-shadow: 0 0 0 1rpx #e8e8e8 inset;
@@ -676,24 +706,24 @@ const getVisualClass = (productCode: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 76rpx;
-  height: 76rpx;
+  width: 64rpx;
+  height: 64rpx;
   padding: 0;
-  border-radius: 999rpx;
+  border-radius: 18rpx;
   background: transparent;
-  color: #9a9a9a;
+  color: #8f8f8f;
 }
 
 .toggle-button.active {
-  background: #050505;
+  background: #111111;
   color: #ffffff;
 }
 
 .grid-icon,
 .list-icon {
   display: flex;
-  width: 34rpx;
-  height: 34rpx;
+  width: 36rpx;
+  height: 36rpx;
 }
 
 .grid-icon {
@@ -701,20 +731,37 @@ const getVisualClass = (productCode: string) => {
   gap: 4rpx;
 }
 
-.grid-icon text {
+.grid-icon view {
+  display: block;
   width: 15rpx;
   height: 15rpx;
-  border-radius: 3rpx;
+  border-radius: 4rpx;
   background: currentColor;
 }
 
 .list-icon {
   flex-direction: column;
   justify-content: center;
-  gap: 7rpx;
+  gap: 5rpx;
 }
 
-.list-icon text {
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 5rpx;
+  height: 7rpx;
+}
+
+.list-thumb {
+  flex: 0 0 auto;
+  width: 7rpx;
+  height: 7rpx;
+  border-radius: 2rpx;
+  background: currentColor;
+}
+
+.list-line {
+  flex: 1 1 auto;
   height: 3rpx;
   border-radius: 999rpx;
   background: currentColor;
@@ -835,11 +882,31 @@ const getVisualClass = (productCode: string) => {
   padding: 38rpx 32rpx 28rpx;
 }
 
+.catalog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 22rpx;
+  box-sizing: border-box;
+  padding: 38rpx 32rpx 28rpx;
+}
+
 .catalog-card {
   width: calc((100% - 36rpx) / 2);
   min-width: 0;
   transition: opacity 160ms ease, transform 160ms ease;
   will-change: transform;
+}
+
+.catalog-list .catalog-card {
+  display: grid;
+  grid-template-columns: 168rpx minmax(0, 1fr);
+  column-gap: 22rpx;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 16rpx;
+  border-radius: 28rpx;
+  background: #ffffff;
+  box-shadow: 0 14rpx 38rpx rgba(5, 5, 5, 0.05);
 }
 
 .catalog-card-pressed,
@@ -858,6 +925,14 @@ const getVisualClass = (productCode: string) => {
   border-radius: 26rpx;
   background: #f0f0f0;
   box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.06);
+}
+
+.catalog-list .catalog-media {
+  grid-row: 1 / span 4;
+  width: 168rpx;
+  height: 168rpx;
+  border-radius: 22rpx;
+  box-shadow: none;
 }
 
 .image,
@@ -977,6 +1052,12 @@ const getVisualClass = (productCode: string) => {
   white-space: nowrap;
 }
 
+.catalog-list .product-code {
+  grid-column: 2;
+  margin-top: 0;
+  font-size: 22rpx;
+}
+
 .product-name {
   display: -webkit-box;
   min-height: 96rpx;
@@ -991,12 +1072,25 @@ const getVisualClass = (productCode: string) => {
   -webkit-line-clamp: 2;
 }
 
+.catalog-list .product-name {
+  grid-column: 2;
+  min-height: 0;
+  margin-top: 6rpx;
+  font-size: 32rpx;
+}
+
 .rating {
   display: block;
   margin-top: 12rpx;
   color: #050505;
   font-size: 26rpx;
   line-height: 1.2;
+}
+
+.catalog-list .rating {
+  grid-column: 2;
+  margin-top: 10rpx;
+  font-size: 24rpx;
 }
 
 .rating text {
@@ -1011,6 +1105,12 @@ const getVisualClass = (productCode: string) => {
   font-weight: 500;
   line-height: 1;
   overflow-wrap: anywhere;
+}
+
+.catalog-list .price {
+  grid-column: 2;
+  margin-top: 12rpx;
+  font-size: 36rpx;
 }
 
 .favorite-feedback {
@@ -1092,12 +1192,27 @@ const getVisualClass = (productCode: string) => {
     width: calc((100% - 28rpx) / 2);
   }
 
+  .catalog-list .catalog-card {
+    grid-template-columns: 150rpx minmax(0, 1fr);
+    width: 100%;
+    padding: 14rpx;
+  }
+
   .catalog-media {
     height: 366rpx;
   }
 
+  .catalog-list .catalog-media {
+    width: 150rpx;
+    height: 150rpx;
+  }
+
   .product-name {
     font-size: 36rpx;
+  }
+
+  .catalog-list .product-name {
+    font-size: 30rpx;
   }
 }
 </style>

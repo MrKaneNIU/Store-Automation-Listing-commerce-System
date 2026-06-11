@@ -51,7 +51,7 @@
               class="text-button"
               :disabled="isDeletingAddress(item.id)"
               hover-class="press-feedback"
-              @tap.stop="editAddress(item.id)"
+              @tap.stop="openEditAddressSheet(item.id)"
             >
               编辑
             </button>
@@ -75,7 +75,19 @@
         </view>
       </view>
 
-      <view class="form-card">
+      <view class="add-address-entry">
+        <button class="add-address-button" hover-class="press-feedback" @tap="openCreateAddressSheet">
+          +新增地址
+        </button>
+      </view>
+
+      <view v-if="isAddressSheetOpen" class="address-sheet-layer" @tap="closeAddressSheet">
+        <view class="address-sheet" @tap.stop>
+          <button class="sheet-close" :disabled="isSaving" aria-label="关闭地址表单" hover-class="press-feedback" @tap="closeAddressSheet">
+            <text>×</text>
+          </button>
+
+          <view class="form-card sheet-form">
         <text class="form-title">{{ editingAddressId ? '编辑地址' : '新增地址' }}</text>
 
         <view class="field-row">
@@ -123,9 +135,11 @@
 
         <view class="form-actions">
           <button class="secondary-action" :disabled="isSaving" hover-class="press-feedback" @tap="resetForm">清空</button>
-          <button class="primary-action" :disabled="isSaveDisabled" hover-class="press-feedback" @tap="saveAddress">
+          <button class="primary-action" :disabled="isSaveDisabled" hover-class="press-feedback" @tap="handleSaveAddress">
             {{ isSaving ? '保存中' : editingAddressId ? '保存修改' : '新增地址' }}
           </button>
+        </view>
+          </view>
         </view>
       </view>
 
@@ -158,6 +172,7 @@ const DEFAULT_HEADER_TOP_PADDING = 'calc(env(safe-area-inset-top) + 28rpx)'
 const HEADER_TOP_OFFSET_RPX = -8
 const STATUS_BAR_FALLBACK_GAP_RPX = 44
 const headerTopPadding = ref(DEFAULT_HEADER_TOP_PADDING)
+const isAddressSheetOpen = ref(false)
 const isSaveDisabled = computed(() => isSaving.value || viewModel.value.loadingState === 'loading')
 
 const readInputValue = (event: unknown): string => {
@@ -206,8 +221,27 @@ const toggleDefault = () => {
 }
 
 const resetForm = () => addressState.resetForm()
-const editAddress = (addressId: string) => addressState.editAddress(addressId)
-const saveAddress = () => void addressState.saveAddress()
+const openCreateAddressSheet = () => {
+  addressState.resetForm()
+  isAddressSheetOpen.value = true
+}
+const openEditAddressSheet = (addressId: string) => {
+  addressState.editAddress(addressId)
+  isAddressSheetOpen.value = true
+}
+const closeAddressSheet = () => {
+  if (isSaving.value) return
+  isAddressSheetOpen.value = false
+  addressState.resetForm()
+}
+const handleSaveAddress = async () => {
+  await addressState.saveAddress()
+  if (!message.value && Object.values(fieldErrors.value).some(Boolean)) return
+  if (viewModel.value.loadingState === 'failed') return
+  if (Object.values(fieldErrors.value).some(Boolean)) return
+
+  isAddressSheetOpen.value = false
+}
 const deleteAddress = (addressId: string) => void addressState.deleteAddress(addressId)
 const setDefaultAddress = (addressId: string) => void addressState.setDefaultAddress(addressId)
 const selectAddress = (addressId: string) => addressState.selectAddress(addressId)
@@ -262,6 +296,8 @@ const goMine = () => {
 .text-button,
 .secondary-action,
 .primary-action,
+.add-address-button,
+.sheet-close,
 .inline-error button {
   margin: 0;
   border: 0;
@@ -272,6 +308,8 @@ const goMine = () => {
 .text-button::after,
 .secondary-action::after,
 .primary-action::after,
+.add-address-button::after,
+.sheet-close::after,
 .inline-error button::after {
   border: 0;
 }
@@ -386,14 +424,90 @@ const goMine = () => {
 
 .text-button[disabled],
 .secondary-action[disabled],
-.primary-action[disabled] {
+.primary-action[disabled],
+.sheet-close[disabled] {
   opacity: 0.48;
+}
+
+.add-address-entry {
+  display: flex;
+  width: 100%;
+  align-self: stretch;
+  justify-content: center;
+}
+
+.add-address-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  min-width: 168rpx;
+  min-height: 76rpx;
+  padding: 0 30rpx;
+  border-radius: 999rpx;
+  background: #050505;
+  color: #ffffff;
+  font-size: 28rpx;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.address-sheet-layer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(5, 5, 5, 0.48);
+}
+
+.address-sheet {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  max-height: 88vh;
+  padding: 48rpx 32rpx calc(34rpx + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  border-top-left-radius: 38rpx;
+  border-top-right-radius: 38rpx;
+  background: #ffffff;
+  box-shadow: 0 -24rpx 64rpx rgba(0, 0, 0, 0.12);
+}
+
+.sheet-close {
+  position: absolute;
+  top: 22rpx;
+  right: 28rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72rpx;
+  height: 72rpx;
+  padding: 0;
+  border-radius: 999rpx;
+  background: #f4f4f4;
+  color: #050505;
+  line-height: 1;
+}
+
+.sheet-close text {
+  font-size: 40rpx;
+  line-height: 1;
 }
 
 .form-card {
   display: flex;
   flex-direction: column;
   gap: 24rpx;
+}
+
+.sheet-form {
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .form-title,
