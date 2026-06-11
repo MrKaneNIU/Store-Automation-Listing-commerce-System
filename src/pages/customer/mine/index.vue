@@ -5,7 +5,6 @@
         <view class="nav-spacer" />
         <view class="title-cluster">
           <text class="nav-title">我的</text>
-          <text class="mine-count">共 {{ viewModel.recentOrderTotalCount }} 笔订单</text>
         </view>
         <view class="nav-spacer" />
       </view>
@@ -33,7 +32,6 @@
           <text v-else class="identity-avatar-placeholder">{{ viewModel.avatarPlaceholderText }}</text>
         </view>
         <view class="identity-copy">
-          <text class="identity-label">{{ viewModel.identityLabel }}</text>
           <text class="identity-name">{{ viewModel.identityDisplayName }}</text>
           <text v-if="viewModel.customerId" class="identity-meta">客户ID {{ viewModel.customerId }}</text>
         </view>
@@ -45,14 +43,13 @@
 
       <view class="utility-grid" aria-label="我的功能">
         <button
-          v-for="entry in viewModel.utilities"
+          v-for="entry in visibleUtilities"
           :key="entry.key"
           class="utility-entry"
           :disabled="!entry.isEnabled || Boolean(navigatingRoute)"
           hover-class="press-feedback"
           @tap="navigateUtility(entry.route)"
         >
-          <text class="utility-count">{{ entry.countLabel }}</text>
           <text class="utility-label">{{ entry.label }}</text>
         </button>
       </view>
@@ -134,7 +131,7 @@
 
 <script setup lang="ts">
 import { onShow } from '@dcloudio/uni-app'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { redirectTo } from '../../../app/navigation'
 import type { AppRoute } from '../../../app/routes'
 import { customerBottomNavRoutes, shouldIgnoreCustomerBottomNavTap } from '../customer-bottom-nav'
@@ -142,6 +139,9 @@ import { useCustomerMinePageState } from './useCustomerMinePageState'
 
 const mineState = useCustomerMinePageState()
 const viewModel = mineState.viewModel
+const visibleUtilities = computed(() =>
+  viewModel.value.utilities.filter((entry) => entry.key !== 'favorites' && entry.key !== 'shoppingBag'),
+)
 const navigatingRoute = ref<AppRoute | ''>('')
 const DEFAULT_HEADER_TOP_PADDING = 'calc(env(safe-area-inset-top) + 28rpx)'
 const HEADER_TOP_OFFSET_RPX = -8
@@ -218,16 +218,6 @@ const goCustomerBottomNav = (targetRoute: AppRoute) => {
 }
 
 const navigateUtility = (route: string) => {
-  if (route === customerBottomNavRoutes.favorites) {
-    goFavorites()
-    return
-  }
-
-  if (route === customerBottomNavRoutes.shoppingBag) {
-    goShoppingBag()
-    return
-  }
-
   const targetRoute = route as AppRoute
   navigatingRoute.value = targetRoute
   scheduleNavigationFallback()
@@ -303,12 +293,6 @@ const goMine = () => {
   font-size: 42rpx;
   font-weight: 600;
   line-height: 1.15;
-}
-
-.mine-count {
-  color: #9a9a9a;
-  font-size: 24rpx;
-  line-height: 1.2;
 }
 
 .utility-entry,
@@ -427,9 +411,10 @@ const goMine = () => {
 
 .identity-panel {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 22rpx;
+  justify-content: flex-start;
+  gap: 22rpx 26rpx;
   padding: 34rpx;
 }
 
@@ -457,12 +442,12 @@ const goMine = () => {
 .identity-copy {
   display: flex;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   flex-direction: column;
   gap: 10rpx;
+  padding-top: 10rpx;
 }
 
-.identity-label,
 .identity-meta,
 .phone-pill text:first-child,
 .section-heading text:last-child,
@@ -483,14 +468,14 @@ const goMine = () => {
 
 .phone-pill {
   display: flex;
-  flex: 0 0 auto;
+  flex: 0 0 100%;
+  box-sizing: border-box;
   flex-direction: column;
   gap: 6rpx;
-  max-width: 240rpx;
   padding: 16rpx 20rpx;
   border-radius: 24rpx;
   background: #f4f4f4;
-  text-align: right;
+  text-align: left;
 }
 
 .phone-pill text:last-child {
@@ -526,16 +511,10 @@ const goMine = () => {
   opacity: 0.56;
 }
 
-.utility-count {
-  color: #050505;
-  font-size: 42rpx;
-  font-weight: 700;
-  line-height: 1;
-}
-
 .utility-label {
-  color: #666666;
-  font-size: 26rpx;
+  color: #222222;
+  font-size: 30rpx;
+  font-weight: 600;
   line-height: 1.35;
 }
 
@@ -677,14 +656,9 @@ const goMine = () => {
 }
 
 @media (max-width: 390px) {
-  .identity-panel {
-    flex-direction: column;
-  }
-
   .phone-pill {
-    width: 100%;
-    max-width: none;
-    text-align: left;
+    padding-right: 18rpx;
+    padding-left: 18rpx;
   }
 }
 </style>

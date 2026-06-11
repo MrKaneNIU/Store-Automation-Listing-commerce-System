@@ -47,8 +47,8 @@ describe('customer mine UI integration', () => {
     expect(source).toContain('viewModel.avatarUrl')
     expect(source).toContain('viewModel.avatarPlaceholderText')
     expect(source).toContain('viewModel.customerId')
-    expect(source).toContain('viewModel.identityLabel')
     expect(source).toContain('viewModel.identityDisplayName')
+    expect(source).not.toContain('viewModel.identityLabel')
     expect(source).not.toContain('viewModel.identityOpenidLabel')
     expect(source).toContain('viewModel.phoneLabel')
     expect(source).toContain('viewModel.phoneDisplayText')
@@ -57,6 +57,18 @@ describe('customer mine UI integration', () => {
     expect(source).toContain('@tap="retry"')
     expect(source).toContain('viewModel.recentOrdersEmptyMessage')
     expect(source).toContain('去逛商品')
+  })
+
+  it('keeps the Mine identity name beside the avatar and the phone entry directly below', () => {
+    expect(source).toContain('.identity-panel {')
+    expect(source).toContain('flex-wrap: wrap;')
+    expect(source).toContain('gap: 22rpx 26rpx;')
+    expect(source).toContain('flex: 1 1 0;')
+    expect(source).toContain('padding-top: 10rpx;')
+    expect(source).toContain('flex: 0 0 100%;')
+    expect(source).toContain('box-sizing: border-box;')
+    expect(source).toContain('text-align: left;')
+    expect(source).not.toContain('flex-direction: column;\r\n  }\r\n\r\n  .phone-pill')
   })
 
   it('renders recent order summaries without order mutation actions', () => {
@@ -72,13 +84,18 @@ describe('customer mine UI integration', () => {
     expect(source).not.toContain('logistics')
   })
 
-  it('wires favorites and shopping-bag utility entries to existing customer routes', () => {
-    expect(source).toContain('v-for="entry in viewModel.utilities"')
+  it('filters favorites and shopping-bag out of the Mine utility cards only', () => {
+    expect(source).toContain('const visibleUtilities = computed(() =>')
+    expect(source).toContain("entry.key !== 'favorites' && entry.key !== 'shoppingBag'")
+    expect(source).toContain('v-for="entry in visibleUtilities"')
     expect(source).toContain('@tap="navigateUtility(entry.route)"')
-    expect(source).toContain('route === customerBottomNavRoutes.favorites')
-    expect(source).toContain('route === customerBottomNavRoutes.shoppingBag')
-    expect(source).toContain('goFavorites()')
-    expect(source).toContain('goShoppingBag()')
+    expect(source).not.toContain('route === customerBottomNavRoutes.favorites')
+    expect(source).not.toContain('route === customerBottomNavRoutes.shoppingBag')
+    expect(source).not.toContain('goFavorites()')
+    expect(source).not.toContain('goShoppingBag()')
+    expect(source).not.toContain('class="mine-count"')
+    expect(source).not.toContain('class="identity-label"')
+    expect(source).not.toContain('class="utility-count"')
   })
 
   it('registers account utility routes for profile, wallet, address, and customer orders', () => {

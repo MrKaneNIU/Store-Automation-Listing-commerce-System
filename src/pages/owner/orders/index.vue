@@ -24,15 +24,55 @@
       </button>
     </view>
 
-    <view v-if="viewModel.orders.length > 0" class="order-list">
-      <view v-for="order in viewModel.orders" :key="order.id" class="order-card">
+    <view v-if="viewModel.orders.length > 0" class="order-filters">
+      <button
+        class="filter-pill"
+        :class="{ active: selectedOrderFilter === 'pending' }"
+        hover-class="press-feedback"
+        @tap="filterOrders('pending')"
+      >
+        待处理 <text>{{ pendingOrderCount }}</text>
+      </button>
+      <button
+        class="filter-pill"
+        :class="{ active: selectedOrderFilter === 'settled' }"
+        hover-class="press-feedback"
+        @tap="filterOrders('settled')"
+      >
+        已处理 <text>{{ settledOrderCount }}</text>
+      </button>
+      <button
+        class="filter-pill"
+        :class="{ active: selectedOrderFilter === 'all' }"
+        hover-class="press-feedback"
+        @tap="filterOrders('all')"
+      >
+        全部 <text>{{ viewModel.orders.length }}</text>
+      </button>
+    </view>
+
+    <view v-if="viewModel.orders.length > 0 && filteredOrders.length > 0" class="order-list">
+      <view
+        v-for="order in filteredOrders"
+        :key="order.id"
+        class="order-card"
+        :class="{ expanded: selectedOrderId === order.id }"
+        hover-class="order-card-pressed"
+        hover-stay-time="90"
+        @tap="toggleOrderDetail(order.id)"
+      >
         <view class="order-head">
           <view class="customer">
             <text class="order-id">ORDER {{ order.id }}</text>
             <text class="name">{{ order.customerName }}</text>
             <text class="phone">{{ order.customerPhone }}</text>
           </view>
-          <text class="status">{{ order.statusLabel }}</text>
+          <view class="status-stack">
+            <text class="status">{{ order.statusLabel }}</text>
+            <button class="detail-toggle" hover-class="press-feedback" @tap.stop="toggleOrderDetail(order.id)">
+              {{ selectedOrderId === order.id ? '收起详情' : '查看详情' }}
+            </button>
+          </view>
         </view>
 
         <view class="items-panel">
@@ -60,7 +100,7 @@
               :class="{ busy: processingOrderId === order.id && processingOrderAction === 'cancel' }"
               :disabled="Boolean(processingOrderId)"
               hover-class="press-feedback"
-              @tap="cancel(order.id)"
+              @tap.stop="cancel(order.id)"
             >
               {{ processingOrderId === order.id && processingOrderAction === 'cancel' ? '取消中...' : '取消订单' }}
             </button>
@@ -70,19 +110,70 @@
               :class="{ busy: processingOrderId === order.id && processingOrderAction === 'confirm' }"
               :disabled="Boolean(processingOrderId)"
               hover-class="press-feedback"
-              @tap="confirm(order.id)"
+              @tap.stop="confirm(order.id)"
             >
               {{ processingOrderId === order.id && processingOrderAction === 'confirm' ? '确认中...' : '确认订单' }}
             </button>
           </view>
           <text v-else class="settled-mark">已处理</text>
         </view>
+
+        <view v-if="selectedOrderId === order.id" class="order-detail-panel" @tap.stop>
+          <view class="detail-grid">
+            <view class="detail-cell">
+              <text class="detail-label">订单编号</text>
+              <text class="detail-value">{{ order.id }}</text>
+            </view>
+            <view class="detail-cell">
+              <text class="detail-label">订单状态</text>
+              <text class="detail-value">{{ order.statusLabel }}</text>
+            </view>
+            <view class="detail-cell">
+              <text class="detail-label">下单时间</text>
+              <text class="detail-value">{{ order.createdAt }}</text>
+            </view>
+            <view class="detail-cell">
+              <text class="detail-label">更新时间</text>
+              <text class="detail-value">{{ order.updatedAt }}</text>
+            </view>
+            <view class="detail-cell">
+              <text class="detail-label">客户标识</text>
+              <text class="detail-value">{{ order.customerId || '未绑定' }}</text>
+            </view>
+            <view class="detail-cell">
+              <text class="detail-label">认证来源</text>
+              <text class="detail-value">{{ order.customerAuthSource || '未记录' }}</text>
+            </view>
+          </view>
+
+          <view class="detail-items">
+            <text class="detail-section-title">商品明细</text>
+            <view v-for="item in order.items" :key="`detail-${item.skuId}`" class="detail-item">
+              <view class="detail-item-main">
+                <text class="detail-item-name">{{ item.productName }}</text>
+                <text class="detail-item-spec">{{ item.spec }} · {{ item.productCode }}</text>
+              </view>
+              <view class="detail-item-meta">
+                <text>SKU {{ item.skuId }}</text>
+                <text>x {{ item.quantity }} / ¥{{ item.salePrice }}</text>
+              </view>
+            </view>
+          </view>
+        </view>
       </view>
     </view>
 
     <view v-else class="empty-state">
-      <text class="empty-title">{{ viewModel.emptyMessage }}</text>
-      <text class="empty-copy">客户下单后会在这里进入商家确认流程。</text>
+      <text class="empty-title">{{ displayedEmptyMessage }}</text>
+      <text class="empty-copy">{{ displayedEmptyCopy }}</text>
+      <button
+        v-if="viewModel.orders.length > 0 && filteredOrders.length === 0"
+        class="empty-action"
+        hover-class="press-feedback"
+        @tap="filterOrders('all')"
+      >
+        查看全部订单
+      </button>
     </view>
 
     <view v-if="message" class="result">{{ message }}</view>
@@ -156,7 +247,51 @@ const notificationConfig = ref<ManagerOrderNotificationConfig>({
 })
 let pendingRefresh: Promise<void> | null = null
 
-const pendingOrderCount = computed(() => viewModel.value.orders.filter((order) => order.canConfirm).length)
+type OrderFilter = 'pending' | 'settled' | 'all'
+type OwnerOrderViewItem = OwnerOrdersViewModel['orders'][number]
+
+const selectedOrderFilter = ref<OrderFilter>('pending')
+const selectedOrderId = ref('')
+const isPendingOrder = (order: OwnerOrderViewItem) => order.canConfirm || order.canCancel
+const pendingOrderCount = computed(() => viewModel.value.orders.filter(isPendingOrder).length)
+const settledOrderCount = computed(() => viewModel.value.orders.filter((order) => !isPendingOrder(order)).length)
+const filteredOrders = computed(() => {
+  if (selectedOrderFilter.value === 'pending') {
+    return viewModel.value.orders.filter(isPendingOrder)
+  }
+
+  if (selectedOrderFilter.value === 'settled') {
+    return viewModel.value.orders.filter((order) => !isPendingOrder(order))
+  }
+
+  return viewModel.value.orders
+})
+const displayedEmptyMessage = computed(() => {
+  if (viewModel.value.orders.length === 0) {
+    return viewModel.value.emptyMessage
+  }
+
+  if (selectedOrderFilter.value === 'pending') {
+    return '暂无待处理订单'
+  }
+
+  if (selectedOrderFilter.value === 'settled') {
+    return '暂无已处理订单'
+  }
+
+  return viewModel.value.emptyMessage
+})
+const displayedEmptyCopy = computed(() => {
+  if (viewModel.value.orders.length === 0) {
+    return '客户下单后会在这里进入商家确认流程。'
+  }
+
+  if (selectedOrderFilter.value === 'pending') {
+    return '已确认或已取消的订单保留在已处理和全部视图，避免误认为还能继续处理。'
+  }
+
+  return '切回待处理可继续确认或取消仍在商家确认阶段的订单。'
+})
 const reminderButtonLabel = computed(() => {
   if (!notificationConfig.value.isConfigured) return '提醒未配置'
   if (notificationConfig.value.subscribed) return '提醒已开启'
@@ -208,6 +343,15 @@ const goAdminTab = (route: AppRoute) => {
   })
 }
 
+const filterOrders = (filter: OrderFilter) => {
+  selectedOrderFilter.value = filter
+  selectedOrderId.value = ''
+}
+
+const toggleOrderDetail = (orderId: string) => {
+  selectedOrderId.value = selectedOrderId.value === orderId ? '' : orderId
+}
+
 const getErrorMessage = (error: unknown) => (error instanceof Error && error.message.trim()
   ? error.message.trim()
   : '订单列表加载失败')
@@ -222,6 +366,9 @@ const refreshView = () => {
   pendingRefresh = getCloudBaseOwnerOrdersView()
     .then((nextView) => {
       viewModel.value = nextView
+      if (selectedOrderId.value && !nextView.orders.some((order) => order.id === selectedOrderId.value)) {
+        selectedOrderId.value = ''
+      }
     })
     .catch((error) => {
       loadError.value = getErrorMessage(error)
@@ -369,6 +516,9 @@ const cancel = async (orderId: string) => {
 
 .primary::after,
 .secondary::after,
+.filter-pill::after,
+.detail-toggle::after,
+.empty-action::after,
 .reminder-button::after,
 .nav-item::after {
   border: 0;
@@ -438,6 +588,46 @@ const cancel = async (orderId: string) => {
   background: #eeeeee;
 }
 
+.order-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12rpx;
+  margin-bottom: 22rpx;
+  padding: 10rpx;
+  border-radius: 28rpx;
+  background: #ffffff;
+  box-shadow: 0 14rpx 36rpx rgba(12, 12, 12, 0.05);
+}
+
+.filter-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  min-width: 0;
+  min-height: 64rpx;
+  margin: 0;
+  padding: 0 12rpx;
+  border-radius: 22rpx;
+  background: transparent;
+  color: #707070;
+  font-size: 24rpx;
+  font-weight: 500;
+  line-height: 1.2;
+  transition: opacity 120ms ease, transform 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+
+.filter-pill text {
+  color: inherit;
+  font-size: 22rpx;
+  font-variant-numeric: tabular-nums;
+}
+
+.filter-pill.active {
+  background: #202020;
+  color: #ffffff;
+}
+
 .order-list {
   display: flex;
   flex-direction: column;
@@ -458,6 +648,15 @@ const cancel = async (orderId: string) => {
   flex-direction: column;
   gap: 24rpx;
   padding: 28rpx;
+  transition: box-shadow 140ms ease, transform 140ms ease;
+}
+
+.order-card.expanded {
+  box-shadow: 0 24rpx 58rpx rgba(12, 12, 12, 0.08);
+}
+
+.order-card-pressed {
+  transform: scale(0.992);
 }
 
 .order-head {
@@ -500,6 +699,15 @@ const cancel = async (orderId: string) => {
   line-height: 1.35;
 }
 
+.status-stack {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12rpx;
+  max-width: 190rpx;
+}
+
 .status {
   flex: 0 0 auto;
   max-width: 170rpx;
@@ -514,6 +722,21 @@ const cancel = async (orderId: string) => {
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.detail-toggle {
+  min-width: 132rpx;
+  min-height: 54rpx;
+  margin: 0;
+  padding: 0 18rpx;
+  border-radius: 999rpx;
+  background: #f4f4f4;
+  color: #202020;
+  font-size: 22rpx;
+  font-weight: 500;
+  line-height: 54rpx;
+  white-space: nowrap;
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
 .items-panel {
@@ -650,6 +873,97 @@ const cancel = async (orderId: string) => {
   line-height: 1.35;
 }
 
+.order-detail-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+  padding: 26rpx;
+  border-radius: 26rpx;
+  background: #f7f7f7;
+  box-shadow: inset 0 0 0 1rpx #ececec;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+}
+
+.detail-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  min-width: 0;
+}
+
+.detail-label,
+.detail-section-title,
+.detail-item-meta {
+  color: #8e8e8e;
+  font-size: 22rpx;
+  line-height: 1.3;
+}
+
+.detail-value {
+  overflow: hidden;
+  color: #202020;
+  font-size: 24rpx;
+  font-weight: 500;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-items {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+
+.detail-section-title {
+  font-weight: 600;
+}
+
+.detail-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 178rpx;
+  gap: 16rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #e8e8e8;
+}
+
+.detail-item-main,
+.detail-item-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  min-width: 0;
+}
+
+.detail-item-name {
+  overflow: hidden;
+  color: #202020;
+  font-size: 24rpx;
+  font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-item-spec {
+  overflow: hidden;
+  color: #8e8e8e;
+  font-size: 22rpx;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-item-meta {
+  align-items: flex-end;
+  text-align: right;
+}
+
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -669,6 +983,21 @@ const cancel = async (orderId: string) => {
   color: #9a9a9a;
   font-size: 26rpx;
   line-height: 1.5;
+}
+
+.empty-action {
+  align-self: flex-start;
+  min-width: 176rpx;
+  min-height: 64rpx;
+  margin: 8rpx 0 0;
+  padding: 0 28rpx;
+  border-radius: 999rpx;
+  background: #202020;
+  color: #ffffff;
+  font-size: 24rpx;
+  font-weight: 500;
+  line-height: 64rpx;
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
 .result {
