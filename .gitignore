@@ -13,6 +13,10 @@ dist
 unpackage
 coverage
 .nyc_output
+.ai/
+_ai_review_context/
+_ai_review_context.zip
+cloudfunctions/*.zip
 .playwright-mcp/
 .superpowers/
 *.local
