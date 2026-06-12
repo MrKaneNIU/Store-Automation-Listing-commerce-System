@@ -1,4 +1,4 @@
-# VX Close System
+# Store Automation Listing E-commerce System
 
 面向中小服饰商家的微信小程序 MVP。项目把“截图识别上货、商品/库存管理、店员补图、客户浏览下单、商家确认订单”串成一条可验证的闭环，用于展示 uni-app + Vue 3 + TypeScript 在小程序业务场景中的工程化落地能力。
 
